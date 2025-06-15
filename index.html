@@ -221,15 +221,28 @@
 
         // Firebase variables
         let app, db, auth, userId;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gridfall-dev';
+        
         
         async function initFirebase() {
             try {
-                const firebaseConfig = JSON.parse(__firebase_config);
+                // 1. PASTE YOUR FIREBASE CONFIG HERE
+                const firebaseConfig = {
+                apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
+                authDomain: "gridfall-2661e.firebaseapp.com",
+                projectId: "gridfall-2661e",
+                storageBucket: "gridfall-2661e.firebasestorage.app",
+                messagingSenderId: "623611849102",
+                appId: "1:623611849102:web:6ffb21d284b72574abdcdf",
+                };
+
+                // 2. USE A HARDCODED APP ID
+                const appId = 'Markedsoulgame'; 
+
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-        
+
+                // This part is already correct for a live site!
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
@@ -243,7 +256,7 @@
                 console.error("Firebase Initialization Error:", error);
                 document.getElementById('action-status').textContent = "Connection failed!";
             }
-        }
+}
 
         // --- Game Constants ---
         const TILE_SIZE = 24;
