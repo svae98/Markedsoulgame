@@ -136,12 +136,22 @@ function buildMapData(zoneX, zoneY) {
     const zone = worldData[zoneKey];
     const newMapData = Array.from({ length: MAP_HEIGHT_TILES }, () => Array(MAP_WIDTH_TILES).fill(TILES.GRASS));
 
+    // Draw map boundaries
     for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
         for (let x = 0; x < MAP_WIDTH_TILES; x++) {
             if (y === 0 || y === MAP_HEIGHT_TILES - 1 || x === 0 || x === MAP_WIDTH_TILES - 1) { newMapData[y][x] = TILES.WALL; }
         }
     }
+    
     if (zone) {
+        // NEW: Draw walls from the zone data
+        if (zone.walls) zone.walls.forEach(wall => {
+            if(newMapData[wall.y] && newMapData[wall.y][wall.x] !== undefined) {
+                newMapData[wall.y][wall.x] = TILES.WALL;
+            }
+        });
+        
+        // Draw other features
         if (zone.gateways) zone.gateways.forEach(gw => { newMapData[gw.y][gw.x] = TILES.GATEWAY; });
         if (zone.pedestals) zone.pedestals.forEach(p => { newMapData[p.y][p.x] = TILES.PEDESTAL; });
         if (zone.resources) zone.resources.forEach(r => {
@@ -175,7 +185,7 @@ function getDefaultGameState() {
         skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
         upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
         collectedItemDrops: [],
-        firstKills: [], // NEW: Track first-time boss kills
+        firstKills: [], 
     };
 }
 
@@ -488,7 +498,11 @@ function renderAltarList() {
             let costString = '';
             let canAfford = true;
             for(const currency in cost) {
-                costString += `${cost[currency]} ${ITEM_SPRITES[currency]} `;
+                if (currency === 'ragingSoul') {
+                     costString += `${cost[currency]} <span class="text-red-500">${ITEM_SPRITES[currency]}</span> `;
+                } else {
+                     costString += `${cost[currency]} ${ITEM_SPRITES[currency]} `;
+                }
                 if((gameState.inventory[currency] || 0) < cost[currency]) {
                     canAfford = false;
                 }
@@ -695,7 +709,7 @@ function handleLeftClick(e) {
     }
     
     if (e.shiftKey) { 
-        handleMarking(enemy, activeChar, {x, y});
+        handleMarking(enemy, activeChar);
         return;
     }
     
@@ -782,8 +796,9 @@ function addMark(activeChar, enemy, approachSpot) {
     showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
 }
 
-function handleMarking(enemy, activeChar, clickedBossTile = null) {
-    if (!enemy) return;
+function handleMarking(enemy) {
+    const activeChar = getActiveCharacter();
+    if (!enemy || !activeChar) return;
     activeChar.currentMoveId = null;
     activeChar.isMoving = false;
 
@@ -795,7 +810,6 @@ function handleMarking(enemy, activeChar, clickedBossTile = null) {
          if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) forceEndCombat(activeChar);
          if (activeChar.automation.markedTiles.length === 0) stopAutomation(activeChar);
     } else {
-        // NEW: Path to closest tile
         const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
         if(closestSpot) {
             addMark(activeChar, enemy, closestSpot);
@@ -1044,7 +1058,7 @@ function endCombat(character, playerWon) {
         const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`;
 
-        // NEW: Boss Loot Logic
+        // Boss Loot Logic
         if (enemyData.isBoss) {
             if (!gameState.firstKills.includes(targetEnemy.type)) {
                 gameState.inventory.ragingSoul += enemyData.loot.ragingSoul;
@@ -1057,7 +1071,7 @@ function endCombat(character, playerWon) {
             gameState.inventory.soulFragment += enemyData.loot.soulFragment;
         }
 
-        // NEW: Handle multiple item drops
+        // Handle multiple item drops
         if (enemyData.itemDrop && Array.isArray(enemyData.itemDrop)) {
             enemyData.itemDrop.forEach(itemDropId => {
                 const itemData = ITEM_DROP_DATA[itemDropId];
@@ -1076,7 +1090,7 @@ function endCombat(character, playerWon) {
     } else if (!playerWon) {
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
         
-        // NEW: Monster heals when player dies
+        // Monster heals when player dies
         if (targetEnemy) {
             const healAmount = targetEnemy.hp * 0.10;
             targetEnemy.currentHp = Math.min(targetEnemy.hp, targetEnemy.currentHp + healAmount);
@@ -1184,7 +1198,6 @@ function updateHuntingTask(character, setStatus) {
     const desiredTarget = findEnemyById(mark.enemyId);
 
     if (desiredTarget) {
-        // This is the existing logic to move towards and attack a live target. It's correct.
         if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
             setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
             const path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY);
@@ -1216,12 +1229,9 @@ function updateHuntingTask(character, setStatus) {
             }
         }
     } else {
-        // Target is not alive. Check if it's waiting to respawn.
         if (isEnemyDead(mark.enemyId)) {
             setStatus("Waiting for respawn...");
-            // Do nothing, just wait. The mark remains.
         } else {
-            // The mark is invalid (no live or dead enemy with this ID). Remove it.
             setStatus(`Invalid mark, removing.`);
             automation.markedTiles.shift();
             if (automation.markedTiles.length === 0) {
@@ -1369,7 +1379,6 @@ function updateAllEnemyRegen(gameTime) {
             const enemyData = ENEMIES_DATA[enemy.type];
             if (enemy.currentHp < enemyData.hp) {
                 if (gameTime - (enemy.lastRegenTime || 0) > 1000) {
-                     // NEW: Periodic regen disabled by setting rate to 0
                      const regenAmount = enemyData.regenRate || (enemyData.hp * 0.00);
                      enemy.currentHp = Math.min(enemyData.hp, enemy.currentHp + regenAmount);
                      enemy.lastRegenTime = gameTime;
@@ -1469,7 +1478,6 @@ function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
     const availableNeighbors = walkableNeighbors.filter(p => !reservedSet.has(`${p.x},${p.y}`));
     if (availableNeighbors.length === 0) return null; 
     
-    // NEW: Sort by distance to find the closest tile
     availableNeighbors.sort((a, b) => {
         const distA = Math.abs(a.x - charPos.x) + Math.abs(a.y - charPos.y);
         const distB = Math.abs(b.x - charPos.x) + Math.abs(b.y - charPos.y);
