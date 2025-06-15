@@ -1,0 +1,126 @@
+<style>
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #0a0a0a;
+            color: #e5e5e5;
+            overflow: hidden;
+        }
+        .ui-panel {
+            background-color: #1c1c1c;
+            border: 1px solid #2a2a2a;
+        }
+        .progress-bar-container { background-color: #333; border-radius: 0.25rem; overflow: hidden; height: 1.25rem; }
+        .progress-bar { 
+            height: 100%; 
+            transition: width 0.3s ease-in-out; 
+            text-align: center; 
+            color: white; 
+            font-weight: 500; 
+            font-size: 0.75rem; 
+            line-height: 1.25rem; 
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .hp-bar { background-color: #c026d3; } /* fuchsia-600 */
+        
+        #context-menu {
+            position: absolute; display: none; background-color: #222; border: 1px solid #444;
+            border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.4); padding: 0.5rem; z-index: 1000;
+        }
+        #context-menu button {
+            display: block; width: 100%; padding: 0.5rem 1rem; text-align: left;
+            background: none; border: none; color: #ccc; border-radius: 0.25rem; cursor: pointer;
+        }
+        #context-menu button:hover { background-color: #333; }
+        
+        .damage-popup {
+            position: absolute;
+            color: white;
+            font-weight: bold;
+            font-size: 1.1rem;
+            text-shadow: 2px 2px 2px black;
+            pointer-events: none;
+            transition: transform 1s ease-out, opacity 1s ease-out;
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .damage-popup.player { color: #f87171; } /* red-400 */
+        .damage-popup.enemy { color: #fef08a; } /* yellow-200 */
+
+        .stat-popup {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75);
+            border: 1px solid #4a4a4a;
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            color: white;
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 50;
+        }
+
+        .modal-item {
+            display: flex; justify-content: space-between; align-items: center; width: 100%;
+            padding: 0.5rem 1rem;
+            border-radius: 4px; user-select: none; font-size: 1rem; border: 1px solid #3f3f46;
+        }
+        .modal-item.clickable:hover { background-color: #3f3f46; cursor: pointer; }
+        .modal-item.disabled { color: #6b7280; cursor: default; pointer-events: none; }
+        .modal-item.disabled:hover { background-color: transparent; }
+        .modal-item .cost { color: #fef08a; font-weight: bold; } /* yellow-200 */
+        .modal-item.disabled .cost { color: #6b7280; }
+        .modal-item.cannot-afford .cost { color: #f87171; } /* red-400 */
+        .modal-item.assigned { border-color: #fbbf24; } /* amber-400 */
+
+        .char-button {
+            border: 2px solid #4a4a4a; padding: 0.5rem; text-align: center;
+            border-radius: 0.375rem; cursor: pointer; transition: all 0.2s;
+            font-weight: 500;
+        }
+        .char-button:hover { background-color: #3a3a3a; border-color: #6a6a6a; }
+        .char-button.active { background-color: #c026d3; border-color: #f472b6; color: white; }
+        
+        #notification-banner {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            transform: translateY(-100%);
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+        #notification-banner.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .map-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* Adjust number of columns as needed */
+            gap: 0.5rem;
+        }
+
+        .map-zone {
+            position: relative;
+            aspect-ratio: 1/1;
+            border: 2px solid #4a4a4a;
+            border-radius: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            color: #a1a1aa;
+        }
+        .map-zone.active-zone {
+            border-color: #c026d3;
+            box-shadow: 0 0 10px #c026d3;
+        }
+        .boss-icon {
+            font-size: 1.5rem;
+            cursor: pointer;
+            filter: drop-shadow(0 0 5px #f87171);
+        }
+    </style>
