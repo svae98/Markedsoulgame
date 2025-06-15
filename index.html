@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gridfall: Marked Souls</title>
@@ -219,43 +219,61 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase variables
+        // --- Global Variables ---
+        // Firebase variables will be initialized in initFirebase()
         let app, db, auth, userId, appId;
         
+        // This function intelligently sets up Firebase for both preview and live environments
         async function initFirebase() {
             try {
-                // 1. PASTE YOUR FIREBASE CONFIG HERE
-                const firebaseConfig = {
-                apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
-                authDomain: "gridfall-2661e.firebaseapp.com",
-                projectId: "gridfall-2661e",
-                storageBucket: "gridfall-2661e.firebasestorage.app",
-                messagingSenderId: "623611849102",
-                appId: "1:623611849102:web:6ffb21d284b72574abdcdf",
-                };
+                let firebaseConfig;
+                // Check if running in the preview environment by looking for a global variable
+                const isPreview = typeof __firebase_config !== 'undefined';
 
-                // 2. USE A HARDCODED APP ID
-                appId = 'Markedsoulgame'; 
+                if (isPreview) {
+                    // --- PREVIEW ENVIRONMENT ---
+                    // Use the config and app ID provided by the preview environment
+                    console.log("Running in Preview Environment");
+                    firebaseConfig = JSON.parse(__firebase_config);
+                    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-preview-app';
+                } else {
+                    // --- LIVE ENVIRONMENT ---
+                    // Use your hardcoded config for the live site
+                    console.log("Running in Live Environment");
+                    appId = 'Markedsoulgame'; // Your specific app name for the database
+                    firebaseConfig = {
+                        apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
+                        authDomain: "gridfall-2661e.firebaseapp.com",
+                        projectId: "gridfall-2661e",
+                        storageBucket: "gridfall-2661e.firebasestorage.app",
+                        messagingSenderId: "623611849102",
+                        appId: "1:623611849102:web:6ffb21d284b72574abdcdf",
+                    };
+                }
 
+                // Initialize Firebase with the determined config
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // This part is already correct for a live site!
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                // Sign in based on the environment
+                if (isPreview && typeof __initial_auth_token !== 'undefined') {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
+                
+                // Get the user ID after sign-in
                 userId = auth.currentUser.uid;
                 
+                // Start the game logic
                 await initGame();
 
             } catch (error) {
                 console.error("Firebase Initialization Error:", error);
                 document.getElementById('action-status').textContent = "Connection failed!";
             }
-}
+        }
 
         // --- Game Constants ---
         const TILE_SIZE = 24;
@@ -1572,7 +1590,7 @@
         }
         
         async function saveGameState() { 
-            if (!userId) return; 
+            if (!userId || !appId) return; 
             try { 
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
                 const stateToSave = JSON.parse(JSON.stringify(gameState));
@@ -1581,7 +1599,7 @@
         }
 
         async function loadGameState() { 
-            if (!userId) { 
+            if (!userId || !appId) { 
                 gameState = getDefaultGameState();
                 if (gameState.characters.length === 0) {
                      gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
