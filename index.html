@@ -847,7 +847,7 @@
 
             // --- Action-related logic below ---
             
-            // NEW: If moving, check if we should stop by clicking a walkable tile.
+            // If moving, check if we should stop by clicking a walkable tile.
             if (activeChar.isMoving) {
                 const tileType = currentMapData[y]?.[x];
                 // Stop if clicking on a walkable, non-interactive tile.
@@ -857,14 +857,14 @@
                 return; // Whether we stopped or not, no further action is taken on this click.
             }
 
-            // If automated, don't allow manual actions.
-            if (activeChar.automation.active) {
-                return;
-            }
-            
             // If shift is held, handle marking.
             if (e.shiftKey) { 
                 handleMarking(x, y, enemy, activeChar);
+                return;
+            }
+
+            // If automated, don't allow manual actions.
+            if (activeChar.automation.active) {
                 return;
             }
             
@@ -907,25 +907,38 @@
         }
 
         function handleMarking(x, y, enemy, activeChar) {
-            if (activeChar.automation.active) {
-                showNotification("Stop current task to mark enemies.");
-                return;
-            }
             let existingMarkIndex = -1;
             let existingMarkChar = null;
+            
+            // Check if any character has this tile marked
             for (const char of gameState.characters) {
-                existingMarkIndex = char.automation.markedTiles.findIndex(tile => tile.x === x && tile.y === y && tile.zoneX === activeChar.zoneX && tile.zoneY === activeChar.zoneY);
-                if (existingMarkIndex !== -1) { existingMarkChar = char; break; }
+                const index = char.automation.markedTiles.findIndex(tile => tile.x === x && tile.y === y && tile.zoneX === activeChar.zoneX && tile.zoneY === activeChar.zoneY);
+                if (index !== -1) {
+                    existingMarkIndex = index;
+                    existingMarkChar = char;
+                    break;
+                }
             }
-
-            if (existingMarkChar && existingMarkChar.id === activeChar.id && existingMarkIndex !== -1) {
+        
+            // Case 1: The active character is un-marking their own tile.
+            if (existingMarkChar && existingMarkChar.id === activeChar.id) {
                 activeChar.automation.markedTiles.splice(existingMarkIndex, 1);
                 const enemyOnTile = getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
+                
                 if (activeChar.combat.active && enemyOnTile && activeChar.combat.targetId === enemyOnTile.id) {
                     forceEndCombat(activeChar);
                 }
-            } else if (!existingMarkChar && enemy) {
+                
+                // If no marks are left, stop the hunting task completely.
+                if (activeChar.automation.markedTiles.length === 0) {
+                    stopAutomation(activeChar);
+                }
+            } 
+            // Case 2: No mark exists here and we are clicking a valid enemy tile. Add a mark.
+            else if (!existingMarkChar && enemy) {
                 const stats = getTeamStats();
+                
+                // If the character's mark list is full, remove the oldest one.
                 if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
                     const removedTile = activeChar.automation.markedTiles.shift();
                     const removedEnemy = getEnemyAt(removedTile.x, removedTile.y, `${removedTile.zoneX},${removedTile.zoneY}`);
@@ -933,8 +946,15 @@
                         forceEndCombat(activeChar);
                     }
                 }
+                
                 activeChar.automation.markedTiles.push({ x, y, zoneX: activeChar.zoneX, zoneY: activeChar.zoneY });
+                
+                // This is the core change: adding a mark now starts the hunting process.
+                // It will also switch from any skilling task to hunting.
+                startAutomation(activeChar, 'hunting');
             }
+            // Note: We ignore clicks on tiles marked by other characters.
+            
             saveGameState();
             updateAllUI();
         }
@@ -988,26 +1008,48 @@
             if (!activeChar) return;
             ui.contextMenu.innerHTML = '';
             
-            const anyCharHasTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
-            if (activeChar.automation.markedTiles.length > 0 && !activeChar.automation.active) {
-                addContextMenuButton('Start Marked Route', () => startAutomation(activeChar, 'hunting'));
+            const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
+        
+            // Button to stop the current character's task
+            if (activeChar.automation.active) {
+                addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
             }
+        
+            // Button to clear the current character's marks
             if (activeChar.automation.markedTiles.length > 0) {
-                addContextMenuButton('Clear Marks', () => { stopAutomation(activeChar); activeChar.automation.markedTiles = []; saveGameState(); });
+                addContextMenuButton('Clear My Marks', () => {
+                    if (activeChar.automation.task === 'hunting') {
+                        stopAutomation(activeChar);
+                    }
+                    activeChar.automation.markedTiles = [];
+                    saveGameState();
+                });
             }
+        
+            // Button to clear all marks from all characters
             const anyCharHasMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
             if (anyCharHasMarks) {
                 addContextMenuButton('Clear All Marks', () => {
-                    gameState.characters.forEach(char => { char.automation.markedTiles = []; if (char.automation.task === 'hunting') stopAutomation(char); });
+                    gameState.characters.forEach(char => {
+                        if (char.automation.task === 'hunting') stopAutomation(char);
+                        char.automation.markedTiles = [];
+                    });
                     saveGameState();
                 });
             }
-             if (anyCharHasTask) {
-                addContextMenuButton('Stop All Tasks', () => {
-                    gameState.characters.forEach(char => stopAutomation(char));
+            
+            // Button to stop all skilling tasks
+            if (anyCharHasSkillingTask) {
+                addContextMenuButton('Stop All Skilling', () => {
+                    gameState.characters.forEach(char => {
+                        if (['woodcutting', 'mining', 'fishing'].includes(char.automation.task)) {
+                            stopAutomation(char);
+                        }
+                    });
                     saveGameState();
                 });
             }
+        
             if (ui.contextMenu.children.length > 0) {
                 const rect = ui.canvas.getBoundingClientRect();
                 ui.contextMenu.style.left = `${e.clientX - rect.left}px`;
@@ -1278,7 +1320,11 @@
                     const gateway = findGatewayToZone(zoneX, zoneY, targetEnemy.zoneX, targetEnemy.zoneY);
                     if (gateway) {
                         const path = findPath(player, { x: gateway.x, y: gateway.y }, zoneX, zoneY);
-                        if (path) { moveAlongPath(character, path, Date.now()); } 
+                        if (path) { 
+                            const moveId = Date.now();
+                            character.currentMoveId = moveId;
+                            moveAlongPath(character, path, moveId); 
+                        } 
                         else { setStatus("Blocked from gateway!"); automation.state = 'FINDING_TARGET'; }
                     } else { setStatus("No path to target's zone!"); automation.state = 'FINDING_TARGET'; }
                 } else { // Target is in the same zone
@@ -1289,7 +1335,11 @@
                         const targetPos = findWalkableNeighborForEntity(targetEnemy, player);
                         if (targetPos) {
                             const path = findPath(player, targetPos, zoneX, zoneY);
-                            if (path) { moveAlongPath(character, path, Date.now()); } 
+                            if (path) { 
+                                const moveId = Date.now();
+                                character.currentMoveId = moveId;
+                                moveAlongPath(character, path, moveId);
+                            } 
                             else { setStatus("Cannot find path!"); automation.state = 'FINDING_TARGET'; }
                         } else { setStatus("Cannot reach target!"); automation.state = 'FINDING_TARGET'; }
                     }
@@ -1459,7 +1509,7 @@
                 }
             });
         }
-
+        
         function findPath(start, end, zoneX, zoneY) { 
             if (!end) return null; 
             const queue = [[start]]; 
@@ -1526,7 +1576,41 @@
             }, { pos: null, dist: Infinity }).pos;
         }
 
-        function startAutomation(character, task) { stopAutomation(character); character.automation.task = task; character.automation.active = true; character.automation.state = 'IDLE'; saveGameState(); if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
+        // --- MODIFIED FUNCTION ---
+        function startAutomation(character, task) {
+            // If we're already doing this task, do nothing.
+            if (character.automation.active && character.automation.task === task) return;
+
+            // --- NEW: If the character is in combat, force it to end before switching tasks.
+            if (character.combat.active) {
+                forceEndCombat(character);
+            }
+        
+            // Stop any current action. This is a lightweight flag reset.
+            stopAutomation(character);
+        
+            // Cleanup based on the NEW task.
+            if (task !== 'hunting') {
+                // If we're starting a skilling task, clear this character's marks.
+                character.automation.markedTiles = [];
+            }
+            
+            // Now, set up and start the new task.
+            character.automation.task = task;
+            
+            // A check to ensure we can actually perform the task.
+            if (task === 'hunting' && character.automation.markedTiles.length === 0) {
+                if (character.id === getActiveCharacter().id) showNotification('Mark an enemy to start hunting.');
+                return; // Abort. Don't set active to true.
+            }
+            
+            character.automation.active = true;
+            character.automation.state = 'IDLE';
+            
+            saveGameState();
+            if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
+            updateAllUI();
+        }
         function stopAutomation(character) { if(!character.automation.active) return; character.automation.active = false; character.automation.state = 'IDLE'; character.automation.task = null; character.automation.targetId = null; if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
 
         function spawnEnemiesForZone(zoneX, zoneY) { 
@@ -1597,7 +1681,7 @@
                     if (char.automation.task === 'hunting') taskEmoji = '⚔️';
                     else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
                     else if (char.automation.task === 'mining') taskEmoji = '⛏️';
-                    else if (char.automation.task === 'fishing') taskEmoji = '🎣';
+                    else if (char.automation.task === 'fishing') taskEmoji = '�';
                 }
                 btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
                 btn.className = 'char-button'; 
