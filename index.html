@@ -119,7 +119,7 @@
             <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
-                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.002</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.003</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -359,9 +359,11 @@
         let currentMapData = [];
         let notificationTimeout = null;
 
+        // Game Loop and Time Management Variables
         let lastFrameTime = 0;
         let accumulator = 0;
-        const LOGIC_TICK_RATE = 50; 
+        const LOGIC_TICK_RATE = 50; // ms per tick, so 20 ticks per second
+        let currentGameTime = 0; // The master clock for the game logic
 
         function getActiveCharacter() {
             if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -487,6 +489,7 @@
             ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
             ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
             
+            currentGameTime = performance.now(); // Initialize the master game clock
             await loadGameState();
             const activeChar = getActiveCharacter();
             currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
@@ -512,16 +515,22 @@
             lastFrameTime = timestamp;
             accumulator += deltaTime;
 
-            const now = performance.now();
+            // Cap the accumulator to prevent long freezes after prolonged inactivity (e.g., 1 second)
+            if (accumulator > 1000) {
+                accumulator = 1000;
+            }
 
+            // Process logic ticks to catch up with the accumulated time
             while (accumulator >= LOGIC_TICK_RATE) {
-                checkAllRespawns();
-                updateAllEnemyRegen(now);
-                updateAllPlayerRegen(now);
+                currentGameTime += LOGIC_TICK_RATE;
+                
+                checkAllRespawns(currentGameTime);
+                updateAllEnemyRegen(currentGameTime);
+                updateAllPlayerRegen(currentGameTime);
                 gameState.characters.forEach(char => {
                     if (char) {
-                        updateAutomation(char, now);
-                        updateCombat(char, now);
+                        updateAutomation(char, currentGameTime);
+                        updateCombat(char, currentGameTime);
                     }
                 });
                 
@@ -1110,12 +1119,12 @@
             return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus }; 
         }
 
-        function updateCombat(character, now) { 
+        function updateCombat(character, gameTime) { 
             const { combat } = character; 
             if (!combat.active || character.isDead) return;
-            const combatDelta = now - combat.lastUpdateTime; 
+            const combatDelta = gameTime - combat.lastUpdateTime; 
             if (combatDelta < 1500) return; 
-            combat.lastUpdateTime = now; 
+            combat.lastUpdateTime = gameTime; 
             const zoneKey = `${character.zoneX},${character.zoneY}`; 
             const enemy = enemies[zoneKey]?.[combat.targetId]; 
             if (!enemy) { endCombat(character, true); return; } 
@@ -1176,7 +1185,7 @@
                 character.combat.active = true; 
                 character.combat.targetId = enemyId; 
                 character.combat.isPlayerTurn = true; 
-                character.combat.lastUpdateTime = performance.now(); 
+                character.combat.lastUpdateTime = currentGameTime; 
                 if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
             }
         }
@@ -1213,7 +1222,7 @@
                 }
 
                 if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
-                deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: Date.now() + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
+                deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: currentGameTime + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
                 delete enemies[zoneKey][combat.targetId];
                 
                 if (character.automation.active && character.automation.task === 'hunting') {
@@ -1297,7 +1306,7 @@
             saveGameState();
         }
         
-        function updateAutomation(character, now) { 
+        function updateAutomation(character, gameTime) { 
             const { combat } = character; 
             if (!character.automation.active || combat.active || character.isDead) return;
 
@@ -1306,7 +1315,7 @@
                 case 'hunting': updateHuntingTask(character, setStatus); break;
                 case 'woodcutting': case 'mining': case 'fishing':
                     if (character.isMoving) return; 
-                    updateSkillingTask(character, now, setStatus);
+                    updateSkillingTask(character, gameTime, setStatus);
                     break;
             }
         }
@@ -1343,7 +1352,7 @@
             }
         }
 
-        function updateSkillingTask(character, now, setStatus) {
+        function updateSkillingTask(character, gameTime, setStatus) {
             const { automation, player, zoneX, zoneY } = character;
             const resourceType = automation.task === 'woodcutting' ? 'TREE' : automation.task === 'mining' ? 'ROCK' : 'POND';
 
@@ -1383,7 +1392,7 @@
                     }
                     break;
                 case 'GATHERING':
-                    gatherResource(character, now, setStatus);
+                    gatherResource(character, gameTime, setStatus);
                     break;
                 case 'WAITING_FOR_RESPAWN':
                     const hasRespawned = worldData[`${zoneX},${zoneY}`]?.resources?.some(r => r.type === resourceType);
@@ -1392,15 +1401,15 @@
             }
         }
 
-        function gatherResource(character, now, setStatus) {
+        function gatherResource(character, gameTime, setStatus) {
             const { automation } = character;
             const node = findResourceById(automation.targetId);
             if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
             const resourceData = RESOURCE_DATA[node.type];
 
-            if (now - automation.gatheringState.lastHitTime < resourceData.time) return;
+            if (gameTime - automation.gatheringState.lastHitTime < resourceData.time) return;
 
-            automation.gatheringState.lastHitTime = now;
+            automation.gatheringState.lastHitTime = gameTime;
             setStatus(`Gathering...`);
             
             gainSkillXp(resourceData.skill, resourceData.xp);
@@ -1467,35 +1476,35 @@
             return nearest;
         }
 
-        function updateAllEnemyRegen(now) {
+        function updateAllEnemyRegen(gameTime) {
             for (const zoneKey in enemies) {
                 for (const enemyId in enemies[zoneKey]) {
                     const enemy = enemies[zoneKey][enemyId];
                     const enemyData = ENEMIES_DATA[enemy.type];
                     
                     if (enemy.currentHp < enemyData.hp) {
-                        if (now - (enemy.lastRegenTime || 0) > 1000) {
+                        if (gameTime - (enemy.lastRegenTime || 0) > 1000) {
                              const regenAmount = enemyData.hp * 0.01;
                              enemy.currentHp = Math.min(enemyData.hp, enemy.currentHp + regenAmount);
-                             enemy.lastRegenTime = now;
+                             enemy.lastRegenTime = gameTime;
                         }
                     }
                 }
             }
         }
 
-        function updateAllPlayerRegen(now) {
+        function updateAllPlayerRegen(gameTime) {
             const teamStats = getTeamStats();
             gameState.characters.forEach(char => {
                 if (char.isDead || char.hp.current >= char.hp.max) return;
 
-                if (now - (char.lastRegenTime || 0) > 1000) {
+                if (gameTime - (char.lastRegenTime || 0) > 1000) {
                     const baseRegen = char.hp.max * 0.01;
                     const bonusRegen = char.hp.max * teamStats.hpRegenBonus;
                     const totalRegen = baseRegen + bonusRegen;
 
                     char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
-                    char.lastRegenTime = now;
+                    char.lastRegenTime = gameTime;
                     if (char.id === getActiveCharacter().id) updateAllUI();
                 }
             });
@@ -1627,20 +1636,19 @@
                     spawnX: point.x, spawnY: point.y, zoneX, zoneY, 
                     ...JSON.parse(JSON.stringify(enemyData)), 
                     currentHp: enemyData.hp,
-                    lastRegenTime: Date.now()
+                    lastRegenTime: currentGameTime
                 }; 
             }); 
         }
 
-        function checkAllRespawns() { 
-            const now = Date.now(); 
+        function checkAllRespawns(gameTime) { 
             for(const zoneKey in deadEnemies) { 
                 for(let i = deadEnemies[zoneKey].length - 1; i >= 0; i--) { 
                     const dead = deadEnemies[zoneKey][i]; 
-                    if(now >= dead.respawnTime) { 
+                    if(gameTime >= dead.respawnTime) { 
                         if (!enemies[zoneKey]) enemies[zoneKey] = {}; 
                         enemies[zoneKey][dead.id] = dead.data;
-                        enemies[zoneKey][dead.id].lastRegenTime = now;
+                        enemies[zoneKey][dead.id].lastRegenTime = gameTime;
                         deadEnemies[zoneKey].splice(i, 1); 
                     } 
                 } 
@@ -1762,9 +1770,28 @@
                 if (gameState.characters.length === 0) {
                      gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
                 }
-                await saveGameState(); 
             }
+
+            // FIX: Check for and respawn any characters that were dead on load.
+            let needsSave = false;
+            gameState.characters.forEach(char => {
+                if (char.isDead) {
+                    console.log(`Character ${char.name} was dead on load. Respawning.`);
+                    char.isDead = false;
+                    char.hp.current = char.hp.max;
+                    char.player = { x: 15, y: 15 };
+                    char.zoneX = 1;
+                    char.zoneY = 1;
+                    char.combat = { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 };
+                    needsSave = true;
+                }
+            });
+
             recalculateTeamStats();
+
+            if (needsSave) {
+                await saveGameState();
+            }
         }
 
         initFirebase();
