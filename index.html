@@ -457,7 +457,7 @@
                 player: { x: 15 + id, y: 16 }, 
                 hp: { current: 5, max: 5 },
                 isMoving: false, currentMoveId: null, lastRegenTime: 0,
-                automation: { active: false, task: null, state: 'IDLE', path: [], targetId: null, targetZone: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+                automation: { active: false, task: null, state: 'IDLE', path: [], targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
                 combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
             };
         }
@@ -838,22 +838,34 @@
             const enemy = getEnemyAt(x, y, zoneKey);
             const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
 
-            // Always allow showing info popups, regardless of character state
+            // Always allow showing info popups.
             if (enemy) {
                 handleEnemyClick(enemy);
             } else if (resource) {
                 handleResourceClick(resource);
             }
 
-            // --- Action-related logic below. Do not proceed if character is busy. ---
-            if (activeChar.automation.active || activeChar.isMoving) {
+            // --- Action-related logic below ---
+            
+            // NEW: If moving, check if we should stop by clicking a walkable tile.
+            if (activeChar.isMoving) {
+                const tileType = currentMapData[y]?.[x];
+                // Stop if clicking on a walkable, non-interactive tile.
+                if (!enemy && !resource && (tileType === TILES.GRASS || tileType === TILES.GATEWAY)) {
+                    activeChar.currentMoveId = null; // This will break the moveAlongPath loop.
+                }
+                return; // Whether we stopped or not, no further action is taken on this click.
+            }
+
+            // If automated, don't allow manual actions.
+            if (activeChar.automation.active) {
                 return;
             }
             
-            // Handle marking action
+            // If shift is held, handle marking.
             if (e.shiftKey) { 
-                handleMarking(x, y, enemy, activeChar); // Pass enemy, it might be null
-                return; // Marking is an action, so we stop here.
+                handleMarking(x, y, enemy, activeChar);
+                return;
             }
             
             // If we didn't click on an enemy or resource, it's a move command.
@@ -928,7 +940,10 @@
         }
 
         async function moveAlongPath(character, path, moveId) {
-            if (!path || path.length === 0) return;
+            if (!path || path.length === 0) {
+                 character.isMoving = false; // Ensure isMoving is reset if path is bad
+                 return;
+            }
             
             const stats = getTeamStats();
             const moveDelay = 200 / (1 + (stats.speed * 0.01));
@@ -937,7 +952,7 @@
             if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Moving...';
         
             for (const step of path) {
-                if (character.currentMoveId !== moveId) break;
+                if (character.currentMoveId !== moveId) break; // Check for cancellation
                 character.player.x = step.x;
                 character.player.y = step.y;
                 await new Promise(r => setTimeout(r, moveDelay));
@@ -960,11 +975,11 @@
                     }
                 }
                  if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Idle';
+                 character.currentMoveId = null; // Clear move ID on completion
             } else {
-                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Movement cancelled.';
+                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Movement stopped.';
             }
             character.isMoving = false;
-            character.currentMoveId = null;
         }
 
         function handleRightClick(e) {
@@ -1227,100 +1242,65 @@
             }
         }
         
+        function findGatewayToZone(fromX, fromY, toX, toY) {
+            const zoneKey = `${fromX},${fromY}`;
+            const zoneData = worldData[zoneKey];
+            if (!zoneData || !zoneData.gateways) return null;
+            return zoneData.gateways.find(g => g.destZone.x === toX && g.destZone.y === toY);
+        }
+
         function updateHuntingTask(character, setStatus) {
             const { automation, player, zoneX, zoneY } = character;
-            switch(automation.state) { 
-                case 'IDLE': 
-                    automation.state = 'FINDING_TARGET'; 
-                    break; 
-                case 'FINDING_TARGET': 
-                    setStatus("Finding marked enemy..."); 
-                    const target = findNearestMarked(character); 
-                    if (target) { 
-                        automation.targetId = target.id; 
-                        automation.targetZone = { x: target.zoneX, y: target.zoneY };
-                        automation.state = 'WALKING_TO_TARGET'; 
-                    } else { 
-                        setStatus("Awaiting respawns..."); 
-                        automation.state = 'WAITING_FOR_RESPAWN'; 
-                    } 
-                    break; 
-                case 'WALKING_TO_TARGET':
-                    if (!automation.targetId || !automation.targetZone) {
-                        automation.state = 'FINDING_TARGET';
-                        break;
-                    }
+            const { state } = automation;
 
-                    const targetZoneKey = `${automation.targetZone.x},${automation.targetZone.y}`;
-                    const targetEnemy = enemies[targetZoneKey]?.[automation.targetId];
+            if (state === 'IDLE') {
+                automation.state = 'FINDING_TARGET';
+            } else if (state === 'FINDING_TARGET') {
+                setStatus("Finding marked enemy...");
+                const targetEnemy = findNearestMarked(character);
+                if (targetEnemy) {
+                    automation.targetId = targetEnemy.id;
+                    automation.state = 'WALKING_TO_TARGET';
+                } else {
+                    setStatus("Awaiting respawns...");
+                    automation.state = 'WAITING_FOR_RESPAWN';
+                }
+            } else if (state === 'WALKING_TO_TARGET') {
+                const targetEnemy = findEnemyById(automation.targetId);
+                if (!targetEnemy) {
+                    automation.state = 'FINDING_TARGET';
+                    return;
+                }
 
-                    if (!targetEnemy) {
-                        automation.state = 'FINDING_TARGET';
-                        break;
-                    }
-
-                    // Check if we need to change zones
-                    if (automation.targetZone.x !== zoneX || automation.targetZone.y !== zoneY) {
-                        setStatus("Changing zone...");
-                        const currentZoneData = worldData[`${zoneX},${zoneY}`];
-                        if (!currentZoneData || !currentZoneData.gateways) {
-                            setStatus("Error: Current zone has no gateways!");
-                            automation.state = 'FINDING_TARGET';
-                            break;
-                        }
-                        
-                        const gateway = currentZoneData.gateways.find(g => g.destZone.x === automation.targetZone.x && g.destZone.y === automation.targetZone.y);
-                        
-                        if (gateway) {
-                            const path = findPath(player, {x: gateway.x, y: gateway.y}, zoneX, zoneY);
-                            if (path && path.length > 0) {
-                                const moveId = Date.now();
-                                character.currentMoveId = moveId;
-                                moveAlongPath(character, path, moveId);
-                            } else {
-                                setStatus("Can't find path to gateway!");
-                                automation.state = 'FINDING_TARGET';
-                            }
-                        } else {
-                            setStatus("No gateway to target zone!");
-                            automation.state = 'FINDING_TARGET';
-                        }
-                        break;
-                    }
-
-                    // If we are in the correct zone, proceed to walk to the enemy
+                // Is the target in another zone?
+                if (targetEnemy.zoneX !== zoneX || targetEnemy.zoneY !== zoneY) {
+                    setStatus("Pathing to other zone...");
+                    const gateway = findGatewayToZone(zoneX, zoneY, targetEnemy.zoneX, targetEnemy.zoneY);
+                    if (gateway) {
+                        const path = findPath(player, { x: gateway.x, y: gateway.y }, zoneX, zoneY);
+                        if (path) { moveAlongPath(character, path, Date.now()); } 
+                        else { setStatus("Blocked from gateway!"); automation.state = 'FINDING_TARGET'; }
+                    } else { setStatus("No path to target's zone!"); automation.state = 'FINDING_TARGET'; }
+                } else { // Target is in the same zone
                     if (isAdjacent(player, targetEnemy)) {
                         automation.state = 'FIGHTING';
                     } else {
                         setStatus("Walking to target...");
                         const targetPos = findWalkableNeighborForEntity(targetEnemy, player);
-                        if (!targetPos) {
-                            setStatus("Can't reach target!");
-                            automation.markedTiles = automation.markedTiles.filter(t => getEnemyAt(t.x, t.y, targetZoneKey)?.id !== automation.targetId);
-                            automation.state = 'FINDING_TARGET';
-                            break;
-                        }
-                        const path = findPath(player, targetPos, zoneX, zoneY);
-                        if (path && path.length > 0) {
-                            const moveId = Date.now();
-                            character.currentMoveId = moveId;
-                            moveAlongPath(character, path, moveId);
-                        } else {
-                            setStatus("Can't find path to target!");
-                            automation.markedTiles = automation.markedTiles.filter(t => getEnemyAt(t.x, t.y, targetZoneKey)?.id !== automation.targetId);
-                            automation.state = 'FINDING_TARGET';
-                        }
+                        if (targetPos) {
+                            const path = findPath(player, targetPos, zoneX, zoneY);
+                            if (path) { moveAlongPath(character, path, Date.now()); } 
+                            else { setStatus("Cannot find path!"); automation.state = 'FINDING_TARGET'; }
+                        } else { setStatus("Cannot reach target!"); automation.state = 'FINDING_TARGET'; }
                     }
-                    break;
-                case 'FIGHTING': 
-                    setStatus("Initiating combat..."); 
-                    startCombat(character, automation.targetId, true); 
-                    break; 
-                case 'WAITING_FOR_RESPAWN': 
-                    if (character.automation.markedTiles.some(tile => !!getEnemyAt(tile.x, tile.y, `${tile.zoneX},${tile.zoneY}`))) { 
-                        automation.state = 'FINDING_TARGET'; 
-                    } 
-                    break; 
+                }
+            } else if (state === 'FIGHTING') {
+                setStatus("Initiating combat...");
+                startCombat(character, automation.targetId, true);
+            } else if (state === 'WAITING_FOR_RESPAWN') {
+                if (automation.markedTiles.some(tile => !!getEnemyAt(tile.x, tile.y, `${tile.zoneX},${tile.zoneY}`))) {
+                    automation.state = 'FINDING_TARGET';
+                }
             }
         }
 
@@ -1404,6 +1384,15 @@
             } else {
                 startAutomation(activeChar, skillKey);
             }
+        }
+
+        function findEnemyById(id) {
+            for (const zoneKey in enemies) {
+                if (enemies[zoneKey][id]) {
+                    return enemies[zoneKey][id];
+                }
+            }
+            return null;
         }
 
         function findResourceById(id) {
@@ -1538,7 +1527,7 @@
         }
 
         function startAutomation(character, task) { stopAutomation(character); character.automation.task = task; character.automation.active = true; character.automation.state = 'IDLE'; saveGameState(); if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
-        function stopAutomation(character) { if(!character.automation.active) return; character.automation.active = false; character.automation.state = 'IDLE'; character.automation.task = null; character.automation.targetId = null; character.automation.targetZone = null; if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
+        function stopAutomation(character) { if(!character.automation.active) return; character.automation.active = false; character.automation.state = 'IDLE'; character.automation.task = null; character.automation.targetId = null; if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
 
         function spawnEnemiesForZone(zoneX, zoneY) { 
             const zoneKey = `${zoneX},${zoneY}`; 
@@ -1606,7 +1595,7 @@
                 let taskEmoji = '';
                 if (char.automation.active) {
                     if (char.automation.task === 'hunting') taskEmoji = '⚔️';
-                    else if (char.automation.task === 'woodcutting') taskEmoji = '�';
+                    else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
                     else if (char.automation.task === 'mining') taskEmoji = '⛏️';
                     else if (char.automation.task === 'fishing') taskEmoji = '🎣';
                 }
