@@ -1,16 +1,13 @@
 // js/gameData.js
-
-// This file contains all the static data for the game.
-// By keeping it separate, the main game logic file is cleaner and easier to manage.
-// The 'export' keyword makes these constants available to other JavaScript files.
+// A Walk in the Park Update
 
 // --- Core Game Mechanics ---
-export const TILE_SIZE = 24;
-export const MAP_WIDTH_TILES = 31;
-export const MAP_HEIGHT_TILES = 31;
-export const RESPAWN_TIME = 10000; // Time in milliseconds for enemies to respawn
+export const TILE_SIZE = 32; // Increased for a more zoomed-in feel
+export const MAP_WIDTH_TILES = 60; // Increased for a larger world
+export const MAP_HEIGHT_TILES = 60; // Increased for a larger world
+export const RESPAWN_TIME = 10000; 
 export const MAX_CHARACTERS = 4;
-export const CHARACTER_COLORS = ['#FFFFFF', '#06b6d4', '#d946ef', '#f59e0b']; // White, Cyan, Fuchsia, Amber
+export const CHARACTER_COLORS = ['#FFFFFF', '#06b6d4', '#d946ef', '#f59e0b'];
 
 // --- Tile & Item Definitions ---
 export const TILES = {
@@ -20,19 +17,20 @@ export const TILES = {
     PEDESTAL: 3,
     TREE: 4,
     ROCK: 5,
-    POND: 6
+    POND: 6,
+    DEEP_FOREST: 7, // New impassable decorative tile
+    DEEP_WATER: 8,  // New impassable decorative tile
 };
 
 export const ITEM_SPRITES = {
     soulFragment: '✧',
-    ragingSoul: '✧', // Using same sprite but will be colored differently
+    ragingSoul: '✧',
     wood: '🌲',
     copper_ore: '⛏️',
     fish: '🐟'
 };
 
 // --- Item Drop Data ---
-// Defines special items dropped by monsters and their effects.
 export const ITEM_DROP_DATA = {
     'green_goo': { name: 'Green Goo', monster: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
     'viscous_ichor': { name: 'Viscous Ichor', monster: 'YELLOW_SLIME', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 1 }, pedestalId: 'vi_pedestal', visual: { color: '#fde047', char: 'I' }, description: "+1 Damage" },
@@ -46,7 +44,6 @@ export const ITEM_DROP_DATA = {
 };
 
 // --- Enemy Definitions ---
-// Contains stats and information for all enemies in the game.
 export const ENEMIES_DATA = {
     BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: ['green_goo'] },
     YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: ['viscous_ichor'] },
@@ -59,7 +56,6 @@ export const ENEMIES_DATA = {
 };
 
 // --- Resource Definitions ---
-// Data for gatherable resources like trees and rocks.
 export const RESOURCE_DATA = {
     TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting' },
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining' },
@@ -67,69 +63,104 @@ export const RESOURCE_DATA = {
 };
 
 // --- World Layout ---
-// Defines all the zones, gateways, resources, and enemy spawns in the game world.
 export const worldData = {
     '0,1': {
-        name: "The Collector's Library", theme: 'library', gateways: [{ x: 30, y: 15, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 15 } }],
+        name: "The Collector's Library", theme: 'library', gateways: [{ x: 58, y: 30, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 30 } }],
         pedestals: [
             { x: 5, y: 5, id: 'gg_pedestal' }, { x: 7, y: 5, id: 'vi_pedestal' }, { x: 9, y: 5, id: 'pc_pedestal' },
             { x: 5, y: 7, id: 'tc_pedestal' }, { x: 7, y: 7, id: 'bt_pedestal' }, { x: 9, y: 7, id: 'wp_pedestal' },
             { x: 7, y: 9, id: 'gh_pedestal' },
-        ]
+        ],
+        mapLayout: Array(60).fill(" ".repeat(60)) // Placeholder empty map for this zone
     },
     '1,0': {
-        name: "The Quiet Grove", theme: 'dark_forest', gateways: [{ x: 15, y: 30, destZone: { x: 1, y: 1 }, entry: { x: 15, y: 1 } }],
-        spawns: [
-            { x: 15, y: 15, type: 'GOLEM_KING' },
-        ],
+        name: "The Quiet Grove", theme: 'dark_forest', gateways: [{ x: 30, y: 58, destZone: { x: 1, y: 1 }, entry: { x: 30, y: 1 } }],
+        spawns: [ { x: 30, y: 30, type: 'GOLEM_KING' }, ],
+        mapLayout: Array(60).fill(" ".repeat(60)) // Placeholder empty map
     },
     '1,1': {
         name: "Verdant Starting Area", theme: 'forest',
         gateways: [
-            { x: 15, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 15, y: 29 } }, { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 29, y: 15 } },
-        ],
-        // NEW: Structures defined with wall coordinates
-        walls: [
-            // Slime pit (top-left)
-            {x: 5, y: 5}, {x: 6, y: 5}, {x: 7, y: 5}, {x: 8, y: 5}, {x: 9, y: 5},
-            {x: 5, y: 6}, {x: 9, y: 6},
-            {x: 5, y: 7}, {x: 9, y: 7},
-            {x: 5, y: 8}, {x: 6, y: 8}, {x: 8, y: 8}, {x: 9, y: 8},
-            // Red Slime Pen (top-right)
-            {x: 23, y: 3}, {x: 24, y: 3}, {x: 25, y: 3}, {x: 26, y: 3}, {x: 27, y: 3},
-            {x: 23, y: 4},
-            {x: 23, y: 5},
-            {x: 23, y: 6}, {x: 25, y: 6}, {x: 26, y: 6}, {x: 27, y: 6},
-            // Humanoid Hut (bottom-right)
-            {x: 23, y: 23}, {x: 24, y: 23}, {x: 25, y: 23}, {x: 26, y: 23}, {x: 27, y: 23},
-            {x: 23, y: 24}, {x: 27, y: 24},
-            {x: 23, y: 25}, {x: 27, y: 25},
-            {x: 23, y: 26}, {x: 27, y: 26},
-            {x: 23, y: 27}, {x: 24, y: 27}, {x: 26, y: 27}, {x: 27, y: 27},
+            { x: 30, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 30, y: 57 } }, { x: 0, y: 30, destZone: { x: 0, y: 1 }, entry: { x: 57, y: 30 } },
         ],
         resources: [
-            { x: 10, y: 10, type: 'TREE', id: 'tree_1_1_1' }, { x: 12, y: 20, type: 'TREE', id: 'tree_1_1_2' }, { x: 25, y: 15, type: 'TREE', id: 'tree_1_1_3' },
-            { x: 20, y: 10, type: 'ROCK', id: 'rock_1_1_1' }, { x: 18, y: 20, type: 'ROCK', id: 'rock_1_1_2' }, { x: 25, y: 18, type: 'ROCK', id: 'rock_1_1_3' },
-            { x: 4, y: 20, type: 'POND', id: 'pond_1_1_1' }, { x: 5, y: 20, type: 'POND', id: 'pond_1_1_2' },
-            { x: 4, y: 21, type: 'POND', id: 'pond_1_1_3' }, { x: 5, y: 21, type: 'POND', id: 'pond_1_1_4' }
+            { x: 33, y: 33, type: 'TREE', id: 'tree_1' }, { x: 10, y: 50, type: 'TREE', id: 'tree_2' },
+            { x: 50, y: 10, type: 'ROCK', id: 'rock_1' }, { x: 48, y: 52, type: 'ROCK', id: 'rock_2' },
+            { x: 15, y: 16, type: 'POND', id: 'pond_1' }, { x: 16, y: 16, type: 'POND', id: 'pond_2' },
         ],
         spawns: [
-            // Golem spawn remains in its own clearing
-            { x: 2, y: 2, type: 'GOLEM' },
-            // Red slimes moved to their pen
-            { x: 24, y: 4, type: 'RED_SLIME' }, { x: 26, y: 4, type: 'RED_SLIME' }, 
-            { x: 25, y: 5, type: 'RED_SLIME' },
-            // Slimes moved to their pit
-            { x: 7, y: 6, type: 'BLUE_SLIME' }, { x: 8, y: 7, type: 'BLUE_SLIME' }, 
-            { x: 6, y: 7, type: 'BLUE_SLIME' }, { x: 7, y: 7, type: 'YELLOW_SLIME' },
-            // Humanoids and their beasts moved to their hut
-            { x: 25, y: 25, type: 'HUMAN' }, { x: 24, y: 26, type: 'BOAR' }, { x: 26, y: 26, type: 'WOLF' },
+            { x: 18, y: 45, type: 'BLUE_SLIME' }, { x: 20, y: 46, type: 'BLUE_SLIME' },
+            { x: 12, y: 40, type: 'YELLOW_SLIME' },
+            { x: 52, y: 22, type: 'RED_SLIME' },
+            { x: 8, y: 8, type: 'GOLEM' },
+            { x: 45, y: 45, type: 'HUMAN' }, { x: 46, y: 46, type: 'BOAR' }, { x: 47, y: 45, type: 'WOLF' },
+        ],
+        // F = Deep Forest, D = Deep Water, W = Wall, ' ' = Grass
+        mapLayout: [
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFF       FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFF   WWW   FFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFF   W   W   FFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFWFW  W   W  WFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFWFW  W G W  WFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFWFW  WWWWW  WFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFDDDDFFFFFFFWFW         WFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFDDDDDDFFFFFFFFFFFFF FFFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFDDDDDDDFFFFFFFFFF  F FFFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFDDDDDDDDFFFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFDDDDDDDDDFFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFDDDDDDDDDDFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFDDDDDDDDDFFFFF    F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFDDDDDDDDDFFF  FF F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFPPPPPDDDF  FFF F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFPDDDDF  FFFFF FFFFWFWFFFFFFFFFFFFFFWWWWWWWFFFFFF",
+            "FFFFFFFFFFFFFFF  FFFFF FFFFWFWFFFFFFFFFFFFFFW     WFFFFFF",
+            "FFFFFFFFFFFFFFF  FFFFF FFFFWFWFFFFFFFFFFFFFFW     WFFFFFF",
+            "FFFFFFFFFFFFF    FFFFF FFFFWFWFFFFFFFFFFWWWWWW H WWFFFFFF",
+            "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFW W   WWFFFFFF",
+            "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFW  B  WWFFFFFF",
+            "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFFWWWWWWWWFFFFFF",
+            "FFFFF                 WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "      FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFF   FFFFFFFFFFFFF  WFWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+            " FFF T FFFFFFFFFFFFF         FFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFF   FFFFFFFFFFFFF FFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFF FFFFFFFFFFFF FFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFF             FFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFFFFFFFFF FFFFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFFFFFFFFF FFFFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFF Y      FFFFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFWWWWWWWWWWWFFFFFFFF FFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFW         WFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFW  S   S  WFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFW   S     WFFFFFFFFFFFFF R FFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFW         WFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFWWWWWWWWWWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            " FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
         ],
     },
 };
 
 // --- Altar Upgrades ---
-// Defines the available upgrades at the Soul Altar and their costs.
 export const ALTAR_UPGRADES = {
     plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(2 * Math.pow(3, level)) }) },
     plusTwoMaxHp: { name: "+2 Max HP", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(2 * Math.pow(3, level)) }) },
