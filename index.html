@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gridfall: Marked Souls</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #0a0a0a;
+            color: #e5e5e5;
+            overflow: hidden;
+        }
+        .ui-panel {
+            background-color: #1c1c1c;
+            border: 1px solid #2a2a2a;
+        }
+        .progress-bar-container { background-color: #333; border-radius: 0.25rem; overflow: hidden; height: 1.25rem; }
+        .progress-bar { 
+            height: 100%; 
+            transition: width 0.3s ease-in-out; 
+            text-align: center; 
+            color: white; 
+            font-weight: 500; 
+            font-size: 0.75rem; 
+            line-height: 1.25rem; 
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .hp-bar { background-color: #c026d3; } /* fuchsia-600 */
+        
+        #context-menu {
+            position: absolute; display: none; background-color: #222; border: 1px solid #444;
+            border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.4); padding: 0.5rem; z-index: 1000;
+        }
+        #context-menu button {
+            display: block; width: 100%; padding: 0.5rem 1rem; text-align: left;
+            background: none; border: none; color: #ccc; border-radius: 0.25rem; cursor: pointer;
+        }
+        #context-menu button:hover { background-color: #333; }
+        
+        .damage-popup {
+            position: absolute;
+            color: white;
+            font-weight: bold;
+            font-size: 1.1rem;
+            text-shadow: 2px 2px 2px black;
+            pointer-events: none;
+            transition: transform 1s ease-out, opacity 1s ease-out;
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .damage-popup.player { color: #f87171; } /* red-400 */
+        .damage-popup.enemy { color: #fef08a; } /* yellow-200 */
+
+        .stat-popup {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75);
+            border: 1px solid #4a4a4a;
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            color: white;
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 50;
+        }
+
+        .modal-item {
+            display: flex; justify-content: space-between; align-items: center; width: 100%;
+            padding: 0.5rem 1rem;
+            border-radius: 4px; user-select: none; font-size: 1rem; border: 1px solid #3f3f46;
+        }
+        .modal-item.clickable:hover { background-color: #3f3f46; cursor: pointer; }
+        .modal-item.disabled { color: #6b7280; cursor: default; pointer-events: none; }
+        .modal-item.disabled:hover { background-color: transparent; }
+        .modal-item .cost { color: #fef08a; font-weight: bold; } /* yellow-200 */
+        .modal-item.disabled .cost { color: #6b7280; }
+        .modal-item.cannot-afford .cost { color: #f87171; } /* red-400 */
+        .modal-item.assigned { border-color: #fbbf24; } /* amber-400 */
+
+        .char-button {
+            border: 2px solid #4a4a4a; padding: 0.5rem; text-align: center;
+            border-radius: 0.375rem; cursor: pointer; transition: all 0.2s;
+            font-weight: 500;
+        }
+        .char-button:hover { background-color: #3a3a3a; border-color: #6a6a6a; }
+        .char-button.active { background-color: #c026d3; border-color: #f472b6; color: white; }
+        
+        #notification-banner {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            transform: translateY(-100%);
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+        #notification-banner.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <main id="game-container" class="w-full max-w-7xl mx-auto grid lg:grid-cols-3 gap-6">
+        
+        <div id="canvas-container" class="lg:col-span-2 relative">
+            <canvas id="game-canvas" class="bg-black rounded-lg"></canvas>
+            <div id="context-menu"></div>
+        </div>
+        
+        <div id="ui-panel" class="relative p-4 rounded-lg flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
+            <div id="notification-banner" class="p-2 bg-fuchsia-600 text-white text-center rounded-b-lg shadow-lg z-10">Notification</div>
+            
+            <header class="text-center pb-2 border-b border-gray-700">
+                <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
+                <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
+            </header>
+
+            <section id="combat-info-section" class="space-y-2">
+                 <div>
+                    <div class="flex justify-between items-baseline">
+                        <span id="active-character-name" class="text-sm font-bold text-fuchsia-300">Character 1</span>
+                        <span id="player-souls" class="text-xs text-yellow-200">0 ✧</span>
+                    </div>
+                    <div class="progress-bar-container"><div id="player-hp-bar" class="progress-bar hp-bar">5/5</div></div>
+                 </div>
+                 <div id="enemy-combat-info" class="hidden">
+                    <div class="flex justify-between items-center">
+                         <div id="enemy-name" class="text-sm font-bold text-green-400">Slime</div>
+                         <div id="enemy-stats" class="text-sm"></div>
+                    </div>
+                    <div class="progress-bar-container"><div id="enemy-hp-bar" class="progress-bar bg-green-500">10/10</div></div>
+                 </div>
+            </section>
+
+            <section>
+                <h2 class="text-lg font-semibold text-white mb-2">Status</h2>
+                <div id="action-status" class="text-center text-gray-400 h-10 p-2 bg-black bg-opacity-25 rounded-md flex items-center justify-center text-sm">
+                    Connecting...
+                </div>
+            </section>
+            
+            <section id="character-management-section">
+                <h2 class="text-lg font-semibold text-white mb-2">Characters</h2>
+                <div id="character-switcher" class="grid grid-cols-2 gap-2">
+                </div>
+            </section>
+
+            <section id="stats-section" class="space-y-3">
+                 <h2 class="text-lg font-semibold text-white mb-2">Team Stats</h2>
+                 <div id="combat-level-container">
+                    <div class="flex justify-between items-center mb-1 text-sm">
+                        <span class="font-medium text-fuchsia-300">Combat Level</span>
+                        <span id="player-level">Lv 1</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div id="xp-progress" class="progress-bar bg-fuchsia-500" style="width: 0%;"></div>
+                    </div>
+                 </div>
+                 <div class="grid grid-cols-3 gap-4 text-center text-sm pt-2">
+                    <div>
+                        <div class="font-bold text-pink-400">Damage</div>
+                        <div id="player-damage-stat">2</div>
+                    </div>
+                     <div>
+                        <div class="font-bold text-lime-400">Speed</div>
+                        <div id="player-speed-stat">0</div>
+                    </div>
+                    <div>
+                        <div class="font-bold text-cyan-400">Marks</div>
+                        <div id="mark-count">1/1</div>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="grid grid-cols-3 gap-2">
+                 <button id="openAltarButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-fuchsia-300 font-bold py-2 px-4 rounded-lg border border-fuchsia-500 transition-colors">Altar</button>
+                 <button id="openLevelsButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-sky-300 font-bold py-2 px-4 rounded-lg border border-sky-500 transition-colors">Skills</button>
+                 <button id="openInventoryButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold py-2 px-4 rounded-lg border border-amber-500 transition-colors">Inventory</button>
+            </section>
+        </div>
+    </main>
+    
+    <!-- Modals -->
+    <div id="soulAltarModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                 <h2 class="text-2xl font-bold text-fuchsia-400">Soul Altar</h2>
+                 <span id="altar-souls-display" class="text-lg text-yellow-200 font-bold">0 ✧</span>
+            </div>
+            <div id="altarListContainer" class="flex flex-col items-center space-y-3 overflow-y-auto max-h-96 pr-2"></div>
+            <button id="closeAltarButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
+        </div>
+    </div>
+    <div id="levelsModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <h2 class="text-2xl font-bold text-sky-400 mb-4">Skills</h2>
+            <div id="levelsListContainer" class="flex flex-col items-center space-y-4 overflow-y-auto max-h-96 pr-2"></div>
+            <button id="closeLevelsButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
+        </div>
+    </div>
+    <div id="inventoryModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <h2 class="text-2xl font-bold text-amber-400 mb-4">Inventory</h2>
+            <div id="inventoryListContainer" class="grid grid-cols-4 gap-4 overflow-y-auto max-h-96 pr-2"></div>
+            <button id="closeInventoryButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // --- Firebase Integration ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase variables
+        let app, db, auth, userId;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gridfall-dev';
+        
+        async function initFirebase() {
+            try {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+        
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                userId = auth.currentUser.uid;
+                
+                await initGame();
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                document.getElementById('action-status').textContent = "Connection failed!";
+            }
+        }
+
+        // --- Game Constants ---
+        const TILE_SIZE = 24;
+        const MAP_WIDTH_TILES = 31;
+        const MAP_HEIGHT_TILES = 31;
+        const RESPAWN_TIME = 10000;
+        const MAX_CHARACTERS = 4;
+        const CHARACTER_COLORS = ['#FFFFFF', '#06b6d4', '#d946ef', '#f59e0b'];
+
+        const TILES = { GRASS: 0, WALL: 1, GATEWAY: 2, PEDESTAL: 3, TREE: 4, ROCK: 5, POND: 6 };
+        const ITEM_SPRITES = { soulFragment: '✧', wood: '🌲', copper_ore: '⛏️', fish: '🐟' };
+        
+        const ITEM_DROP_DATA = {
+            'green_goo': { name: 'Green Goo', enemy: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
+            'viscous_ichor': { name: 'Viscous Ichor', enemy: 'YELLOW_SLIME', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 1 }, pedestalId: 'vi_pedestal', visual: { color: '#fde047', char: 'I' }, description: "+1 Damage" },
+            'pulsating_core': { name: 'Pulsating Core', enemy: 'RED_SLIME', dropChance: 0.02, effect: { type: 'ADD_SPEED', value: 1 }, pedestalId: 'pc_pedestal', visual: { color: '#f87171', char: 'C' }, description: "+1 Speed" },
+            'tattered_cloth': { name: 'Tattered Cloth', enemy: 'HUMAN', dropChance: 0.15, effect: { type: 'ADD_HP_REGEN', value: 0.001 }, pedestalId: 'tc_pedestal', visual: { color: '#d1d5db', char: 'T' }, description: "+0.1% HP Regen" },
+            'boar_tusk': { name: 'Boar Tusk', enemy: 'BOAR', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 2 }, pedestalId: 'bt_pedestal', visual: { color: '#e5e7eb', char: 'B' }, description: "+2 Damage" },
+            'wolf_pelt': { name: 'Wolf Pelt', enemy: 'WOLF', dropChance: 0.04, effect: { type: 'ADD_SPEED', value: 2 }, pedestalId: 'wp_pedestal', visual: { color: '#9ca3af', char: 'W' }, description: "+2 Speed" },
+            'golem_heart': { name: 'Golem Heart', enemy: 'GOLEM', dropChance: 0.01, effect: { type: 'ADD_MAX_HP', value: 50 }, pedestalId: 'gh_pedestal', visual: { color: '#a8a29e', char: 'H' }, description: "+50 Max HP" },
+        };
+
+        const ENEMIES_DATA = { 
+            BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: 'green_goo' },
+            YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: 'viscous_ichor' },
+            RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: 'pulsating_core' },
+            GOLEM: { name: 'Stone Golem', color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart' },
+            HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: 'tattered_cloth' },
+            BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: 'boar_tusk' },
+            WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: 'wolf_pelt' },
+        };
+        
+        const RESOURCE_DATA = {
+            TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting' },
+            ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining' },
+            POND: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing' }
+        };
+
+        const worldData = {
+            '0,1': { 
+                name: "The Collector's Library", theme: 'library', gateways: [ { x: 30, y: 15, destZone: {x: 1, y: 1}, entry: {x: 1, y: 15} } ],
+                pedestals: [ 
+                    { x: 5, y: 5, id: 'gg_pedestal' }, { x: 7, y: 5, id: 'vi_pedestal' }, { x: 9, y: 5, id: 'pc_pedestal' },
+                    { x: 5, y: 7, id: 'tc_pedestal' }, { x: 7, y: 7, id: 'bt_pedestal' }, { x: 9, y: 7, id: 'wp_pedestal' },
+                    { x: 7, y: 9, id: 'gh_pedestal' },
+                ]
+            },
+            '1,0': { 
+                name: "The Quiet Grove", theme: 'dark_forest', gateways: [ { x: 15, y: 30, destZone: {x: 1, y: 1}, entry: {x: 15, y: 1} } ],
+                spawns: [
+                    { x: 5, y: 5, type: 'HUMAN' }, { x: 7, y: 8, type: 'HUMAN' }, { x: 9, y: 6, type: 'HUMAN' },
+                    { x: 15, y: 15, type: 'BOAR' }, { x: 17, y: 18, type: 'BOAR' },
+                    { x: 25, y: 25, type: 'WOLF' }, { x: 22, y: 24, type: 'WOLF' },
+                ],
+            },
+            '1,1': {
+                name: "Verdant Starting Area", theme: 'forest',
+                gateways: [
+                    { x: 15, y: 0, destZone: {x: 1, y: 0}, entry: {x: 15, y: 29} }, { x: 0, y: 15, destZone: {x: 0, y: 1}, entry: {x: 29, y: 15} },
+                ],
+                resources: [
+                    { x: 10, y: 10, type: 'TREE', id: 'tree_1_1_1' }, { x: 12, y: 20, type: 'TREE', id: 'tree_1_1_2' }, { x: 25, y: 15, type: 'TREE', id: 'tree_1_1_3' },
+                    { x: 20, y: 10, type: 'ROCK', id: 'rock_1_1_1' }, { x: 18, y: 20, type: 'ROCK', id: 'rock_1_1_2' }, { x: 25, y: 18, type: 'ROCK', id: 'rock_1_1_3' },
+                    { x: 4, y: 20, type: 'POND', id: 'pond_1_1_1', size: {w: 2, h: 2}}
+                ],
+                spawns: [
+                    { x: 7, y: 7, type: 'BLUE_SLIME' }, { x: 8, y: 9, type: 'BLUE_SLIME' }, { x: 6, y: 11, type: 'BLUE_SLIME' },
+                    { x: 9, y: 13, type: 'BLUE_SLIME' }, { x: 5, y: 9, type: 'BLUE_SLIME' }, { x: 8, y: 11, type: 'BLUE_SLIME' },
+                    { x: 22, y: 22, type: 'BLUE_SLIME' }, { x: 24, y: 24, type: 'BLUE_SLIME' }, { x: 26, y: 22, type: 'BLUE_SLIME' },
+                    { x: 23, y: 26, type: 'BLUE_SLIME' }, { x: 21, y: 24, type: 'BLUE_SLIME' }, { x: 24, y: 22, type: 'BLUE_SLIME' },
+                    { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' }, { x: 27, y: 9, type: 'YELLOW_SLIME' },
+                    { x: 23, y: 8, type: 'YELLOW_SLIME' }, { x: 25, y: 11, type: 'YELLOW_SLIME' }, { x: 28, y: 7, type: 'YELLOW_SLIME' },
+                    { x: 2, y: 2, type: 'GOLEM'},
+                    { x: 5, y: 2, type: 'RED_SLIME' }, { x: 2, y: 5, type: 'RED_SLIME' },
+                    { x: 2, y: 25, type: 'RED_SLIME' }, { x: 3, y: 27, type: 'RED_SLIME' }, { x: 4, y: 25, type: 'RED_SLIME' },
+                    { x: 5, y: 28, type: 'RED_SLIME' }, { x: 6, y: 26, type: 'RED_SLIME' }, { x: 2, y: 28, type: 'RED_SLIME' },
+                ],
+            },
+        };
+        
+        const ALTAR_UPGRADES = {
+            plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
+            plusTwoMaxHp: { name: "+2 Max HP", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
+            plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => Math.floor(5 * Math.pow(3, level)) },
+            plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => Math.floor(30 * Math.pow(3, level)) },
+            addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => Math.floor(100 * Math.pow(3, level)) }
+        };
+        
+        let gameState = {};
+        let enemies = {};
+        let deadEnemies = {};
+        let isPerformingAction = {}; 
+        let lastLogicUpdateTime = 0;
+        let statPopupTimeout = null;
+        let currentMapData = [];
+        let notificationTimeout = null;
+
+        function getActiveCharacter() {
+            if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
+            return gameState.characters[gameState.activeCharacterIndex];
+        }
+
+        const ui = {
+            canvas: document.getElementById('game-canvas'),
+            canvasContainer: document.getElementById('canvas-container'),
+            ctx: document.getElementById('game-canvas').getContext('2d'),
+            actionStatus: document.getElementById('action-status'),
+            contextMenu: document.getElementById('context-menu'),
+            activeCharacterName: document.getElementById('active-character-name'),
+            playerHpBar: document.getElementById('player-hp-bar'),
+            playerSouls: document.getElementById('player-souls'),
+            enemyCombatInfo: document.getElementById('enemy-combat-info'),
+            enemyName: document.getElementById('enemy-name'),
+            enemyStats: document.getElementById('enemy-stats'),
+            enemyHpBar: document.getElementById('enemy-hp-bar'),
+            playerLevel: document.getElementById('player-level'),
+            xpProgress: document.getElementById('xp-progress'),
+            playerDamageStat: document.getElementById('player-damage-stat'),
+            playerSpeedStat: document.getElementById('player-speed-stat'),
+            markCount: document.getElementById('mark-count'),
+            characterSwitcher: document.getElementById('character-switcher'),
+            notificationBanner: document.getElementById('notification-banner'),
+            openAltarButton: document.getElementById('openAltarButton'),
+            openLevelsButton: document.getElementById('openLevelsButton'),
+            openInventoryButton: document.getElementById('openInventoryButton'),
+            soulAltarModal: document.getElementById('soulAltarModal'),
+            levelsModal: document.getElementById('levelsModal'),
+            inventoryModal: document.getElementById('inventoryModal'),
+            altarListContainer: document.getElementById('altarListContainer'),
+            levelsListContainer: document.getElementById('levelsListContainer'),
+            inventoryListContainer: document.getElementById('inventoryListContainer'),
+            closeAltarButton: document.getElementById('closeAltarButton'),
+            closeLevelsButton: document.getElementById('closeLevelsButton'),
+            closeInventoryButton: document.getElementById('closeInventoryButton'),
+            altarSoulsDisplay: document.getElementById('altar-souls-display'),
+        };
+        
+        function isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
+        function mergeDeep(target, ...sources) { 
+            if (!sources.length) return target; 
+            const source = sources.shift(); 
+            if (isObject(target) && isObject(source)) { 
+                for (const key in source) { 
+                    if (isObject(source[key])) { 
+                        if (!target[key]) Object.assign(target, { [key]: {} }); 
+                        mergeDeep(target[key], source[key]); 
+                    } else { Object.assign(target, { [key]: source[key] }); } 
+                } 
+            } 
+            return mergeDeep(target, ...sources); 
+        }
+
+        function buildMapData(zoneX, zoneY) {
+            const zoneKey = `${zoneX},${zoneY}`;
+            const zone = worldData[zoneKey];
+            const newMapData = Array.from({ length: MAP_HEIGHT_TILES }, () => Array(MAP_WIDTH_TILES).fill(TILES.GRASS));
+
+            for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
+                for (let x = 0; x < MAP_WIDTH_TILES; x++) {
+                    if (y === 0 || y === MAP_HEIGHT_TILES - 1 || x === 0 || x === MAP_WIDTH_TILES - 1) { newMapData[y][x] = TILES.WALL; }
+                }
+            }
+            if (zone) {
+                if (zone.gateways) zone.gateways.forEach(gw => { newMapData[gw.y][gw.x] = TILES.GATEWAY; });
+                if (zone.pedestals) zone.pedestals.forEach(p => { newMapData[p.y][p.x] = TILES.PEDESTAL; });
+                if (zone.resources) zone.resources.forEach(r => {
+                     const size = r.size || {w: 1, h: 1};
+                     for(let i=0; i<size.w; i++) {
+                        for(let j=0; j<size.h; j++) {
+                            newMapData[r.y+j][r.x+i] = TILES[r.type]; 
+                        }
+                     }
+                });
+            }
+            return newMapData;
+        }
+
+        function getDefaultCharacterState(id, name, color) {
+            return { 
+                id, name, zoneX: 1, zoneY: 1, 
+                player: { x: 15 + id, y: 16 }, 
+                hp: { current: 5, max: 5 },
+                isMoving: false, currentMoveId: null, lastRegenTime: 0,
+                automation: { active: false, task: null, state: 'IDLE', path: [], targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+                combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
+            };
+        }
+
+        function getDefaultGameState() {
+            return { 
+                characters: [], activeCharacterIndex: 0, souls: 0, 
+                level: { current: 1, xp: 0 }, 
+                skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
+                inventory: { wood: 0, copper_ore: 0, fish: 0 },
+                upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0 },
+                collectedItemDrops: []
+            };
+        }
+
+        async function initGame() {
+            ui.canvas.width = TILE_SIZE * MAP_WIDTH_TILES;
+            ui.canvas.height = TILE_SIZE * MAP_HEIGHT_TILES;
+            ui.canvas.addEventListener('contextmenu', handleRightClick);
+            ui.canvas.addEventListener('click', handleLeftClick);
+            document.addEventListener('keydown', handleKeydown);
+            document.addEventListener('click', (e) => {
+                if (ui.contextMenu.style.display === 'block' && !ui.contextMenu.contains(e.target)) {
+                    ui.contextMenu.style.display = 'none';
+                }
+            });
+            ui.openAltarButton.addEventListener('click', openSoulAltar);
+            ui.closeAltarButton.addEventListener('click', closeSoulAltar);
+            ui.openLevelsButton.addEventListener('click', openLevels);
+            ui.closeLevelsButton.addEventListener('click', closeLevels);
+            ui.openInventoryButton.addEventListener('click', openInventory);
+            ui.closeInventoryButton.addEventListener('click', closeInventory);
+            
+            await loadGameState();
+            const activeChar = getActiveCharacter();
+            currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
+            spawnEnemiesForZone(1,1);
+            spawnEnemiesForZone(0,1);
+            spawnEnemiesForZone(1,0);
+            updateAllUI();
+            ui.actionStatus.textContent = "Right-click for options";
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function gameLoop(timestamp) {
+            const now = timestamp || 0;
+            if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
+            const logicDelta = now - lastLogicUpdateTime;
+            if (logicDelta > 60) {
+                checkAllRespawns();
+                updateAllEnemyRegen(now);
+                updateAllPlayerRegen(now);
+                gameState.characters.forEach(char => {
+                    updateAutomation(char, now);
+                    updateCombat(char, now);
+                });
+                updateCombatPanelUI();
+                lastLogicUpdateTime = now;
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function draw() {
+            const ctx = ui.ctx;
+            ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+            const activeChar = getActiveCharacter();
+            if(!activeChar) return;
+            const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+
+            for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
+                for (let x = 0; x < MAP_WIDTH_TILES; x++) {
+                    drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
+                }
+            }
+            if(enemies[zoneKey]) {
+                for(const enemyId in enemies[zoneKey]) {
+                    drawEnemy(enemies[zoneKey][enemyId]);
+                }
+            }
+            gameState.characters.forEach((char, index) => {
+                if (char.zoneX === activeChar.zoneX && char.zoneY === activeChar.zoneY) {
+                    drawPlayer(char, index === gameState.activeCharacterIndex);
+                }
+            });
+            drawMarks(zoneKey);
+        }
+        
+        function drawTile(x, y, zoneX, zoneY) {
+            const zone = worldData[`${zoneX},${zoneY}`];
+            const theme = zone?.theme || 'plains';
+            
+            let bgColor = '#18181b'; 
+            if (theme === 'forest') bgColor = '#166534';
+            else if (theme === 'dark_forest') bgColor = '#14532d';
+            else if (theme === 'library') bgColor = '#4338ca';
+
+            ui.ctx.fillStyle = bgColor;
+            ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            
+            const tileType = currentMapData[y][x];
+            if (tileType === TILES.WALL) {
+                ui.ctx.fillStyle = '#52525b';
+                ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else if (tileType === TILES.GATEWAY) {
+                const centerX = x * TILE_SIZE + TILE_SIZE / 2;
+                const centerY = y * TILE_SIZE + TILE_SIZE / 2;
+                const gradient = ui.ctx.createRadialGradient(centerX, centerY, TILE_SIZE / 5, centerX, centerY, TILE_SIZE / 2);
+                gradient.addColorStop(0, '#a21caf');
+                gradient.addColorStop(1, '#581c87');
+                ui.ctx.fillStyle = gradient;
+                ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else if (tileType === TILES.PEDESTAL) {
+                ui.ctx.fillStyle = '#4b5563';
+                ui.ctx.fillRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                
+                const pedestalData = zone?.pedestals?.find(p => p.x === x && p.y === y);
+                if (pedestalData) {
+                    const itemDropId = Object.keys(ITEM_DROP_DATA).find(id => ITEM_DROP_DATA[id].pedestalId === pedestalData.id);
+                    if (itemDropId && gameState.collectedItemDrops.includes(itemDropId)) {
+                        const itemVisual = ITEM_DROP_DATA[itemDropId].visual;
+                        ui.ctx.fillStyle = itemVisual.color;
+                        ui.ctx.font = `bold ${TILE_SIZE * 0.7}px 'Roboto Mono'`;
+                        ui.ctx.textAlign = 'center'; ui.ctx.textBaseline = 'middle';
+                        ui.ctx.fillText(itemVisual.char, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
+                    }
+                }
+            } else if (tileType === TILES.TREE) {
+                ui.ctx.fillStyle = '#65a30d'; 
+                ui.ctx.fillRect(x * TILE_SIZE + 4, y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                ui.ctx.fillStyle = '#78350f'; 
+                ui.ctx.fillRect(x * TILE_SIZE + 9, y * TILE_SIZE + 15, TILE_SIZE - 18, TILE_SIZE - 15);
+            } else if (tileType === TILES.ROCK) {
+                ui.ctx.fillStyle = '#a1a1aa'; 
+                ui.ctx.fillRect(x * TILE_SIZE + 3, y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+                ui.ctx.fillStyle = '#ca8a04'; 
+                ui.ctx.fillRect(x * TILE_SIZE + 6, y * TILE_SIZE + 8, 4, 4);
+                ui.ctx.fillRect(x * TILE_SIZE + 14, y * TILE_SIZE + 12, 4, 4);
+            } else if (tileType === TILES.POND) {
+                 ui.ctx.fillStyle = '#2563eb'; // blue-600
+                 ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+
+        function drawEnemy(enemy) {
+            const enemyData = ENEMIES_DATA[enemy.type];
+            if (!enemyData) return;
+            const size = enemyData.size || {w: 1, h: 1};
+            const px = enemy.x * TILE_SIZE;
+            const py = enemy.y * TILE_SIZE;
+            const width = size.w * TILE_SIZE;
+            const height = size.h * TILE_SIZE;
+            ui.ctx.fillStyle = enemyData.color;
+            ui.ctx.fillRect(px, py, width, height);
+            if (enemy.type === 'GOLEM') {
+                ui.ctx.fillStyle = '#57534e';
+                const eyeSize = TILE_SIZE * 0.6;
+                const eyeOffset = (TILE_SIZE - eyeSize) / 2;
+                ui.ctx.fillRect(px + eyeOffset, py + eyeOffset, eyeSize, eyeSize);
+                ui.ctx.fillRect(px + TILE_SIZE + eyeOffset, py + eyeOffset, eyeSize, eyeSize);
+            }
+        }
+
+        function drawMarks(currentZoneKey) {
+            gameState.characters.forEach(char => {
+                ui.ctx.strokeStyle = char.automation.color;
+                ui.ctx.lineWidth = 2;
+                char.automation.markedTiles.forEach(tile => {
+                    if (`${tile.zoneX},${tile.zoneY}` === currentZoneKey) {
+                        ui.ctx.strokeRect(tile.x * TILE_SIZE + 1, tile.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                    }
+                });
+            });
+        }
+
+        function drawPlayer(character, isActive) {
+            ui.ctx.fillStyle = isActive ? '#f472b6' : '#a855f7';
+            ui.ctx.fillRect(character.player.x * TILE_SIZE + 6, character.player.y * TILE_SIZE + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+            if (isActive) {
+                ui.ctx.strokeStyle = 'white';
+                ui.ctx.lineWidth = 1;
+                ui.ctx.strokeRect(character.player.x * TILE_SIZE + 4, character.player.y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+            }
+        }
+        function showDamagePopup(x, y, amount, isPlayerDamage) {
+            if (amount <= 0) return;
+            const popup = document.createElement('div');
+            popup.textContent = amount;
+            popup.className = `damage-popup ${isPlayerDamage ? 'player' : 'enemy'}`;
+            ui.canvasContainer.appendChild(popup);
+            popup.style.left = `${(x * TILE_SIZE) + (TILE_SIZE / 2) - popup.offsetWidth / 2}px`;
+            popup.style.top = `${(y * TILE_SIZE) - popup.offsetHeight}px`;
+            setTimeout(() => {
+                popup.style.transform = 'translateY(-30px)';
+                popup.style.opacity = '0';
+                setTimeout(() => popup.remove(), 1000);
+            }, 10);
+        }
+
+        function showStatPopup(x, y, title, text) {
+             if (statPopupTimeout) clearTimeout(statPopupTimeout);
+            const existingPopup = document.querySelector('.stat-popup');
+            if(existingPopup) existingPopup.remove();
+            
+            const popup = document.createElement('div');
+            popup.className = 'stat-popup';
+            popup.innerHTML = `<strong class="text-fuchsia-400">${title}</strong><br>${text}`;
+
+            ui.canvasContainer.appendChild(popup);
+            popup.style.left = `${(x * TILE_SIZE) + (TILE_SIZE / 2) - (popup.offsetWidth / 2)}px`;
+            popup.style.top = `${(y * TILE_SIZE) - popup.offsetHeight - 5}px`;
+            
+            statPopupTimeout = setTimeout(() => {
+                popup.style.opacity = '0';
+                setTimeout(() => popup.remove(), 3000);
+            }, 3000);
+        }
+
+        function showNotification(message) {
+            if (notificationTimeout) clearTimeout(notificationTimeout);
+            ui.notificationBanner.textContent = message;
+            ui.notificationBanner.classList.add('show');
+            notificationTimeout = setTimeout(() => {
+                ui.notificationBanner.classList.remove('show');
+            }, 3000);
+        }
+        
+        function renderAltarList() {
+            const listContainer = ui.altarListContainer;
+            listContainer.innerHTML = '';
+            ui.altarSoulsDisplay.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`;
+        
+            Object.keys(ALTAR_UPGRADES).forEach(id => {
+                const upgrade = ALTAR_UPGRADES[id];
+                const itemEl = document.createElement('div');
+                itemEl.className = 'modal-item clickable';
+                const nameEl = document.createElement('span');
+                const costEl = document.createElement('span');
+                costEl.className = 'cost';
+
+                let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
+                const maxLevel = upgrade.maxLevel;
+        
+                nameEl.textContent = `${upgrade.name} (${currentLevel}/${maxLevel})`;
+                
+                if (currentLevel >= maxLevel) {
+                    itemEl.classList.add('disabled');
+                    costEl.textContent = "MAX";
+                } else {
+                    const cost = upgrade.cost(currentLevel);
+                    costEl.textContent = `${cost} ${ITEM_SPRITES.soulFragment}`;
+                    if (gameState.souls < cost) itemEl.classList.add('cannot-afford');
+                    itemEl.addEventListener('click', () => purchaseUpgrade(id));
+                }
+                
+                itemEl.append(nameEl, costEl);
+                listContainer.appendChild(itemEl);
+            });
+        }
+        
+        function purchaseUpgrade(id) {
+            const upgrade = ALTAR_UPGRADES[id];
+            let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
+
+            if (currentLevel >= upgrade.maxLevel) return;
+
+            const cost = upgrade.cost(currentLevel);
+            if (gameState.souls >= cost) {
+                gameState.souls -= cost;
+                if (id === 'addCharacter') {
+                    const newId = gameState.characters.length;
+                    gameState.characters.push(getDefaultCharacterState(newId, `Character ${newId + 1}`, CHARACTER_COLORS[newId % CHARACTER_COLORS.length]));
+                } else {
+                    gameState.upgrades[id]++;
+                }
+                recalculateTeamStats();
+                saveGameState();
+                renderAltarList();
+                updateAllUI();
+            }
+        }
+        
+        function openModal(modal) { modal.classList.remove('hidden'); }
+        function closeModal(modal) { modal.classList.add('hidden'); }
+        function openSoulAltar() { openModal(ui.soulAltarModal); renderAltarList(); }
+        function closeSoulAltar() { closeModal(ui.soulAltarModal); }
+        function openLevels() { openModal(ui.levelsModal); renderLevels(); }
+        function closeLevels() { closeModal(ui.levelsModal); }
+        function openInventory() { openModal(ui.inventoryModal); renderInventory(); }
+        function closeInventory() { closeModal(ui.inventoryModal); }
+
+        function renderLevels() {
+            ui.levelsListContainer.innerHTML = '';
+            const activeChar = getActiveCharacter();
+            const createLevelBar = (name, skillKey, level, xp, neededXp, color) => {
+                const xpPercent = (neededXp > 0) ? (xp / neededXp) * 100 : 100;
+                const isAssigned = activeChar.automation.active && activeChar.automation.task === skillKey;
+                const container = document.createElement('div');
+                container.className = `w-full p-2 border rounded-lg modal-item clickable ${isAssigned ? 'assigned' : ''}`;
+                container.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-center mb-1 text-sm">
+                            <span class="font-medium text-${color}-300">${name}</span>
+                            <span>Lv ${level}</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar bg-${color}-500" style="width: ${xpPercent}%;">${xp}/${neededXp}</div>
+                        </div>
+                    </div>
+                `;
+                container.addEventListener('click', () => assignSkillTask(skillKey));
+                return container;
+            };
+            
+            ui.levelsListContainer.appendChild(createLevelBar('Woodcutting', 'woodcutting', gameState.skills.woodcutting.level, gameState.skills.woodcutting.xp, xpForSkillLevel(gameState.skills.woodcutting.level), 'lime'));
+            ui.levelsListContainer.appendChild(createLevelBar('Mining', 'mining', gameState.skills.mining.level, gameState.skills.mining.xp, xpForSkillLevel(gameState.skills.mining.level), 'yellow'));
+            ui.levelsListContainer.appendChild(createLevelBar('Fishing', 'fishing', gameState.skills.fishing.level, gameState.skills.fishing.xp, xpForSkillLevel(gameState.skills.fishing.level), 'sky'));
+        }
+
+        function renderInventory() {
+            ui.inventoryListContainer.innerHTML = '';
+            for (const item in gameState.inventory) {
+                if(gameState.inventory[item] > 0) {
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'flex flex-col items-center justify-center p-2 border border-zinc-600 rounded-lg bg-zinc-800';
+                    itemEl.innerHTML = `
+                        <span class="text-3xl">${ITEM_SPRITES[item]}</span>
+                        <span class="text-sm font-bold">${gameState.inventory[item]}</span>
+                    `;
+                    ui.inventoryListContainer.appendChild(itemEl);
+                }
+            }
+        }
+        
+        function getTileFromClick(e) { 
+            const rect = ui.canvas.getBoundingClientRect(); 
+            return {x: Math.floor((e.clientX - rect.left) / TILE_SIZE), y: Math.floor((e.clientY - rect.top) / TILE_SIZE)}; 
+        }
+
+        function getEnemyAt(x, y, zoneKey) { 
+            if (!enemies[zoneKey]) return null; 
+            for (const id in enemies[zoneKey]) { 
+                const enemy = enemies[zoneKey][id]; 
+                const eData = ENEMIES_DATA[enemy.type]; 
+                const size = eData.size || { w: 1, h: 1 }; 
+                if (x >= enemy.x && x < enemy.x + size.w && y >= enemy.y && y < enemy.y + size.h) return enemy;
+            } 
+            return null; 
+        }
+
+        function getResourceNodeAt(x, y, zoneX, zoneY) {
+            const zone = worldData[`${zoneX},${zoneY}`];
+            if (!zone || !zone.resources) return null;
+            return zone.resources.find(r => {
+                const size = r.size || {w: 1, h: 1};
+                return x >= r.x && x < r.x + size.w && y >= r.y && y < r.y + size.h;
+            });
+        }
+
+        function handleKeydown(e) { 
+            const key = parseInt(e.key); 
+            if (!isNaN(key) && key > 0 && key <= MAX_CHARACTERS) { 
+                const charIndex = key - 1; 
+                if (gameState.characters[charIndex]) { 
+                    gameState.activeCharacterIndex = charIndex; 
+                    saveGameState(); 
+                    updateAllUI(); 
+                } 
+            } 
+        }
+
+        function handleLeftClick(e) {
+            const activeChar = getActiveCharacter();
+            if (!activeChar) return;
+        
+            const { x, y } = getTileFromClick(e);
+            
+            if (activeChar.automation.active || activeChar.isMoving) return;
+
+            const enemy = getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
+            const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
+        
+            if (e.shiftKey) { 
+                handleMarking(x, y, enemy, activeChar);
+                return;
+            }
+            
+            if (enemy) {
+                 handleEnemyClick(enemy);
+            } else if (resource) {
+                 handleResourceClick(resource);
+            } else {
+                handleMovementClick(x, y, activeChar);
+            }
+        }
+        
+        function handleEnemyClick(enemy) {
+            const enemyData = ENEMIES_DATA[enemy.type];
+            let content = `❤️ ${Math.ceil(enemy.currentHp)}/${enemyData.hp}<br>👊 ${enemyData.attack}<br>💰 ${enemyData.loot.soulFragment}`;
+            const itemDropId = enemyData.itemDrop;
+            if (itemDropId && !gameState.collectedItemDrops.includes(itemDropId)) {
+                const itemData = ITEM_DROP_DATA[itemDropId];
+                content += `<br><span style="color:#67e8f9;">${itemData.dropChance * 100}% 💧</span>`;
+            }
+            showStatPopup(enemy.x, enemy.y, enemyData.name, content);
+        }
+        
+        function handleResourceClick(resource) {
+             const resourceData = RESOURCE_DATA[resource.type];
+             showStatPopup(resource.x, resource.y, resourceData.name, `Level ${resourceData.levelReq} ${resourceData.skill}`);
+        }
+
+        function handleMovementClick(x, y, activeChar) {
+            const moveId = Date.now();
+            activeChar.currentMoveId = moveId;
+        
+            let targetPos = null;
+            if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY)) {
+                targetPos = {x, y};
+            }
+            if (targetPos) {
+                const path = findPath(activeChar.player, targetPos, activeChar.zoneX, activeChar.zoneY);
+                if (path && path.length > 0) {
+                    moveAlongPath(activeChar, path, moveId);
+                }
+            }
+        }
+
+        function handleMarking(x, y, enemy, activeChar) {
+            if (activeChar.automation.active) {
+                showNotification("Stop current task to mark enemies.");
+                return;
+            }
+            let existingMarkIndex = -1;
+            let existingMarkChar = null;
+            for (const char of gameState.characters) {
+                existingMarkIndex = char.automation.markedTiles.findIndex(tile => tile.x === x && tile.y === y && tile.zoneX === activeChar.zoneX && tile.zoneY === activeChar.zoneY);
+                if (existingMarkIndex !== -1) { existingMarkChar = char; break; }
+            }
+
+            if (existingMarkChar && existingMarkChar.id === activeChar.id && existingMarkIndex !== -1) {
+                activeChar.automation.markedTiles.splice(existingMarkIndex, 1);
+                const enemyOnTile = getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
+                if (activeChar.combat.active && enemyOnTile && activeChar.combat.targetId === enemyOnTile.id) {
+                    forceEndCombat(activeChar);
+                }
+            } else if (!existingMarkChar && enemy) {
+                const stats = getTeamStats();
+                if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
+                    const removedTile = activeChar.automation.markedTiles.shift();
+                    const removedEnemy = getEnemyAt(removedTile.x, removedTile.y, `${removedTile.zoneX},${removedTile.zoneY}`);
+                    if (activeChar.combat.active && removedEnemy && activeChar.combat.targetId === removedEnemy.id) {
+                        forceEndCombat(activeChar);
+                    }
+                }
+                activeChar.automation.markedTiles.push({ x, y, zoneX: activeChar.zoneX, zoneY: activeChar.zoneY });
+            }
+            saveGameState();
+            updateAllUI();
+        }
+
+        async function moveAlongPath(character, path, moveId) {
+            if (!path || path.length === 0) return;
+            
+            const stats = getTeamStats();
+            const moveDelay = 200 / (1 + (stats.speed * 0.01));
+
+            character.isMoving = true;
+            if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Moving...';
+        
+            for (const step of path) {
+                if (character.currentMoveId !== moveId) break;
+                character.player.x = step.x;
+                character.player.y = step.y;
+                await new Promise(r => setTimeout(r, moveDelay));
+            }
+        
+            if (character.currentMoveId === moveId) {
+                const endTile = character.player;
+                const zone = worldData[`${character.zoneX},${character.zoneY}`];
+                if (zone && zone.gateways) {
+                    const gateway = zone.gateways.find(g => g.x === endTile.x && g.y === endTile.y);
+                    if (gateway) {
+                        character.zoneX = gateway.destZone.x;
+                        character.zoneY = gateway.destZone.y;
+                        character.player.x = gateway.entry.x;
+                        character.player.y = gateway.entry.y;
+                        spawnEnemiesForZone(character.zoneX, character.zoneY);
+                        currentMapData = buildMapData(character.zoneX, character.zoneY);
+                        saveGameState();
+                        updateAllUI();
+                    }
+                }
+                 if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Idle';
+            } else {
+                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Movement cancelled.';
+            }
+            character.isMoving = false;
+            character.currentMoveId = null;
+        }
+
+        function handleRightClick(e) {
+            e.preventDefault();
+            const activeChar = getActiveCharacter();
+            if (!activeChar) return;
+            ui.contextMenu.innerHTML = '';
+            
+            const anyCharHasTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
+            if (activeChar.automation.markedTiles.length > 0 && !activeChar.automation.active) {
+                addContextMenuButton('Start Marked Route', () => startAutomation(activeChar, 'hunting'));
+            }
+            if (activeChar.automation.markedTiles.length > 0) {
+                addContextMenuButton('Clear Marks', () => { stopAutomation(activeChar); activeChar.automation.markedTiles = []; saveGameState(); });
+            }
+            const anyCharHasMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
+            if (anyCharHasMarks) {
+                addContextMenuButton('Clear All Marks', () => {
+                    gameState.characters.forEach(char => { char.automation.markedTiles = []; if (char.automation.task === 'hunting') stopAutomation(char); });
+                    saveGameState();
+                });
+            }
+             if (anyCharHasTask) {
+                addContextMenuButton('Stop All Tasks', () => {
+                    gameState.characters.forEach(char => stopAutomation(char));
+                    saveGameState();
+                });
+            }
+            if (ui.contextMenu.children.length > 0) {
+                const rect = ui.canvas.getBoundingClientRect();
+                ui.contextMenu.style.left = `${e.clientX - rect.left}px`;
+                ui.contextMenu.style.top = `${e.clientY - rect.top}px`;
+                ui.contextMenu.style.display = 'block';
+            }
+        }
+
+        function addContextMenuButton(text, onClick) {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.onclick = () => { onClick(); ui.contextMenu.style.display = 'none'; };
+            ui.contextMenu.appendChild(btn);
+        }
+
+        function getTeamStats() { 
+            const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
+            let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
+            let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
+            let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
+            let totalHpRegenBonus = 0;
+
+            if (gameState.collectedItemDrops) {
+                gameState.collectedItemDrops.forEach(itemDropId => {
+                    const itemDrop = ITEM_DROP_DATA[itemDropId];
+                    if (!itemDrop) return;
+                    switch(itemDrop.effect.type) {
+                        case 'ADD_DAMAGE': totalDamage += itemDrop.effect.value; break;
+                        case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
+                        case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
+                    }
+                });
+            }
+            return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus }; 
+        }
+
+        function updateCombat(character, now) { 
+            const { combat } = character; 
+            if (!combat.active) return;
+            const combatDelta = now - combat.lastUpdateTime; 
+            if (combatDelta < 1500) return; 
+            combat.lastUpdateTime = now; 
+            const zoneKey = `${character.zoneX},${character.zoneY}`; 
+            const enemy = enemies[zoneKey]?.[combat.targetId]; 
+            if (!enemy) { endCombat(character, true); return; } 
+            
+            const playerStats = getTeamStats(); 
+            let damage; 
+            if (combat.isPlayerTurn) { 
+                damage = Math.max(1, playerStats.damage); 
+                enemy.currentHp -= damage; 
+                showDamagePopup(enemy.x, enemy.y, damage, false); 
+                gainXp(damage); 
+            } else { 
+                const enemyData = ENEMIES_DATA[enemy.type]; 
+                damage = Math.max(1, enemyData.attack); 
+                character.hp.current -= damage; 
+                showDamagePopup(character.player.x, character.player.y, damage, true); 
+            } 
+            combat.isPlayerTurn = !combat.isPlayerTurn; 
+            if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
+            if (enemy.currentHp <= 0) endCombat(character, true); 
+            else if (character.hp.current <= 0) endCombat(character, false); 
+        }
+
+        async function startCombat(character, enemyId, isAutomated = false) { 
+            if (character.combat.active || character.isMoving) return; 
+            
+            stopAutomation(character);
+            if (isAutomated) {
+                character.automation.task = 'hunting';
+                character.automation.active = true;
+            }
+
+            const zoneKey = `${character.zoneX},${character.zoneY}`; 
+            const enemy = enemies[zoneKey]?.[enemyId]; 
+            if (!enemy) return;
+            
+            const moveId = Date.now();
+            character.currentMoveId = moveId;
+
+            if (!isAdjacent(character.player, enemy)) { 
+                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to enemy..."; 
+                const targetPos = findWalkableNeighborForEntity(enemy, character.player); 
+                if (!targetPos) { 
+                    if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't reach target."; 
+                    return; 
+                } 
+                const path = findPath(character.player, targetPos, character.zoneX, character.zoneY); 
+                if (path) { await moveAlongPath(character, path, moveId); } 
+                else { 
+                    if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't find a path."; 
+                    return; 
+                } 
+            } 
+            
+            if (character.currentMoveId !== moveId) return;
+
+            if (isAdjacent(character.player, enemy)) { 
+                character.combat.active = true; 
+                character.combat.targetId = enemyId; 
+                character.combat.isPlayerTurn = true; 
+                character.combat.lastUpdateTime = performance.now(); 
+                if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
+            }
+        }
+        
+        function forceEndCombat(character) {
+             if (!character.combat.active) return;
+             character.combat.active = false;
+             character.combat.targetId = null;
+             if (character.automation.active && character.automation.task === 'hunting') {
+                character.automation.state = "IDLE";
+             }
+             updateCombatPanelUI();
+             ui.actionStatus.textContent = 'Disengaged.';
+        }
+
+        function endCombat(character, playerWon) { 
+            const { combat, zoneX, zoneY } = character; 
+            if (!combat.targetId) return; 
+            const zoneKey = `${zoneX},${zoneY}`; 
+            const targetEnemy = enemies[zoneKey]?.[combat.targetId]; 
+            if (playerWon && targetEnemy) {
+                const enemyData = ENEMIES_DATA[targetEnemy.type];
+                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Target neutralized.`; 
+                gameState.souls += enemyData.loot.soulFragment;
+
+                const itemDropId = enemyData.itemDrop;
+                if (itemDropId && !gameState.collectedItemDrops.includes(itemDropId)) {
+                    const itemData = ITEM_DROP_DATA[itemDropId];
+                    if (Math.random() < itemData.dropChance) {
+                        gameState.collectedItemDrops.push(itemDropId);
+                        showNotification(`Item Dropped: ${itemData.name}!`);
+                        recalculateTeamStats();
+                    }
+                }
+
+                if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
+                deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: Date.now() + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
+                delete enemies[zoneKey][combat.targetId];
+                
+                if (character.automation.active && character.automation.task === 'hunting') {
+                    character.automation.state = 'IDLE';
+                }
+
+            } else if (!playerWon) {
+                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
+                
+                character.automation.markedTiles = []; 
+                stopAutomation(character);
+                
+                setTimeout(() => {
+                    character.player = { x: 15, y: 15 };
+                    character.zoneX = 1;
+                    character.zoneY = 1;
+                    character.hp.current = character.hp.max;
+                    if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} respawned.`;
+                    updateAllUI();
+                }, 3000);
+            }
+            combat.active = false;
+            combat.targetId = null;
+            updateAllUI();
+            saveGameState();
+        }
+        
+        function recalculateTeamStats() {
+            let allBonuses = { ADD_MAX_HP: 0 };
+            
+            if(gameState.collectedItemDrops) {
+                gameState.collectedItemDrops.forEach(itemDropId => {
+                    const itemDrop = ITEM_DROP_DATA[itemDropId];
+                    if (itemDrop && itemDrop.effect.type === 'ADD_MAX_HP') {
+                        allBonuses.ADD_MAX_HP += itemDrop.effect.value;
+                    }
+                });
+            }
+            allBonuses.ADD_MAX_HP += (gameState.upgrades.plusTwoMaxHp || 0) * 2;
+            allBonuses.ADD_MAX_HP += (gameState.skills.fishing.level - 1) * 3;
+
+            gameState.characters.forEach(char => {
+                const levelHp = 4 + gameState.level.current;
+                const oldMaxHp = char.hp.max;
+                char.hp.max = levelHp + allBonuses.ADD_MAX_HP;
+                const diff = char.hp.max - oldMaxHp;
+                char.hp.current = Math.min(char.hp.max, char.hp.current + diff);
+            });
+            updateAllUI();
+        }
+
+        function xpForLevel(level) { return Math.floor(50 * Math.pow(1.23, level - 1)); }
+        function gainXp(amount) { 
+            const { level } = gameState; 
+            level.xp += amount; 
+            let needed = xpForLevel(level.current); 
+            while (level.xp >= needed) { 
+                level.xp -= needed; 
+                level.current++;
+                recalculateTeamStats();
+                needed = xpForLevel(level.current); 
+            } 
+            updateAllUI(); 
+        }
+
+        function xpForSkillLevel(level) { return Math.floor(100 * Math.pow(1.15, level - 1)); }
+        function gainSkillXp(skill, amount) {
+            if (!gameState.skills[skill]) return;
+            gameState.skills[skill].xp += amount;
+            let needed = xpForSkillLevel(gameState.skills[skill].level);
+            while (gameState.skills[skill].xp >= needed) {
+                gameState.skills[skill].xp -= needed;
+                gameState.skills[skill].level++;
+                showNotification(`${skill.charAt(0).toUpperCase() + skill.slice(1)} level up: ${gameState.skills[skill].level}!`);
+                recalculateTeamStats();
+                needed = xpForSkillLevel(gameState.skills[skill].level);
+            }
+            if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
+            saveGameState();
+        }
+        
+        function updateAutomation(character, now) { 
+            const { combat, isMoving } = character; 
+            if (!character.automation.active || combat.active || isMoving) return;
+
+            const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
+            switch(character.automation.task) {
+                case 'hunting': updateHuntingTask(character, setStatus); break;
+                case 'woodcutting': case 'mining': case 'fishing':
+                    updateSkillingTask(character, now, setStatus);
+                    break;
+            }
+        }
+        
+        function updateHuntingTask(character, setStatus) {
+            const { automation, player, zoneX, zoneY } = character;
+            switch(automation.state) { 
+                case 'IDLE': automation.state = 'FINDING_TARGET'; break; 
+                case 'FINDING_TARGET': 
+                    setStatus("Finding marked enemy..."); 
+                    const target = findNearestMarked(character); 
+                    if (target) { automation.targetId = target.id; automation.state = 'WALKING_TO_TARGET'; } 
+                    else { setStatus("Awaiting respawns..."); automation.state = 'WAITING_FOR_RESPAWN'; } 
+                    break; 
+                case 'WALKING_TO_TARGET': 
+                    const currentTarget = enemies[`${zoneX},${zoneY}`]?.[automation.targetId]; 
+                    if (!currentTarget) { automation.state = 'FINDING_TARGET'; break; } 
+                    if (isAdjacent(player, currentTarget)) { automation.state = 'FIGHTING'; } 
+                    else { 
+                        setStatus("Walking to target..."); 
+                        const targetPos = findWalkableNeighborForEntity(currentTarget, player); 
+                        if (!targetPos) { 
+                            setStatus("Can't reach target!"); 
+                            automation.markedTiles = automation.markedTiles.filter(tile => getEnemyAt(tile.x, tile.y, `${zoneX},${zoneY}`)?.id !== automation.targetId); 
+                            automation.state = 'FINDING_TARGET'; break; 
+                        } 
+                        const path = findPath(player, targetPos, zoneX, zoneY); 
+                        if (path && path.length > 0) { 
+                            const moveId = Date.now();
+                            character.currentMoveId = moveId;
+                            moveAlongPath(character, path, moveId);
+                        } else { 
+                            setStatus("Can't find a path!"); 
+                            automation.markedTiles = automation.markedTiles.filter(tile => getEnemyAt(tile.x, tile.y, `${zoneX},${zoneY}`)?.id !== automation.targetId); 
+                            automation.state = 'FINDING_TARGET'; 
+                        } 
+                    } 
+                    break; 
+                case 'FIGHTING': setStatus("Initiating combat..."); startCombat(character, automation.targetId, true); break; 
+                case 'WAITING_FOR_RESPAWN': if (character.automation.markedTiles.some(tile => !!getEnemyAt(tile.x, tile.y, `${tile.zoneX},${tile.zoneY}`))) { automation.state = 'FINDING_TARGET'; } break; 
+            }
+        }
+
+        function updateSkillingTask(character, now, setStatus) {
+            const { automation, player, zoneX, zoneY } = character;
+            const resourceType = automation.task === 'woodcutting' ? 'TREE' : automation.task === 'mining' ? 'ROCK' : 'POND';
+
+            switch(automation.state) {
+                case 'IDLE': automation.state = 'FINDING_RESOURCE'; break;
+                case 'FINDING_RESOURCE':
+                     setStatus(`Finding ${resourceType.toLowerCase()}...`);
+                     const node = findNearestResource(character, resourceType);
+                     if (node) {
+                         automation.targetId = node.id;
+                         automation.state = 'WALKING_TO_RESOURCE';
+                     } else {
+                         setStatus(`No ${resourceType.toLowerCase()}s available...`);
+                         automation.state = 'WAITING_FOR_RESPAWN';
+                     }
+                    break;
+                case 'WALKING_TO_RESOURCE':
+                    const targetNode = findResourceById(automation.targetId);
+                    if (!targetNode) { automation.state = 'FINDING_RESOURCE'; break; }
+                    if (isAdjacent(player, targetNode)) {
+                        automation.state = 'GATHERING';
+                    } else {
+                        setStatus(`Walking to ${resourceType.toLowerCase()}...`);
+                        const targetPos = findWalkableNeighborForEntity(targetNode, player);
+                        if (!targetPos) { setStatus("Can't reach resource!"); automation.state = 'FINDING_RESOURCE'; break; }
+                        const path = findPath(player, targetPos, zoneX, zoneY);
+                        if (path && path.length > 0) {
+                            const moveId = Date.now();
+                            character.currentMoveId = moveId;
+                            moveAlongPath(character, path, moveId);
+                        } else {
+                            setStatus("Can't find a path!");
+                            automation.state = 'FINDING_RESOURCE';
+                        }
+                    }
+                    break;
+                case 'GATHERING':
+                    gatherResource(character, now, setStatus);
+                    break;
+                case 'WAITING_FOR_RESPAWN':
+                    const hasRespawned = worldData[`${zoneX},${zoneY}`]?.resources?.some(r => r.type === resourceType);
+                    if (hasRespawned) automation.state = 'FINDING_RESOURCE';
+                    break;
+            }
+        }
+
+        function gatherResource(character, now, setStatus) {
+            const { automation } = character;
+            const node = findResourceById(automation.targetId);
+            if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
+            const resourceData = RESOURCE_DATA[node.type];
+
+            if (now - automation.gatheringState.lastHitTime < resourceData.time) return;
+
+            automation.gatheringState.lastHitTime = now;
+            setStatus(`Gathering...`);
+            
+            gainSkillXp(resourceData.skill, resourceData.xp);
+            if(resourceData.item) {
+                gameState.inventory[resourceData.item]++;
+                showNotification(`+1 ${resourceData.item.replace('_', ' ')}`);
+                if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
+            }
+            
+            if (RESOURCE_DATA[node.type]?.depletes) {
+                 automation.state = 'FINDING_RESOURCE';
+            }
+            saveGameState();
+        }
+
+        function assignSkillTask(skillKey) {
+            const activeChar = getActiveCharacter();
+            if (!activeChar) return;
+            
+            if (activeChar.automation.task === skillKey && activeChar.automation.active) {
+                stopAutomation(activeChar);
+            } else {
+                startAutomation(activeChar, skillKey);
+            }
+        }
+
+        function findResourceById(id) {
+            for (const zoneKey in worldData) {
+                const zone = worldData[zoneKey];
+                if (zone.resources) {
+                    const resource = zone.resources.find(r => r.id === id);
+                    if (resource) return resource;
+                }
+            }
+            return null;
+        }
+
+        function findNearestResource(character, type) {
+            const { player, zoneX, zoneY } = character;
+            const zone = worldData[`${zoneX},${zoneY}`];
+            if (!zone || !zone.resources) return null;
+
+            const availableNodes = zone.resources.filter(r => r.type === type);
+            if (availableNodes.length === 0) return null;
+
+            let nearest = null;
+            let minDistance = Infinity;
+            for (const node of availableNodes) {
+                const distance = Math.abs(node.x - player.x) + Math.abs(node.y - player.y);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearest = node;
+                }
+            }
+            return nearest;
+        }
+
+        function updateAllEnemyRegen(now) {
+            for (const zoneKey in enemies) {
+                for (const enemyId in enemies[zoneKey]) {
+                    const enemy = enemies[zoneKey][enemyId];
+                    const enemyData = ENEMIES_DATA[enemy.type];
+                    
+                    if (enemy.currentHp < enemyData.hp) {
+                        if (now - (enemy.lastRegenTime || 0) > 1000) {
+                             const regenAmount = enemyData.hp * 0.01;
+                             enemy.currentHp = Math.min(enemyData.hp, enemy.currentHp + regenAmount);
+                             enemy.lastRegenTime = now;
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateAllPlayerRegen(now) {
+            const teamStats = getTeamStats();
+            gameState.characters.forEach(char => {
+                if (char.hp.current >= char.hp.max) return;
+
+                if (now - (char.lastRegenTime || 0) > 1000) {
+                    const baseRegen = char.hp.max * 0.01;
+                    const bonusRegen = char.hp.max * teamStats.hpRegenBonus;
+                    const totalRegen = baseRegen + bonusRegen;
+
+                    char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
+                    char.lastRegenTime = now;
+                    if (char.id === getActiveCharacter().id) updateAllUI();
+                }
+            });
+        }
+
+        function findPath(start, end, zoneX, zoneY) { 
+            if (!end) return null; 
+            const queue = [[start]]; 
+            const visited = new Set([`${start.x},${start.y}`]); 
+            while (queue.length > 0) { 
+                const path = queue.shift(); 
+                const { x, y } = path[path.length - 1]; 
+                if (x === end.x && y === end.y) return path.slice(1); 
+                const neighbors = [{x:x,y:y-1},{x:x,y:y+1},{x:x-1,y:y},{x:x+1,y:y}]; 
+                for (const n of neighbors) { 
+                    if (isWalkable(n.x, n.y, zoneX, zoneY)) { 
+                        const vKey = `${n.x},${n.y}`; 
+                        if(!visited.has(vKey)) { 
+                            visited.add(vKey); 
+                            const newPath = [...path, n]; 
+                            queue.push(newPath); 
+                        } 
+                    } 
+                } 
+            } 
+            return null; 
+        }
+
+        function isWalkable(x, y, zoneX, zoneY) {
+            const zoneKey = `${zoneX},${zoneY}`;
+            if (x < 0 || x >= MAP_WIDTH_TILES || y < 0 || y >= MAP_HEIGHT_TILES) return false;
+            if (!currentMapData[y] || currentMapData[y][x] === undefined) return false;
+            const tileType = currentMapData[y][x];
+            if (tileType === TILES.WALL || tileType === TILES.PEDESTAL || tileType === TILES.TREE || tileType === TILES.ROCK || tileType === TILES.POND) return false;
+            if (getEnemyAt(x, y, zoneKey)) return false;
+            if (gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
+            return true;
+        }
+
+        function findWalkableNeighborForEntity(entity, charPos) {
+            const size = (entity.type && (ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type])) 
+                ? (ENEMIES_DATA[entity.type]?.size || RESOURCE_DATA[entity.type]?.size || { w: 1, h: 1 }) 
+                : { w: 1, h: 1 };
+            
+            const entityTiles = [];
+            for (let i = 0; i < size.w; i++) {
+                for (let j = 0; j < size.h; j++) {
+                    entityTiles.push({x: entity.x + i, y: entity.y + j});
+                }
+            }
+
+            const perimeter = new Set();
+            entityTiles.forEach(tile => {
+                perimeter.add(`${tile.x},${tile.y - 1}`); // Top
+                perimeter.add(`${tile.x},${tile.y + 1}`); // Bottom
+                perimeter.add(`${tile.x - 1},${tile.y}`); // Left
+                perimeter.add(`${tile.x + 1},${tile.y}`); // Right
+            });
+            
+            const walkableNeighbors = [...perimeter]
+                .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]) }))
+                .filter(p => isWalkable(p.x, p.y, charPos.zoneX, charPos.zoneY));
+
+            if (walkableNeighbors.length === 0) return null; 
+            
+            return walkableNeighbors.reduce((closest, p) => {
+                const dist = Math.abs(p.x - charPos.x) + Math.abs(p.y - charPos.y);
+                return dist < closest.dist ? { pos: p, dist } : closest;
+            }, { pos: null, dist: Infinity }).pos;
+        }
+
+        function startAutomation(character, task) { stopAutomation(character); character.automation.task = task; character.automation.active = true; character.automation.state = 'IDLE'; saveGameState(); if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
+        function stopAutomation(character) { if(!character.automation.active) return; character.automation.active = false; character.automation.state = 'IDLE'; character.automation.task = null; character.automation.targetId = null; if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
+
+        function spawnEnemiesForZone(zoneX, zoneY) { 
+            const zoneKey = `${zoneX},${zoneY}`; 
+            if (enemies[zoneKey] || !worldData[zoneKey]?.spawns) return; 
+            enemies[zoneKey] = {}; 
+            let idCounter = 0; 
+            worldData[zoneKey].spawns.forEach(point => { 
+                const id = `${point.type}_${zoneKey}_${idCounter++}`; 
+                const enemyData = ENEMIES_DATA[point.type]; 
+                enemies[zoneKey][id] = { 
+                    id, type: point.type, x: point.x, y: point.y, 
+                    spawnX: point.x, spawnY: point.y, zoneX, zoneY, 
+                    ...JSON.parse(JSON.stringify(enemyData)), 
+                    currentHp: enemyData.hp,
+                    lastRegenTime: Date.now()
+                }; 
+            }); 
+        }
+
+        function checkAllRespawns() { 
+            const now = Date.now(); 
+            for(const zoneKey in deadEnemies) { 
+                for(let i = deadEnemies[zoneKey].length - 1; i >= 0; i--) { 
+                    const dead = deadEnemies[zoneKey][i]; 
+                    if(now >= dead.respawnTime) { 
+                        if (!enemies[zoneKey]) enemies[zoneKey] = {}; 
+                        enemies[zoneKey][dead.id] = dead.data;
+                        enemies[zoneKey][dead.id].lastRegenTime = now;
+                        deadEnemies[zoneKey].splice(i, 1); 
+                    } 
+                } 
+            }
+        }
+
+        function isAdjacent(charPos, entity) { 
+            if(!entity) return false;
+            const eData = ENEMIES_DATA[entity.type];
+            const rData = RESOURCE_DATA[entity.type];
+            const size = eData?.size || rData?.size || { w: 1, h: 1 };
+            const { x: cx, y: cy } = charPos; 
+            const { x: ex, y: ey } = entity; 
+            const isHorizontallyAdjacent = (cy >= ey && cy < ey + size.h) && (cx === ex - 1 || cx === ex + size.w); 
+            const isVerticallyAdjacent = (cx >= ex && cx < ex + size.w) && (cy === ey - 1 || cy === ey + size.h); 
+            return isHorizontallyAdjacent || isVerticallyAdjacent; 
+        }
+
+        function findNearestMarked(character) { 
+            let nearestEnemy = null; 
+            let minDistance = Infinity; 
+            for (const tile of character.automation.markedTiles) { 
+                const zoneKey = `${tile.zoneX},${tile.zoneY}`; 
+                const enemy = getEnemyAt(tile.x, tile.y, zoneKey); 
+                if (enemy) { 
+                    const distance = Math.abs(enemy.x - character.player.x) + Math.abs(enemy.y - character.player.y) + (Math.abs(enemy.zoneX - character.zoneX) + Math.abs(enemy.zoneY - character.zoneY)) * 1000; 
+                    if (distance < minDistance) { minDistance = distance; nearestEnemy = enemy; } 
+                } 
+            } 
+            return nearestEnemy; 
+        }
+
+        function renderCharacterSwitcher() { 
+            ui.characterSwitcher.innerHTML = ''; 
+            gameState.characters.forEach((char, index) => { 
+                const btn = document.createElement('button');
+                let taskEmoji = '';
+                if (char.automation.active) {
+                    if (char.automation.task === 'hunting') taskEmoji = '⚔️';
+                    else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
+                    else if (char.automation.task === 'mining') taskEmoji = '⛏️';
+                    else if (char.automation.task === 'fishing') taskEmoji = '🎣';
+                }
+                btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
+                btn.className = 'char-button'; 
+                if (index === gameState.activeCharacterIndex) btn.classList.add('active'); 
+                btn.addEventListener('click', () => { gameState.activeCharacterIndex = index; saveGameState(); updateAllUI(); }); 
+                ui.characterSwitcher.appendChild(btn); 
+            }); 
+        }
+
+        function updateCombatPanelUI() { 
+            const activeChar = getActiveCharacter(); 
+            if (!activeChar) return; 
+            const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`; 
+            const enemy = enemies[zoneKey]?.[activeChar.combat.targetId]; 
+            if (enemy && activeChar.combat.active) { 
+                const enemyData = ENEMIES_DATA[enemy.type]; 
+                ui.enemyCombatInfo.classList.remove('hidden'); 
+                ui.enemyName.textContent = enemyData.name; 
+                ui.enemyHpBar.style.width = `${(enemy.currentHp / enemyData.hp) * 100}%`; 
+                ui.enemyHpBar.textContent = `${Math.ceil(enemy.currentHp)}/${enemyData.hp}`; 
+                ui.enemyStats.innerHTML = `❤️ ${enemyData.hp} &nbsp;&nbsp; 👊 ${enemyData.attack}`; 
+            } else { ui.enemyCombatInfo.classList.add('hidden'); } 
+        }
+
+        function updateAllUI() { 
+            const activeChar = getActiveCharacter(); 
+            if (!activeChar || !gameState.level) return; 
+            const teamStats = getTeamStats(); 
+            currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
+            renderCharacterSwitcher(); 
+            ui.activeCharacterName.textContent = activeChar.name; 
+            ui.playerDamageStat.textContent = teamStats.damage; 
+            ui.playerSpeedStat.textContent = teamStats.speed;
+            ui.markCount.textContent = `${activeChar.automation.markedTiles.length}/${teamStats.maxMarks}`; 
+            ui.playerSouls.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`; 
+            const { hp } = activeChar; 
+            ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`; 
+            ui.playerHpBar.textContent = `${Math.ceil(hp.current)}/${hp.max}`;
+            
+            const {level} = gameState;
+            const neededXp = xpForLevel(level.current);
+            ui.playerLevel.textContent = `Lv ${level.current}`; 
+            ui.xpProgress.style.width = `${(level.xp / neededXp) * 100}%`;
+            ui.xpProgress.textContent = `${level.xp}/${neededXp}`;
+        }
+        
+        async function saveGameState() { 
+            if (!userId) return; 
+            try { 
+                const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
+                const stateToSave = JSON.parse(JSON.stringify(gameState));
+                await setDoc(docRef, { ...stateToSave, lastSaved: serverTimestamp() }); 
+            } catch(e) { console.error("Failed to save game state:", e); } 
+        }
+
+        async function loadGameState() { 
+            if (!userId) { 
+                gameState = getDefaultGameState();
+                if (gameState.characters.length === 0) {
+                     gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
+                }
+                return; 
+            } 
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
+            const docSnap = await getDoc(docRef); 
+            let defaultState = getDefaultGameState(); 
+            if (docSnap.exists()) { 
+                let loadedData = docSnap.data();
+                if (!loadedData.characters || loadedData.characters.length === 0) {
+                    loadedData.characters = [getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0])];
+                }
+                gameState = mergeDeep({}, defaultState, loadedData);
+            } else { 
+                gameState = defaultState; 
+                if (gameState.characters.length === 0) {
+                     gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
+                }
+                await saveGameState(); 
+            }
+            recalculateTeamStats();
+        }
+
+        initFirebase();
+
+    </script>
+</body>
+</html>
