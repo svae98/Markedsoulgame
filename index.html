@@ -102,6 +102,35 @@
             transform: translateY(0);
             opacity: 1;
         }
+
+        .map-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* Adjust number of columns as needed */
+            gap: 0.5rem;
+        }
+
+        .map-zone {
+            position: relative;
+            aspect-ratio: 1/1;
+            border: 2px solid #4a4a4a;
+            border-radius: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            color: #a1a1aa;
+        }
+        .map-zone.active-zone {
+            border-color: #c026d3;
+            box-shadow: 0 0 10px #c026d3;
+        }
+        .boss-icon {
+            font-size: 1.5rem;
+            cursor: pointer;
+            filter: drop-shadow(0 0 5px #f87171);
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -119,7 +148,7 @@
             <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
-                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.003</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.005</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -163,7 +192,7 @@
                         <div id="xp-progress" class="progress-bar bg-fuchsia-500" style="width: 0%;"></div>
                     </div>
                  </div>
-                 <div class="grid grid-cols-3 gap-4 text-center text-sm pt-2">
+                 <div class="grid grid-cols-4 gap-2 text-center text-sm pt-2">
                     <div>
                         <div class="font-bold text-pink-400">Damage</div>
                         <div id="player-damage-stat">2</div>
@@ -172,6 +201,10 @@
                         <div class="font-bold text-lime-400">Speed</div>
                         <div id="player-speed-stat">0</div>
                     </div>
+                     <div>
+                        <div class="font-bold text-blue-400">Defense</div>
+                        <div id="player-defense-stat">0 (0)</div>
+                    </div>
                     <div>
                         <div class="font-bold text-cyan-400">Marks</div>
                         <div id="mark-count">1/1</div>
@@ -179,8 +212,9 @@
                 </div>
             </section>
             
-            <section class="grid grid-cols-3 gap-2">
+            <section class="grid grid-cols-2 gap-2">
                  <button id="openAltarButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-fuchsia-300 font-bold py-2 px-4 rounded-lg border border-fuchsia-500 transition-colors">Altar</button>
+                 <button id="openMapButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-emerald-300 font-bold py-2 px-4 rounded-lg border border-emerald-500 transition-colors">Map</button>
                  <button id="openLevelsButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-sky-300 font-bold py-2 px-4 rounded-lg border border-sky-500 transition-colors">Skills</button>
                  <button id="openInventoryButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold py-2 px-4 rounded-lg border border-amber-500 transition-colors">Inventory</button>
             </section>
@@ -210,6 +244,13 @@
             <h2 class="text-2xl font-bold text-amber-400 mb-4">Inventory</h2>
             <div id="inventoryListContainer" class="grid grid-cols-4 gap-4 overflow-y-auto max-h-96 pr-2"></div>
             <button id="closeInventoryButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
+        </div>
+    </div>
+    <div id="mapModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-lg flex flex-col">
+            <h2 class="text-2xl font-bold text-emerald-400 mb-4">World Map</h2>
+            <div id="mapGridContainer" class="map-grid"></div>
+            <button id="closeMapButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
         </div>
     </div>
 
@@ -289,7 +330,8 @@
             BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: 'green_goo' },
             YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: 'viscous_ichor' },
             RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: 'pulsating_core' },
-            GOLEM: { name: 'Stone Golem', color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart' },
+            GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart' },
+            GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: {w: 3, h: 3}, regenRate: 20 },
             HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: 'tattered_cloth' },
             BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: 'boar_tusk' },
             WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: 'wolf_pelt' },
@@ -313,9 +355,7 @@
             '1,0': { 
                 name: "The Quiet Grove", theme: 'dark_forest', gateways: [ { x: 15, y: 30, destZone: {x: 1, y: 1}, entry: {x: 15, y: 1} } ],
                 spawns: [
-                    { x: 5, y: 5, type: 'HUMAN' }, { x: 7, y: 8, type: 'HUMAN' }, { x: 9, y: 6, type: 'HUMAN' },
-                    { x: 15, y: 15, type: 'BOAR' }, { x: 17, y: 18, type: 'BOAR' },
-                    { x: 25, y: 25, type: 'WOLF' }, { x: 22, y: 24, type: 'WOLF' },
+                    { x: 15, y: 15, type: 'GOLEM_KING'},
                 ],
             },
             '1,1': {
@@ -331,15 +371,10 @@
                 ],
                 spawns: [
                     { x: 7, y: 7, type: 'BLUE_SLIME' }, { x: 8, y: 9, type: 'BLUE_SLIME' }, { x: 6, y: 11, type: 'BLUE_SLIME' },
-                    { x: 9, y: 13, type: 'BLUE_SLIME' }, { x: 5, y: 9, type: 'BLUE_SLIME' }, { x: 8, y: 11, type: 'BLUE_SLIME' },
-                    { x: 22, y: 22, type: 'BLUE_SLIME' }, { x: 24, y: 24, type: 'BLUE_SLIME' }, { x: 26, y: 22, type: 'BLUE_SLIME' },
-                    { x: 23, y: 26, type: 'BLUE_SLIME' }, { x: 21, y: 24, type: 'BLUE_SLIME' }, { x: 24, y: 22, type: 'BLUE_SLIME' },
-                    { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' }, { x: 27, y: 9, type: 'YELLOW_SLIME' },
-                    { x: 23, y: 8, type: 'YELLOW_SLIME' }, { x: 25, y: 11, type: 'YELLOW_SLIME' }, { x: 28, y: 7, type: 'YELLOW_SLIME' },
+                    { x: 22, y: 22, type: 'BLUE_SLIME' },
+                    { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' },
                     { x: 2, y: 2, type: 'GOLEM'},
                     { x: 5, y: 2, type: 'RED_SLIME' }, { x: 2, y: 5, type: 'RED_SLIME' },
-                    { x: 2, y: 25, type: 'RED_SLIME' }, { x: 3, y: 27, type: 'RED_SLIME' }, { x: 4, y: 25, type: 'RED_SLIME' },
-                    { x: 5, y: 28, type: 'RED_SLIME' }, { x: 6, y: 26, type: 'RED_SLIME' }, { x: 2, y: 28, type: 'RED_SLIME' },
                 ],
             },
         };
@@ -348,6 +383,7 @@
             plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
             plusTwoMaxHp: { name: "+2 Max HP", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
             plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => Math.floor(5 * Math.pow(3, level)) },
+            plusOneDefense: { name: "+1 Defense", maxLevel: 10, cost: (level) => Math.floor(5 * Math.pow(3, level)) },
             plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => Math.floor(30 * Math.pow(3, level)) },
             addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => Math.floor(100 * Math.pow(3, level)) }
         };
@@ -359,11 +395,10 @@
         let currentMapData = [];
         let notificationTimeout = null;
 
-        // Game Loop and Time Management Variables
         let lastFrameTime = 0;
         let accumulator = 0;
-        const LOGIC_TICK_RATE = 50; // ms per tick, so 20 ticks per second
-        let currentGameTime = 0; // The master clock for the game logic
+        const LOGIC_TICK_RATE = 50;
+        let currentGameTime = 0;
 
         function getActiveCharacter() {
             if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -387,21 +422,26 @@
             xpProgress: document.getElementById('xp-progress'),
             playerDamageStat: document.getElementById('player-damage-stat'),
             playerSpeedStat: document.getElementById('player-speed-stat'),
+            playerDefenseStat: document.getElementById('player-defense-stat'),
             markCount: document.getElementById('mark-count'),
             characterSwitcher: document.getElementById('character-switcher'),
             notificationBanner: document.getElementById('notification-banner'),
             openAltarButton: document.getElementById('openAltarButton'),
             openLevelsButton: document.getElementById('openLevelsButton'),
             openInventoryButton: document.getElementById('openInventoryButton'),
+            openMapButton: document.getElementById('openMapButton'),
             soulAltarModal: document.getElementById('soulAltarModal'),
             levelsModal: document.getElementById('levelsModal'),
             inventoryModal: document.getElementById('inventoryModal'),
+            mapModal: document.getElementById('mapModal'),
             altarListContainer: document.getElementById('altarListContainer'),
             levelsListContainer: document.getElementById('levelsListContainer'),
             inventoryListContainer: document.getElementById('inventoryListContainer'),
+            mapGridContainer: document.getElementById('mapGridContainer'),
             closeAltarButton: document.getElementById('closeAltarButton'),
             closeLevelsButton: document.getElementById('closeLevelsButton'),
             closeInventoryButton: document.getElementById('closeInventoryButton'),
+            closeMapButton: document.getElementById('closeMapButton'),
             altarSoulsDisplay: document.getElementById('altar-souls-display'),
         };
         
@@ -458,11 +498,11 @@
 
         function getDefaultGameState() {
             return { 
-                characters: [], activeCharacterIndex: 0, souls: 0, 
+                characters: [], activeCharacterIndex: 0, souls: 1000000, 
                 level: { current: 1, xp: 0 }, 
                 skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
                 inventory: { wood: 0, copper_ore: 0, fish: 0 },
-                upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0 },
+                upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
                 collectedItemDrops: []
             };
         }
@@ -484,20 +524,25 @@
             ui.closeLevelsButton.addEventListener('click', closeLevels);
             ui.openInventoryButton.addEventListener('click', openInventory);
             ui.closeInventoryButton.addEventListener('click', closeInventory);
+            ui.openMapButton.addEventListener('click', openMap);
+            ui.closeMapButton.addEventListener('click', closeMap);
             
             ui.soulAltarModal.addEventListener('click', (e) => { if (e.target === ui.soulAltarModal) closeSoulAltar(); });
             ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
             ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
+            ui.mapModal.addEventListener('click', (e) => { if (e.target === ui.mapModal) closeMap(); });
             
-            currentGameTime = performance.now(); // Initialize the master game clock
+            currentGameTime = performance.now(); 
             await loadGameState();
             const activeChar = getActiveCharacter();
             currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
-            spawnEnemiesForZone(1,1);
-            spawnEnemiesForZone(0,1);
-            spawnEnemiesForZone(1,0);
+            Object.keys(worldData).forEach(zoneKey => {
+                const [zoneX, zoneY] = zoneKey.split(',').map(Number);
+                spawnEnemiesForZone(zoneX, zoneY);
+            });
             updateAllUI();
             ui.actionStatus.textContent = "Right-click for options";
+            lastFrameTime = performance.now();
             requestAnimationFrame(gameLoop);
         }
         
@@ -506,21 +551,13 @@
                 requestAnimationFrame(gameLoop);
                 return;
             }
-            
-            if (!lastFrameTime) {
-                lastFrameTime = timestamp;
-            }
 
             const deltaTime = timestamp - lastFrameTime;
             lastFrameTime = timestamp;
             accumulator += deltaTime;
+            
+            if (accumulator > 1000) accumulator = 1000;
 
-            // Cap the accumulator to prevent long freezes after prolonged inactivity (e.g., 1 second)
-            if (accumulator > 1000) {
-                accumulator = 1000;
-            }
-
-            // Process logic ticks to catch up with the accumulated time
             while (accumulator >= LOGIC_TICK_RATE) {
                 currentGameTime += LOGIC_TICK_RATE;
                 
@@ -634,12 +671,16 @@
             const height = size.h * TILE_SIZE;
             ui.ctx.fillStyle = enemyData.color;
             ui.ctx.fillRect(px, py, width, height);
-            if (enemy.type === 'GOLEM') {
+            if (enemy.type.includes('GOLEM')) {
                 ui.ctx.fillStyle = '#57534e';
                 const eyeSize = TILE_SIZE * 0.6;
                 const eyeOffset = (TILE_SIZE - eyeSize) / 2;
-                ui.ctx.fillRect(px + eyeOffset, py + eyeOffset, eyeSize, eyeSize);
-                ui.ctx.fillRect(px + TILE_SIZE + eyeOffset, py + eyeOffset, eyeSize, eyeSize);
+                 for (let i = 0; i < size.w; i++) {
+                     for (let j = 0; j < size.h; j++) {
+                         if (Math.random() > 0.7)
+                            ui.ctx.fillRect(px + (i*TILE_SIZE) + eyeOffset, py + (j*TILE_SIZE) + eyeOffset, eyeSize, eyeSize);
+                     }
+                 }
             }
         }
 
@@ -673,11 +714,8 @@
                 return;
             }
 
-            // Active character is dark blue
             ui.ctx.fillStyle = '#2563eb'; // blue-600
             ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
-
-            // With a yellow halo
             ui.ctx.strokeStyle = '#facc15'; // yellow-400
             ui.ctx.lineWidth = 2;
             ui.ctx.strokeRect(px + 3, py + 3, w - 6, h - 6);
@@ -686,7 +724,7 @@
         function showDamagePopup(x, y, amount, isPlayerDamage) {
             if (amount <= 0) return;
             const popup = document.createElement('div');
-            popup.textContent = amount;
+            popup.textContent = amount.toFixed(2).replace(/\.00$/, '');
             popup.className = `damage-popup ${isPlayerDamage ? 'player' : 'enemy'}`;
             ui.canvasContainer.appendChild(popup);
             popup.style.left = `${(x * TILE_SIZE) + (TILE_SIZE / 2) - popup.offsetWidth / 2}px`;
@@ -789,6 +827,56 @@
         function closeLevels() { closeModal(ui.levelsModal); }
         function openInventory() { openModal(ui.inventoryModal); renderInventory(); }
         function closeInventory() { closeModal(ui.inventoryModal); }
+        function openMap() { openModal(ui.mapModal); renderMap(); }
+        function closeMap() { closeModal(ui.mapModal); }
+        
+        function renderMap() {
+            const grid = ui.mapGridContainer;
+            grid.innerHTML = '';
+            const activeChar = getActiveCharacter();
+            const minX = 0, maxX = 1, minY = 0, maxY = 1;
+
+            for(let y = minY; y <= maxY; y++) {
+                for(let x = minX; x <= maxX; x++) {
+                    const zoneKey = `${x},${y}`;
+                    const zoneData = worldData[zoneKey];
+                    const zoneEl = document.createElement('div');
+                    zoneEl.className = 'map-zone';
+                    
+                    if (zoneData) {
+                        zoneEl.textContent = zoneData.name;
+                        if (activeChar.zoneX === x && activeChar.zoneY === y) {
+                             zoneEl.classList.add('active-zone');
+                        }
+                        
+                        // Check for bosses in this zone
+                        if(enemies[zoneKey]) {
+                            for(const enemyId in enemies[zoneKey]) {
+                                const enemy = enemies[zoneKey][enemyId];
+                                const enemyData = ENEMIES_DATA[enemy.type];
+                                if(enemyData.isBoss) {
+                                    const bossIcon = document.createElement('div');
+                                    bossIcon.textContent = '💀';
+                                    bossIcon.className = 'boss-icon';
+                                    bossIcon.title = enemy.name;
+                                    bossIcon.addEventListener('click', (e) => {
+                                        if (e.shiftKey) {
+                                            handleMarking(enemy.x, enemy.y, enemy, activeChar);
+                                            e.stopPropagation();
+                                            showNotification(`Marked ${enemy.name} for ${activeChar.name}!`);
+                                        }
+                                    });
+                                    zoneEl.appendChild(bossIcon);
+                                }
+                            }
+                        }
+                    } else {
+                        zoneEl.style.backgroundColor = '#111';
+                    }
+                    grid.appendChild(zoneEl);
+                }
+            }
+        }
 
         function renderLevels() {
             ui.levelsListContainer.innerHTML = '';
@@ -879,6 +967,15 @@
             const enemy = getEnemyAt(x, y, zoneKey);
             const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
             const tileType = currentMapData[y]?.[x];
+
+            if (activeChar.automation.active && activeChar.automation.task === 'hunting' && !enemy && isWalkable(x, y, activeChar.zoneX, activeChar.zoneY)) {
+                stopAutomation(activeChar);
+                activeChar.automation.markedTiles = [];
+                handleMovementClick(x, y, activeChar);
+                saveGameState();
+                updateAllUI();
+                return;
+            }
             
             if (e.shiftKey) { 
                 handleMarking(x, y, enemy, activeChar);
@@ -956,11 +1053,17 @@
             activeChar.currentMoveId = null;
             activeChar.isMoving = false;
 
+            const targetEnemy = enemy || getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
+            if (!targetEnemy) return;
+
+            const markX = targetEnemy.x;
+            const markY = targetEnemy.y;
+
             let existingMarkIndex = -1;
             let existingMarkChar = null;
             
             for (const char of gameState.characters) {
-                const index = char.automation.markedTiles.findIndex(tile => tile.x === x && tile.y === y && tile.zoneX === activeChar.zoneX && tile.zoneY === activeChar.zoneY);
+                const index = char.automation.markedTiles.findIndex(tile => tile.x === markX && tile.y === markY && tile.zoneX === targetEnemy.zoneX && tile.zoneY === targetEnemy.zoneY);
                 if (index !== -1) {
                     existingMarkIndex = index;
                     existingMarkChar = char;
@@ -970,9 +1073,8 @@
         
             if (existingMarkChar && existingMarkChar.id === activeChar.id) {
                 activeChar.automation.markedTiles.splice(existingMarkIndex, 1);
-                const enemyOnTile = getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
                 
-                if (activeChar.combat.active && enemyOnTile && activeChar.combat.targetId === enemyOnTile.id) {
+                if (activeChar.combat.active && activeChar.combat.targetId === targetEnemy.id) {
                     forceEndCombat(activeChar);
                 }
                 
@@ -980,7 +1082,7 @@
                     stopAutomation(activeChar);
                 }
             } 
-            else if (!existingMarkChar && enemy) {
+            else if (!existingMarkChar) {
                 const stats = getTeamStats();
                 
                 if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
@@ -991,7 +1093,7 @@
                     }
                 }
                 
-                activeChar.automation.markedTiles.push({ x, y, zoneX: activeChar.zoneX, zoneY: activeChar.zoneY });
+                activeChar.automation.markedTiles.push({ x: markX, y: markY, zoneX: targetEnemy.zoneX, zoneY: targetEnemy.zoneY });
                 
                 startAutomation(activeChar, 'hunting');
             }
@@ -1029,7 +1131,6 @@
                         character.zoneY = gateway.destZone.y;
                         character.player.x = gateway.entry.x;
                         character.player.y = gateway.entry.y;
-                        spawnEnemiesForZone(character.zoneX, character.zoneY);
                         currentMapData = buildMapData(character.zoneX, character.zoneY);
                         saveGameState();
                         updateAllUI();
@@ -1104,6 +1205,7 @@
             let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
             let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
             let totalHpRegenBonus = 0;
+            let totalDefense = (gameState.level.current - 1) + (gameState.upgrades.plusOneDefense || 0);
 
             if (gameState.collectedItemDrops) {
                 gameState.collectedItemDrops.forEach(itemDropId => {
@@ -1116,7 +1218,7 @@
                     }
                 });
             }
-            return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus }; 
+            return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense }; 
         }
 
         function updateCombat(character, gameTime) { 
@@ -1138,7 +1240,8 @@
                 gainXp(damage); 
             } else { 
                 const enemyData = ENEMIES_DATA[enemy.type]; 
-                damage = Math.max(1, enemyData.attack); 
+                const damageReduction = playerStats.defense * 0.25;
+                damage = Math.max(0, enemyData.attack - damageReduction); 
                 character.hp.current -= damage; 
                 showDamagePopup(character.player.x, character.player.y, damage, true); 
             } 
@@ -1324,10 +1427,23 @@
             if (character.isMoving) return;
 
             const { automation, player, zoneX, zoneY } = character;
-
             const desiredTarget = findNearestMarked(character);
             
             if (desiredTarget) {
+                if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
+                    setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
+                    // Find a path to a gateway leading to the target zone
+                    const path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY);
+                    if(path) {
+                        const moveId = Date.now();
+                        character.currentMoveId = moveId;
+                        moveAlongPath(character, path, moveId);
+                    } else {
+                        setStatus(`Can't find path to zone!`);
+                    }
+                    return;
+                }
+
                 automation.targetId = desiredTarget.id;
                 
                 if (isAdjacent(player, desiredTarget)) {
@@ -1355,7 +1471,6 @@
         function updateSkillingTask(character, gameTime, setStatus) {
             const { automation, player, zoneX, zoneY } = character;
             const resourceType = automation.task === 'woodcutting' ? 'TREE' : automation.task === 'mining' ? 'ROCK' : 'POND';
-
             const currentState = automation.state || 'IDLE';
 
             switch(currentState) {
@@ -1406,19 +1521,15 @@
             const node = findResourceById(automation.targetId);
             if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
             const resourceData = RESOURCE_DATA[node.type];
-
             if (gameTime - automation.gatheringState.lastHitTime < resourceData.time) return;
-
             automation.gatheringState.lastHitTime = gameTime;
             setStatus(`Gathering...`);
-            
             gainSkillXp(resourceData.skill, resourceData.xp);
             if(resourceData.item) {
                 gameState.inventory[resourceData.item]++;
                 showNotification(`+1 ${resourceData.item.replace('_', ' ')}`);
                 if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
             }
-            
             if (RESOURCE_DATA[node.type]?.depletes) {
                  automation.state = 'FINDING_RESOURCE';
             }
@@ -1428,7 +1539,6 @@
         function assignSkillTask(skillKey) {
             const activeChar = getActiveCharacter();
             if (!activeChar || activeChar.isDead) return;
-            
             if (activeChar.automation.task === skillKey && activeChar.automation.active) {
                 stopAutomation(activeChar);
             } else {
@@ -1438,9 +1548,7 @@
 
         function findEnemyById(id) {
             for (const zoneKey in enemies) {
-                if (enemies[zoneKey][id]) {
-                    return enemies[zoneKey][id];
-                }
+                if (enemies[zoneKey][id]) return enemies[zoneKey][id];
             }
             return null;
         }
@@ -1460,10 +1568,8 @@
             const { player, zoneX, zoneY } = character;
             const zone = worldData[`${zoneX},${zoneY}`];
             if (!zone || !zone.resources) return null;
-
             const availableNodes = zone.resources.filter(r => r.type === type);
             if (availableNodes.length === 0) return null;
-
             let nearest = null;
             let minDistance = Infinity;
             for (const node of availableNodes) {
@@ -1481,10 +1587,9 @@
                 for (const enemyId in enemies[zoneKey]) {
                     const enemy = enemies[zoneKey][enemyId];
                     const enemyData = ENEMIES_DATA[enemy.type];
-                    
                     if (enemy.currentHp < enemyData.hp) {
                         if (gameTime - (enemy.lastRegenTime || 0) > 1000) {
-                             const regenAmount = enemyData.hp * 0.01;
+                             const regenAmount = enemyData.regenRate || (enemyData.hp * 0.01);
                              enemy.currentHp = Math.min(enemyData.hp, enemy.currentHp + regenAmount);
                              enemy.lastRegenTime = gameTime;
                         }
@@ -1497,12 +1602,10 @@
             const teamStats = getTeamStats();
             gameState.characters.forEach(char => {
                 if (char.isDead || char.hp.current >= char.hp.max) return;
-
                 if (gameTime - (char.lastRegenTime || 0) > 1000) {
                     const baseRegen = char.hp.max * 0.01;
                     const bonusRegen = char.hp.max * teamStats.hpRegenBonus;
                     const totalRegen = baseRegen + bonusRegen;
-
                     char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
                     char.lastRegenTime = gameTime;
                     if (char.id === getActiveCharacter().id) updateAllUI();
@@ -1533,6 +1636,19 @@
             return null; 
         }
 
+        function findPathToZone(character, targetZoneX, targetZoneY) {
+            const currentZoneKey = `${character.zoneX},${character.zoneY}`;
+            const currentZoneData = worldData[currentZoneKey];
+            if (!currentZoneData || !currentZoneData.gateways) return null;
+
+            for (const gateway of currentZoneData.gateways) {
+                if (gateway.destZone.x === targetZoneX && gateway.destZone.y === targetZoneY) {
+                    return findPath(character.player, gateway, character.zoneX, character.zoneY);
+                }
+            }
+            return null;
+        }
+
         function isWalkable(x, y, zoneX, zoneY) {
             const zoneKey = `${zoneX},${zoneY}`;
             if (x < 0 || x >= MAP_WIDTH_TILES || y < 0 || y >= MAP_HEIGHT_TILES) return false;
@@ -1540,7 +1656,7 @@
             const tileType = currentMapData[y][x];
             if (tileType === TILES.WALL || tileType === TILES.PEDESTAL || tileType === TILES.TREE || tileType === TILES.ROCK || tileType === TILES.POND) return false;
             if (getEnemyAt(x, y, zoneKey)) return false;
-            if (gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
+            if (gameState.characters.some(c => c.id !== getActiveCharacter()?.id && c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
             return true;
         }
 
@@ -1555,21 +1671,25 @@
                     entityTiles.push({x: entity.x + i, y: entity.y + j});
                 }
             }
-
             const perimeter = new Set();
             entityTiles.forEach(tile => {
-                perimeter.add(`${tile.x},${tile.y - 1}`); // Top
-                perimeter.add(`${tile.x},${tile.y + 1}`); // Bottom
-                perimeter.add(`${tile.x - 1},${tile.y}`); // Left
-                perimeter.add(`${tile.x + 1},${tile.y}`); // Right
+                perimeter.add(`${tile.x},${tile.y - 1}`);
+                perimeter.add(`${tile.x},${tile.y + size.h}`);
+                perimeter.add(`${tile.x - 1},${tile.y}`);
+                perimeter.add(`${tile.x + size.w},${tile.y}`);
+                 for(let i=0; i<size.w; i++){
+                    perimeter.add(`${tile.x+i},${tile.y - 1}`);
+                    perimeter.add(`${tile.x+i},${tile.y + size.h}`);
+                }
+                for(let j=0; j<size.h; j++){
+                    perimeter.add(`${tile.x - 1},${tile.y+j}`);
+                    perimeter.add(`${tile.x + size.w},${tile.y+j}`);
+                }
             });
-            
             const walkableNeighbors = [...perimeter]
                 .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]) }))
                 .filter(p => isWalkable(p.x, p.y, charPos.zoneX, charPos.zoneY));
-
             if (walkableNeighbors.length === 0) return null; 
-            
             return walkableNeighbors.reduce((closest, p) => {
                 const dist = Math.abs(p.x - charPos.x) + Math.abs(p.y - charPos.y);
                 return dist < closest.dist ? { pos: p, dist } : closest;
@@ -1579,27 +1699,16 @@
         function startAutomation(character, task) {
             if (character.isDead) return;
             if (character.automation.active && character.automation.task === task) return;
-
-            if (character.combat.active) {
-                forceEndCombat(character);
-            }
-        
+            if (character.combat.active) forceEndCombat(character);
             stopAutomation(character);
-        
-            if (task !== 'hunting') {
-                character.automation.markedTiles = [];
-            }
-            
+            if (task !== 'hunting') character.automation.markedTiles = [];
             character.automation.task = task;
-            
             if (task === 'hunting' && character.automation.markedTiles.length === 0) {
                 if (character.id === getActiveCharacter().id) showNotification('Mark a monster to start hunting.');
                 return;
             }
-            
             character.automation.active = true;
             character.automation.state = 'IDLE';
-            
             saveGameState();
             if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
             updateAllUI();
@@ -1607,11 +1716,7 @@
 
         function stopAutomation(character) {
              if(!character.automation.active) return; 
-
-             if (character.combat.active) {
-                forceEndCombat(character);
-             }
-
+             if (character.combat.active) forceEndCombat(character);
              character.automation.active = false;
              character.automation.task = null; 
              character.automation.targetId = null; 
@@ -1726,6 +1831,8 @@
             ui.activeCharacterName.textContent = activeChar.name; 
             ui.playerDamageStat.textContent = teamStats.damage; 
             ui.playerSpeedStat.textContent = teamStats.speed;
+            const damageReduction = (teamStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
+            ui.playerDefenseStat.textContent = `${teamStats.defense} (${damageReduction})`;
             ui.markCount.textContent = `${activeChar.automation.markedTiles.length}/${teamStats.maxMarks}`; 
             ui.playerSouls.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`; 
             const { hp } = activeChar; 
@@ -1736,7 +1843,7 @@
             const neededXp = xpForLevel(level.current);
             ui.playerLevel.textContent = `Lv ${level.current}`; 
             ui.xpProgress.style.width = `${(level.xp / neededXp) * 100}%`;
-            ui.xpProgress.textContent = `${level.xp}/${neededXp}`;
+            ui.xpProgress.textContent = `${Math.floor(level.xp)}/${neededXp}`;
         }
         
         async function saveGameState() { 
@@ -1772,7 +1879,6 @@
                 }
             }
 
-            // FIX: Check for and respawn any characters that were dead on load.
             let needsSave = false;
             gameState.characters.forEach(char => {
                 if (char.isDead) {
