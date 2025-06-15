@@ -148,7 +148,7 @@
             <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
-                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.007</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.008</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -331,7 +331,7 @@
             YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: 'viscous_ichor' },
             RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: 'pulsating_core' },
             GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart', eyePattern: [{x:0, y:0}, {x:1, y:0}] },
-            GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: {w: 3, h: 3}, regenRate: 20, eyePattern: [{x:0,y:0}, {x:2,y:0}, {x:1,y:1}] },
+            GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: {w: 3, h: 3}, eyePattern: [{x:0,y:0}, {x:2,y:0}, {x:1,y:1}] },
             HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: 'tattered_cloth' },
             BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: 'boar_tusk' },
             WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: 'wolf_pelt' },
@@ -701,19 +701,28 @@
                     if(enemy) {
                         const enemyData = ENEMIES_DATA[enemy.type];
                         const size = enemyData.size || {w: 1, h: 1};
-
-                        // Deduce the target tile on the boss based on the approach tile (the mark)
-                        const {x: ax, y: ay} = mark;
-                        const {x: ex, y: ey} = enemy;
-                        let tx = ax, ty = ay;
-
-                        if (ax < ex) tx = ex;
-                        else if (ax >= ex + size.w) tx = ex + size.w - 1;
-
-                        if (ay < ey) ty = ey;
-                        else if (ay >= ey + size.h) ty = ey + size.h - 1;
+                        const {x: approachX, y: approachY} = mark;
+                        const {x: enemyX, y: enemyY} = enemy;
                         
-                        ui.ctx.strokeRect(tx * TILE_SIZE + 1, ty * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                        let targetX = -1, targetY = -1;
+
+                        if (approachX < enemyX) { // Left
+                            targetX = enemyX;
+                            targetY = Math.max(enemyY, Math.min(approachY, enemyY + size.h - 1));
+                        } else if (approachX >= enemyX + size.w) { // Right
+                            targetX = enemyX + size.w - 1;
+                            targetY = Math.max(enemyY, Math.min(approachY, enemyY + size.h - 1));
+                        } else if (approachY < enemyY) { // Top
+                            targetY = enemyY;
+                            targetX = Math.max(enemyX, Math.min(approachX, enemyX + size.w - 1));
+                        } else if (approachY >= enemyY + size.h) { // Bottom
+                            targetY = enemyY + size.h - 1;
+                            targetX = Math.max(enemyX, Math.min(approachX, enemyX + size.w - 1));
+                        }
+
+                        if (targetX !== -1) {
+                            ui.ctx.strokeRect(targetX * TILE_SIZE + 1, targetY * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                        }
                     }
                 }
             });
@@ -879,10 +888,8 @@
                                     bossIcon.className = 'boss-icon';
                                     bossIcon.title = enemy.name;
                                     bossIcon.addEventListener('click', (e) => {
-                                        if (e.shiftKey) {
-                                            handleMapMarking(enemy, activeChar);
-                                            e.stopPropagation();
-                                        }
+                                        handleMapMarking(enemy, activeChar);
+                                        e.stopPropagation();
                                     });
                                     zoneEl.appendChild(bossIcon);
                                 }
@@ -1085,7 +1092,6 @@
             activeChar.currentMoveId = null;
             activeChar.isMoving = false;
 
-            const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
             const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.enemyId === enemy.id);
             
             if (existingMarkForChar) {
@@ -1097,17 +1103,10 @@
                 const neighbors = [{x:clickedBossTile.x,y:clickedBossTile.y-1},{x:clickedBossTile.x,y:clickedBossTile.y+1},{x:clickedBossTile.x-1,y:clickedBossTile.y},{x:clickedBossTile.x+1,y:clickedBossTile.y}];
                 const validApproachSpots = neighbors.filter(n => isWalkable(n.x, n.y, enemy.zoneX, enemy.zoneY, true));
                 
-                if (validApproachSpots.length === 0) {
-                    showNotification("No valid approach for that tile.");
-                    return;
-                }
-                const approachSpot = validApproachSpots[0];
-                const isSpotMarked = allMarks.some(m => m.x === approachSpot.x && m.y === approachSpot.y);
-
-                if (isSpotMarked) {
-                    showNotification("That attack spot is already marked.");
+                if (validApproachSpots.length > 0) {
+                    addMark(activeChar, enemy, {...validApproachSpots[0], zoneX: enemy.zoneX, zoneY: enemy.zoneY });
                 } else {
-                    addMark(activeChar, enemy, {...approachSpot, zoneX: enemy.zoneX, zoneY: enemy.zoneY });
+                    showNotification("No valid approach for that tile.");
                 }
             }
             
@@ -1116,18 +1115,15 @@
         }
 
         function handleMapMarking(enemy, activeChar) {
-             const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
-             const availableSpots = getWalkableNeighborsForEntity(enemy, true);
-             const markedSpots = allMarks.map(m => `${m.x},${m.y}`);
-             const openSpots = availableSpots.filter(spot => !markedSpots.includes(`${spot.x},${spot.y}`));
+            const availableSpots = getWalkableNeighborsForEntity(enemy, true);
 
-            if (openSpots.length > 0) {
-                openSpots.sort((a,b) => {
+            if (availableSpots.length > 0) {
+                availableSpots.sort((a,b) => {
                     const distA = Math.abs(a.x - activeChar.player.x) + Math.abs(a.y - activeChar.player.y);
                     const distB = Math.abs(b.x - activeChar.player.x) + Math.abs(b.y - activeChar.player.y);
                     return distA - distB;
                 });
-                const closestSpot = openSpots[0];
+                const closestSpot = availableSpots[0];
                 addMark(activeChar, enemy, closestSpot);
                 saveGameState();
                 updateAllUI();
@@ -1369,14 +1365,6 @@
                 deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: currentGameTime + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
                 delete enemies[zoneKey][combat.targetId];
 
-                gameState.characters.forEach(c => {
-                    const markIndex = c.automation.markedTiles.findIndex(m => m.enemyId === killedEnemyId);
-                    if (markIndex !== -1) {
-                        c.automation.markedTiles.splice(markIndex, 1);
-                        if(c.automation.markedTiles.length === 0) stopAutomation(c);
-                    }
-                });
-                
             } else if (!playerWon) {
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
                 
@@ -1490,7 +1478,7 @@
                         moveAlongPath(character, path, moveId);
                     } else {
                         setStatus(`Can't find path to zone!`);
-                        stopAutomation(character);
+                        automation.markedTiles.shift(); // Remove unpathable mark
                     }
                     return;
                 }
@@ -1508,10 +1496,11 @@
                     } 
                     else { 
                         setStatus("Cannot find path to attack spot!");
-                        stopAutomation(character);
+                        automation.markedTiles.shift(); // Remove unpathable mark
                     }
                 }
             } else {
+                // Target is dead or gone, move to the next mark in the queue
                 automation.markedTiles.shift();
                 if(automation.markedTiles.length === 0) stopAutomation(character);
             }
