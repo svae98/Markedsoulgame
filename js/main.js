@@ -1,5 +1,5 @@
 // js/main.js
-// A Walk in the Park Update - Connection & Resource Fix
+// A Walk in the Park Update
 
 // --- Game Data Import ---
 import {
@@ -28,20 +28,14 @@ async function initFirebase() {
         } else {
             console.log("Running in Live Environment");
             appId = 'Markedsoulgame';
-
-            // ===================================================================
-            // PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
-            // This is the primary fix for your connection issue.
-            // ===================================================================
             firebaseConfig = {
-                    apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
-                    authDomain: "gridfall-2661e.firebaseapp.com",
-                    projectId: "gridfall-2661e",
-                    storageBucket: "gridfall-2661e.firebasestorage.app",
-                    messagingSenderId: "623611849102",
-                    appId: "1:623611849102:web:6ffb21d284b72574abdcdf"
-                    };
-            // ===================================================================
+                apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
+                authDomain: "gridfall-2661e.firebaseapp.com",
+                projectId: "gridfall-2661e",
+                storageBucket: "gridfall-2661e.firebasestorage.app",
+                messagingSenderId: "623611849102",
+                appId: "1:623611849102:web:6ffb21d284b72574abdcdf",
+            };
         }
 
         app = initializeApp(firebaseConfig);
@@ -59,7 +53,7 @@ async function initFirebase() {
 
     } catch (error) {
         console.error("Firebase Initialization Error:", error);
-        document.getElementById('action-status').textContent = "Connection failed! Check Firebase config.";
+        document.getElementById('action-status').textContent = "Connection failed!";
     }
 }
 
@@ -139,12 +133,13 @@ function mergeDeep(target, ...sources) {
     return mergeDeep(target, ...sources); 
 }
 
-//-- Heavily updated map building logic
+//-- New map building logic using the mapLayout string
 function buildMapData(zoneX, zoneY) {
     const zoneKey = `${zoneX},${zoneY}`;
     const zone = worldData[zoneKey];
     if (!zone || !zone.mapLayout) return []; // Return empty if no layout
     
+    // Legend for interpreting map characters
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         'T': TILES.GRASS, 'R': TILES.GRASS, 'P': TILES.GRASS, 'G': TILES.GRASS, 'H': TILES.GRASS,
@@ -199,7 +194,7 @@ function getDefaultGameState() {
 }
 
 async function initGame() {
-    //-- Canvas now takes full container size
+    //-- Canvas now takes full container size and is responsive
     ui.canvas.width = ui.canvasContainer.offsetWidth;
     ui.canvas.height = ui.canvasContainer.offsetHeight;
 
@@ -250,7 +245,7 @@ function gameLoop(timestamp) {
     if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
 
     const activeChar = getActiveCharacter();
-    //-- Update camera target and position
+    //-- Update camera target and smoothly move towards it
     if (activeChar) {
         camera.target = activeChar.player;
         camera.x += (camera.target.x - camera.x) * camera.lerp;
@@ -282,7 +277,7 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-//-- Major rewrite of the entire rendering pipeline to support the camera
+//-- Complete rewrite of the rendering pipeline to support the camera
 function draw() {
     const ctx = ui.ctx;
     ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
@@ -302,6 +297,7 @@ function draw() {
     //-- Loop through only the visible tiles
     for (let y = startRow; y <= endRow; y++) {
         for (let x = startCol; x <= endCol; x++) {
+            // Check bounds before drawing
             if (x >= 0 && x < MAP_WIDTH_TILES && y >= 0 && y < MAP_HEIGHT_TILES) {
                 drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
             }
@@ -322,14 +318,14 @@ function draw() {
     drawMarks(zoneKey);
 }
 
-//-- Helper to convert world coords to screen coords
+//-- Helper to convert world coordinates to screen (canvas) coordinates
 function worldToScreen(worldX, worldY) {
     const screenX = (worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2;
     const screenY = (worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2;
     return { x: screenX, y: screenY };
 }
 
-//-- Updated with more detail
+//-- Updated with more detailed tile drawing using the camera
 function drawTile(x, y, zoneX, zoneY) {
     const { x: drawX, y: drawY } = worldToScreen(x + 0.5, y + 0.5);
     const ctx = ui.ctx;
@@ -354,7 +350,6 @@ function drawTile(x, y, zoneX, zoneY) {
         }
     }
 
-    let tileColor;
     switch(tileType) {
         case TILES.WALL:
             ctx.fillStyle = '#6b7280'; // Lighter top
@@ -417,6 +412,7 @@ function drawEnemy(enemy) {
     if (!enemyData) return;
     const size = enemyData.size || {w: 1, h: 1};
     
+    // Use the top-left corner for positioning, converted to screen space
     const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y);
     
     const width = size.w * TILE_SIZE;
@@ -445,7 +441,7 @@ function drawMarks(currentZoneKey) {
             const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
             ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
             const {x: screenX, y: screenY} = worldToScreen(mark.x, mark.y);
-            ui.ctx.strokeRect(screenX + 1, screenY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+            ui.ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
         }
     });
 }
@@ -512,6 +508,7 @@ function getTileFromClick(e) {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
+    // Convert screen coordinates to world tile coordinates based on camera
     const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / TILE_SIZE) + (screenX / TILE_SIZE));
     const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / TILE_SIZE) + (screenY / TILE_SIZE));
     
@@ -796,6 +793,203 @@ function addContextMenuButton(text, onClick) {
     btn.onclick = () => { onClick(); ui.contextMenu.style.display = 'none'; };
     ui.contextMenu.appendChild(btn);
 }
+
+// ===================================================================
+// START OF MISSING UI FUNCTIONS
+// This entire block was missing, causing the error.
+// ===================================================================
+
+function showNotification(message) {
+    if (notificationTimeout) clearTimeout(notificationTimeout);
+    ui.notificationBanner.textContent = message;
+    ui.notificationBanner.classList.add('show');
+    notificationTimeout = setTimeout(() => {
+        ui.notificationBanner.classList.remove('show');
+    }, 3000);
+}
+
+function renderAltarList() {
+    const listContainer = ui.altarListContainer;
+    listContainer.innerHTML = '';
+    const soulsText = `${gameState.inventory.soulFragment || 0} ${ITEM_SPRITES.soulFragment}`;
+    const ragingSoulsText = `${gameState.inventory.ragingSoul || 0} <span class="text-red-500">${ITEM_SPRITES.ragingSoul}</span>`;
+    ui.altarSoulsDisplay.innerHTML = `${soulsText} &nbsp;&nbsp; ${ragingSoulsText}`;
+
+    Object.keys(ALTAR_UPGRADES).forEach(id => {
+        const upgrade = ALTAR_UPGRADES[id];
+        const itemEl = document.createElement('div');
+        itemEl.className = 'modal-item clickable';
+        const nameEl = document.createElement('span');
+        const costEl = document.createElement('span');
+        costEl.className = 'cost';
+
+        let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
+        const maxLevel = upgrade.maxLevel;
+
+        nameEl.textContent = `${upgrade.name} (${currentLevel}/${maxLevel})`;
+        
+        if (currentLevel >= maxLevel) {
+            itemEl.classList.add('disabled');
+            costEl.textContent = "MAX";
+        } else {
+            const cost = upgrade.cost(currentLevel);
+            let costString = '';
+            let canAfford = true;
+            for(const currency in cost) {
+                if (currency === 'ragingSoul') {
+                     costString += `${cost[currency]} <span class="text-red-500">${ITEM_SPRITES[currency]}</span> `;
+                } else {
+                     costString += `${cost[currency]} ${ITEM_SPRITES[currency]} `;
+                }
+                if((gameState.inventory[currency] || 0) < cost[currency]) {
+                    canAfford = false;
+                }
+            }
+            costEl.innerHTML = costString.trim();
+            if (!canAfford) itemEl.classList.add('cannot-afford');
+            itemEl.addEventListener('click', () => purchaseUpgrade(id));
+        }
+        
+        itemEl.append(nameEl, costEl);
+        listContainer.appendChild(itemEl);
+    });
+}
+
+function purchaseUpgrade(id) {
+    const upgrade = ALTAR_UPGRADES[id];
+    let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
+
+    if (currentLevel >= upgrade.maxLevel) return;
+
+    const cost = upgrade.cost(currentLevel);
+    
+    for(const currency in cost) {
+        if((gameState.inventory[currency] || 0) < cost[currency]) return;
+    }
+    
+    for(const currency in cost) {
+        gameState.inventory[currency] -= cost[currency];
+    }
+
+    if (id === 'addCharacter') {
+        const newId = gameState.characters.length;
+        gameState.characters.push(getDefaultCharacterState(newId, `Character ${newId + 1}`, CHARACTER_COLORS[newId % CHARACTER_COLORS.length]));
+    } else {
+        gameState.upgrades[id]++;
+    }
+    recalculateTeamStats();
+    saveGameState();
+    renderAltarList();
+    updateAllUI();
+}
+
+function openModal(modal) { modal.classList.remove('hidden'); }
+function closeModal(modal) { modal.classList.add('hidden'); }
+function openSoulAltar() { openModal(ui.soulAltarModal); renderAltarList(); }
+function closeSoulAltar() { closeModal(ui.soulAltarModal); }
+function openLevels() { openModal(ui.levelsModal); renderLevels(); }
+function closeLevels() { closeModal(ui.levelsModal); }
+function openInventory() { openModal(ui.inventoryModal); renderInventory(); }
+function closeInventory() { closeModal(ui.inventoryModal); }
+function openMap() { openModal(ui.mapModal); renderMap(); }
+function closeMap() { closeModal(ui.mapModal); }
+
+function renderMap() {
+    const grid = ui.mapGridContainer;
+    grid.innerHTML = '';
+    const activeChar = getActiveCharacter();
+    const minX = 0, maxX = 1, minY = 0, maxY = 1;
+
+    for(let y = minY; y <= maxY; y++) {
+        for(let x = minX; x <= maxX; x++) {
+            const zoneKey = `${x},${y}`;
+            const zoneData = worldData[zoneKey];
+            const zoneEl = document.createElement('div');
+            zoneEl.className = 'map-zone';
+            
+            if (zoneData) {
+                zoneEl.textContent = zoneData.name;
+                if (activeChar.zoneX === x && activeChar.zoneY === y) {
+                     zoneEl.classList.add('active-zone');
+                }
+                
+                if(enemies[zoneKey]) {
+                    for(const enemyId in enemies[zoneKey]) {
+                        const enemy = enemies[zoneKey][enemyId];
+                        const enemyData = ENEMIES_DATA[enemy.type];
+                        if(enemyData.isBoss) {
+                            const bossIcon = document.createElement('div');
+                            bossIcon.textContent = '💀';
+                            bossIcon.className = 'boss-icon';
+                            bossIcon.title = enemy.name;
+                            bossIcon.addEventListener('click', (e) => {
+                                handleMapMarking(enemy, activeChar);
+                                e.stopPropagation();
+                            });
+                            zoneEl.appendChild(bossIcon);
+                        }
+                    }
+                }
+            } else {
+                zoneEl.style.backgroundColor = '#111';
+            }
+            grid.appendChild(zoneEl);
+        }
+    }
+}
+
+function renderLevels() {
+    ui.levelsListContainer.innerHTML = '';
+    const activeChar = getActiveCharacter();
+    const createLevelBar = (name, skillKey, level, xp, neededXp, color) => {
+        const xpPercent = (neededXp > 0) ? (xp / neededXp) * 100 : 100;
+        const isAssigned = activeChar.automation.active && activeChar.automation.task === skillKey;
+        const container = document.createElement('div');
+        container.className = `w-full p-2 border rounded-lg modal-item clickable ${isAssigned ? 'assigned' : ''}`;
+        container.innerHTML = `
+            <div>
+                <div class="flex justify-between items-center mb-1 text-sm">
+                    <span class="font-medium text-${color}-300">${name}</span>
+                    <span>Lv ${level}</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar bg-${color}-500" style="width: ${xpPercent}%;">${Math.floor(xp)}/${neededXp}</div>
+                </div>
+            </div>
+        `;
+        container.addEventListener('click', () => assignSkillTask(skillKey));
+        return container;
+    };
+    
+    ui.levelsListContainer.appendChild(createLevelBar('Woodcutting', 'woodcutting', gameState.skills.woodcutting.level, Math.floor(gameState.skills.woodcutting.xp), xpForSkillLevel(gameState.skills.woodcutting.level), 'lime'));
+    ui.levelsListContainer.appendChild(createLevelBar('Mining', 'mining', gameState.skills.mining.level, Math.floor(gameState.skills.mining.xp), xpForSkillLevel(gameState.skills.mining.level), 'yellow'));
+    ui.levelsListContainer.appendChild(createLevelBar('Fishing', 'fishing', gameState.skills.fishing.level, Math.floor(gameState.skills.fishing.xp), xpForSkillLevel(gameState.skills.fishing.level), 'sky'));
+}
+
+function renderInventory() {
+    ui.inventoryListContainer.innerHTML = '';
+    for (const item in gameState.inventory) {
+        if(gameState.inventory[item] > 0) {
+            const itemEl = document.createElement('div');
+            itemEl.className = 'flex flex-col items-center justify-center p-2 border border-zinc-600 rounded-lg bg-zinc-800';
+            
+            let itemSprite = ITEM_SPRITES[item];
+            if(item === 'ragingSoul') {
+                itemSprite = `<span class="text-red-500">${itemSprite}</span>`;
+            }
+
+            itemEl.innerHTML = `
+                <span class="text-3xl">${itemSprite}</span>
+                <span class="text-sm font-bold">${gameState.inventory[item]}</span>
+            `;
+            ui.inventoryListContainer.appendChild(itemEl);
+        }
+    }
+}
+
+// ===================================================================
+// END OF MISSING UI FUNCTIONS
+// ===================================================================
 
 function getTeamStats() { 
     const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
