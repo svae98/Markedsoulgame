@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"> 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -116,9 +116,10 @@
         <div id="ui-panel" class="relative p-4 rounded-lg flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
             <div id="notification-banner" class="p-2 bg-fuchsia-600 text-white text-center rounded-b-lg shadow-lg z-10">Notification</div>
             
-            <header class="text-center pb-2 border-b border-gray-700">
+            <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.002</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -220,27 +221,20 @@
         import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Global Variables ---
-        // Firebase variables will be initialized in initFirebase()
         let app, db, auth, userId, appId;
         
-        // This function intelligently sets up Firebase for both preview and live environments
         async function initFirebase() {
             try {
                 let firebaseConfig;
-                // Check if running in the preview environment by looking for a global variable
                 const isPreview = typeof __firebase_config !== 'undefined';
 
                 if (isPreview) {
-                    // --- PREVIEW ENVIRONMENT ---
-                    // Use the config and app ID provided by the preview environment
                     console.log("Running in Preview Environment");
                     firebaseConfig = JSON.parse(__firebase_config);
                     appId = typeof __app_id !== 'undefined' ? __app_id : 'default-preview-app';
                 } else {
-                    // --- LIVE ENVIRONMENT ---
-                    // Use your hardcoded config for the live site
                     console.log("Running in Live Environment");
-                    appId = 'Markedsoulgame'; // Your specific app name for the database
+                    appId = 'Markedsoulgame';
                     firebaseConfig = {
                         apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
                         authDomain: "gridfall-2661e.firebaseapp.com",
@@ -251,22 +245,17 @@
                     };
                 }
 
-                // Initialize Firebase with the determined config
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Sign in based on the environment
                 if (isPreview && typeof __initial_auth_token !== 'undefined') {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
                 
-                // Get the user ID after sign-in
                 userId = auth.currentUser.uid;
-                
-                // Start the game logic
                 await initGame();
 
             } catch (error) {
@@ -370,10 +359,9 @@
         let currentMapData = [];
         let notificationTimeout = null;
 
-        // --- New global variables for the game loop ---
         let lastFrameTime = 0;
         let accumulator = 0;
-        const LOGIC_TICK_RATE = 50; // ms per logic update (20 updates/sec)
+        const LOGIC_TICK_RATE = 50; 
 
         function getActiveCharacter() {
             if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -461,7 +449,7 @@
                 player: { x: 15 + id, y: 16 }, 
                 hp: { current: 5, max: 5 },
                 isMoving: false, currentMoveId: null, lastRegenTime: 0, isDead: false,
-                automation: { active: false, task: null, targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+                automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
                 combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
             };
         }
@@ -510,7 +498,6 @@
             requestAnimationFrame(gameLoop);
         }
         
-        // --- MODIFIED: New time-based game loop ---
         function gameLoop(timestamp) {
             if (!gameState.characters) {
                 requestAnimationFrame(gameLoop);
@@ -1228,6 +1215,10 @@
                 if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
                 deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: Date.now() + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
                 delete enemies[zoneKey][combat.targetId];
+                
+                if (character.automation.active && character.automation.task === 'hunting') {
+                    character.automation.state = 'IDLE';
+                }
 
             } else if (!playerWon) {
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
@@ -1321,27 +1312,18 @@
         }
         
         function updateHuntingTask(character, setStatus) {
+            if (character.isMoving) return;
+
             const { automation, player, zoneX, zoneY } = character;
 
             const desiredTarget = findNearestMarked(character);
-            const desiredTargetId = desiredTarget ? desiredTarget.id : null;
-
-            if (character.isMoving) {
-                if (automation.targetId === desiredTargetId) {
-                    return;
-                }
-                else {
-                    character.currentMoveId = null;
-                    character.isMoving = false;
-                }
-            }
-
+            
             if (desiredTarget) {
-                automation.targetId = desiredTargetId;
+                automation.targetId = desiredTarget.id;
                 
                 if (isAdjacent(player, desiredTarget)) {
                     setStatus("Initiating combat...");
-                    startCombat(character, desiredTargetId, true);
+                    startCombat(character, desiredTarget.id, true);
                 } else {
                     setStatus(`Walking to ${desiredTarget.name}...`);
                     const targetPos = findWalkableNeighborForEntity(desiredTarget, player);
@@ -1365,30 +1347,30 @@
             const { automation, player, zoneX, zoneY } = character;
             const resourceType = automation.task === 'woodcutting' ? 'TREE' : automation.task === 'mining' ? 'ROCK' : 'POND';
 
-            const currentState = automation.skillingState || 'IDLE';
+            const currentState = automation.state || 'IDLE';
 
             switch(currentState) {
-                case 'IDLE': automation.skillingState = 'FINDING_RESOURCE'; break;
+                case 'IDLE': automation.state = 'FINDING_RESOURCE'; break;
                 case 'FINDING_RESOURCE':
                      setStatus(`Finding ${resourceType.toLowerCase()}...`);
                      const node = findNearestResource(character, resourceType);
                      if (node) {
                          automation.targetId = node.id;
-                         automation.skillingState = 'WALKING_TO_RESOURCE';
+                         automation.state = 'WALKING_TO_RESOURCE';
                      } else {
                          setStatus(`No ${resourceType.toLowerCase()}s available...`);
-                         automation.skillingState = 'WAITING_FOR_RESPAWN';
+                         automation.state = 'WAITING_FOR_RESPAWN';
                      }
                     break;
                 case 'WALKING_TO_RESOURCE':
                     const targetNode = findResourceById(automation.targetId);
-                    if (!targetNode) { automation.skillingState = 'FINDING_RESOURCE'; break; }
+                    if (!targetNode) { automation.state = 'FINDING_RESOURCE'; break; }
                     if (isAdjacent(player, targetNode)) {
-                        automation.skillingState = 'GATHERING';
+                        automation.state = 'GATHERING';
                     } else {
                         setStatus(`Walking to ${resourceType.toLowerCase()}...`);
                         const targetPos = findWalkableNeighborForEntity(targetNode, player);
-                        if (!targetPos) { setStatus("Can't reach resource!"); automation.skillingState = 'FINDING_RESOURCE'; break; }
+                        if (!targetPos) { setStatus("Can't reach resource!"); automation.state = 'FINDING_RESOURCE'; break; }
                         const path = findPath(player, targetPos, zoneX, zoneY);
                         if (path && path.length > 0) {
                             const moveId = Date.now();
@@ -1396,7 +1378,7 @@
                             moveAlongPath(character, path, moveId);
                         } else {
                             setStatus("Can't find a path!");
-                            automation.skillingState = 'FINDING_RESOURCE';
+                            automation.state = 'FINDING_RESOURCE';
                         }
                     }
                     break;
@@ -1405,7 +1387,7 @@
                     break;
                 case 'WAITING_FOR_RESPAWN':
                     const hasRespawned = worldData[`${zoneX},${zoneY}`]?.resources?.some(r => r.type === resourceType);
-                    if (hasRespawned) automation.skillingState = 'FINDING_RESOURCE';
+                    if (hasRespawned) automation.state = 'FINDING_RESOURCE';
                     break;
             }
         }
@@ -1413,7 +1395,7 @@
         function gatherResource(character, now, setStatus) {
             const { automation } = character;
             const node = findResourceById(automation.targetId);
-            if (!node) { automation.skillingState = 'FINDING_RESOURCE'; return; }
+            if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
             const resourceData = RESOURCE_DATA[node.type];
 
             if (now - automation.gatheringState.lastHitTime < resourceData.time) return;
@@ -1429,7 +1411,7 @@
             }
             
             if (RESOURCE_DATA[node.type]?.depletes) {
-                 automation.skillingState = 'FINDING_RESOURCE';
+                 automation.state = 'FINDING_RESOURCE';
             }
             saveGameState();
         }
@@ -1607,6 +1589,7 @@
             }
             
             character.automation.active = true;
+            character.automation.state = 'IDLE';
             
             saveGameState();
             if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
@@ -1623,6 +1606,7 @@
              character.automation.active = false;
              character.automation.task = null; 
              character.automation.targetId = null; 
+             character.automation.state = 'IDLE'; 
              character.currentMoveId = null;
              character.isMoving = false;
              if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
