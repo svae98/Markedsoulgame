@@ -148,7 +148,7 @@
             <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
-                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.006</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.007</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -678,7 +678,7 @@
             ui.ctx.fillRect(px, py, width, height);
 
             if (enemy.type.includes('GOLEM')) {
-                ui.ctx.fillStyle = '#57534e'; // dark stone color for eyes
+                ui.ctx.fillStyle = '#57534e';
                 const eyeSize = TILE_SIZE * 0.6;
                 const eyeOffset = (TILE_SIZE - eyeSize) / 2;
                 if(enemyData.eyePattern) {
@@ -697,7 +697,24 @@
                 if (`${mark.zoneX},${mark.zoneY}` === currentZoneKey) {
                     const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
                     ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
-                    ui.ctx.strokeRect(mark.x * TILE_SIZE + 1, mark.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                    const enemy = findEnemyById(mark.enemyId);
+                    if(enemy) {
+                        const enemyData = ENEMIES_DATA[enemy.type];
+                        const size = enemyData.size || {w: 1, h: 1};
+
+                        // Deduce the target tile on the boss based on the approach tile (the mark)
+                        const {x: ax, y: ay} = mark;
+                        const {x: ex, y: ey} = enemy;
+                        let tx = ax, ty = ay;
+
+                        if (ax < ex) tx = ex;
+                        else if (ax >= ex + size.w) tx = ex + size.w - 1;
+
+                        if (ay < ey) ty = ey;
+                        else if (ay >= ey + size.h) ty = ey + size.h - 1;
+                        
+                        ui.ctx.strokeRect(tx * TILE_SIZE + 1, ty * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                    }
                 }
             });
         }
@@ -837,10 +854,8 @@
             const grid = ui.mapGridContainer;
             grid.innerHTML = '';
             const activeChar = getActiveCharacter();
-            const minX = 0, maxX = 1, minY = 0, maxY = 1; // Assuming a 2x2 world for now
+            const minX = 0, maxX = 1, minY = 0, maxY = 1;
 
-            const allKnownZoneKeys = Object.keys(worldData);
-            
             for(let y = minY; y <= maxY; y++) {
                 for(let x = minX; x <= maxX; x++) {
                     const zoneKey = `${x},${y}`;
@@ -954,7 +969,7 @@
             if (!isNaN(key) && key > 0 && key <= MAX_CHARACTERS) { 
                 const charIndex = key - 1; 
                 if (gameState.characters[charIndex]) { 
-                    gameState.activeCharacterIndex = index; 
+                    gameState.activeCharacterIndex = charIndex; 
                     saveGameState(); 
                     updateAllUI(); 
                 } 
@@ -981,7 +996,7 @@
             }
             
             if (e.shiftKey) { 
-                handleMarking(enemy, activeChar);
+                handleMarking(enemy, activeChar, {x, y});
                 return;
             }
             
@@ -1052,43 +1067,47 @@
             }
         }
 
-        function handleMarking(enemy, activeChar) {
+        function addMark(activeChar, enemy, approachSpot) {
+            const stats = getTeamStats();
+            if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
+                const removedMark = activeChar.automation.markedTiles.shift();
+                if(activeChar.combat.active && activeChar.combat.targetId === removedMark.enemyId) {
+                     forceEndCombat(activeChar);
+                }
+            }
+            activeChar.automation.markedTiles.push({ ...approachSpot, enemyId: enemy.id });
+            startAutomation(activeChar, 'hunting');
+            showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
+        }
+
+        function handleMarking(enemy, activeChar, clickedBossTile = null) {
             if (!enemy) return;
             activeChar.currentMoveId = null;
             activeChar.isMoving = false;
 
             const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
-            const isMarkedByActiveChar = activeChar.automation.markedTiles.some(m => m.enemyId === enemy.id);
+            const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.enemyId === enemy.id);
             
-            if (isMarkedByActiveChar) {
-                const markIndex = activeChar.automation.markedTiles.findIndex(m => m.enemyId === enemy.id);
-                if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
+            if (existingMarkForChar) {
+                 const markIndex = activeChar.automation.markedTiles.findIndex(m => m.enemyId === enemy.id);
+                 if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
+                 if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) forceEndCombat(activeChar);
+                 if (activeChar.automation.markedTiles.length === 0) stopAutomation(activeChar);
+            } else if (clickedBossTile) {
+                const neighbors = [{x:clickedBossTile.x,y:clickedBossTile.y-1},{x:clickedBossTile.x,y:clickedBossTile.y+1},{x:clickedBossTile.x-1,y:clickedBossTile.y},{x:clickedBossTile.x+1,y:clickedBossTile.y}];
+                const validApproachSpots = neighbors.filter(n => isWalkable(n.x, n.y, enemy.zoneX, enemy.zoneY, true));
                 
-                if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) {
-                    forceEndCombat(activeChar);
+                if (validApproachSpots.length === 0) {
+                    showNotification("No valid approach for that tile.");
+                    return;
                 }
-                if (activeChar.automation.markedTiles.length === 0) {
-                    stopAutomation(activeChar);
-                }
-            } else {
-                 const stats = getTeamStats();
-                if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
-                    const removedMark = activeChar.automation.markedTiles.shift();
-                    if(activeChar.combat.active && activeChar.combat.targetId === removedMark.enemyId) {
-                         forceEndCombat(activeChar);
-                    }
-                }
-                
-                const availableSpots = getWalkableNeighborsForEntity(enemy, true);
-                const markedSpots = allMarks.map(m => `${m.x},${m.y}`);
-                const openSpot = availableSpots.find(spot => !markedSpots.includes(`${spot.x},${spot.y}`));
+                const approachSpot = validApproachSpots[0];
+                const isSpotMarked = allMarks.some(m => m.x === approachSpot.x && m.y === approachSpot.y);
 
-                if(openSpot) {
-                    activeChar.automation.markedTiles.push({ ...openSpot, enemyId: enemy.id });
-                    startAutomation(activeChar, 'hunting');
-                    showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
+                if (isSpotMarked) {
+                    showNotification("That attack spot is already marked.");
                 } else {
-                    showNotification(`${enemy.name} has no open attack spots!`);
+                    addMark(activeChar, enemy, {...approachSpot, zoneX: enemy.zoneX, zoneY: enemy.zoneY });
                 }
             }
             
@@ -1097,7 +1116,24 @@
         }
 
         function handleMapMarking(enemy, activeChar) {
-            handleMarking(enemy, activeChar);
+             const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
+             const availableSpots = getWalkableNeighborsForEntity(enemy, true);
+             const markedSpots = allMarks.map(m => `${m.x},${m.y}`);
+             const openSpots = availableSpots.filter(spot => !markedSpots.includes(`${spot.x},${spot.y}`));
+
+            if (openSpots.length > 0) {
+                openSpots.sort((a,b) => {
+                    const distA = Math.abs(a.x - activeChar.player.x) + Math.abs(a.y - activeChar.player.y);
+                    const distB = Math.abs(b.x - activeChar.player.x) + Math.abs(b.y - activeChar.player.y);
+                    return distA - distB;
+                });
+                const closestSpot = openSpots[0];
+                addMark(activeChar, enemy, closestSpot);
+                saveGameState();
+                updateAllUI();
+            } else {
+                showNotification(`${enemy.name} has no open attack spots!`);
+            }
         }
 
         async function moveAlongPath(character, path, moveId) {
@@ -1269,8 +1305,8 @@
                 
                 const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
                 const reservedSpots = allMarks.filter(m => m.enemyId === enemyId).map(m => ({x: m.x, y: m.y}));
-
-                const targetPos = findWalkableNeighborForEntity(enemy, character.player, reservedSpots); 
+                const charMark = character.automation.markedTiles.find(m => m.enemyId === enemyId);
+                const targetPos = charMark || findWalkableNeighborForEntity(enemy, character.player, reservedSpots); 
                 
                 if (!targetPos) { 
                     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't reach target."; 
@@ -1287,7 +1323,7 @@
             if (character.currentMoveId !== moveId) return;
             
             const finalEnemyCheck = findEnemyById(enemyId);
-            if (isAdjacent(character.player, finalEnemyCheck)) { 
+            if (finalEnemyCheck && isAdjacent(character.player, finalEnemyCheck)) { 
                 character.combat.active = true; 
                 character.combat.targetId = enemyId; 
                 character.combat.isPlayerTurn = true; 
@@ -1310,12 +1346,12 @@
         function endCombat(character, playerWon) { 
             const { combat } = character; 
             if (!combat.targetId) return; 
-
-            const zoneKey = `${character.zoneX},${character.zoneY}`;
-            const targetEnemy = enemies[zoneKey]?.[combat.targetId]; 
+            const killedEnemyId = combat.targetId;
+            const targetEnemy = findEnemyById(killedEnemyId);
             
             if (playerWon && targetEnemy) {
                 const enemyData = ENEMIES_DATA[targetEnemy.type];
+                const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`; 
                 gameState.souls += enemyData.loot.soulFragment;
 
@@ -1334,7 +1370,7 @@
                 delete enemies[zoneKey][combat.targetId];
 
                 gameState.characters.forEach(c => {
-                    const markIndex = c.automation.markedTiles.findIndex(m => m.enemyId === combat.targetId);
+                    const markIndex = c.automation.markedTiles.findIndex(m => m.enemyId === killedEnemyId);
                     if (markIndex !== -1) {
                         c.automation.markedTiles.splice(markIndex, 1);
                         if(c.automation.markedTiles.length === 0) stopAutomation(c);
@@ -1441,7 +1477,7 @@
                  return;
             }
             
-            const mark = automation.markedTiles[0]; // Always target the first mark in the queue
+            const mark = automation.markedTiles[0];
             const desiredTarget = findEnemyById(mark.enemyId);
             
             if (desiredTarget) {
@@ -1476,7 +1512,6 @@
                     }
                 }
             } else {
-                // Target is dead or gone, remove mark and find next
                 automation.markedTiles.shift();
                 if(automation.markedTiles.length === 0) stopAutomation(character);
             }
@@ -1670,7 +1705,7 @@
             const tileType = currentMapData[y][x];
             if (tileType === TILES.WALL || tileType === TILES.PEDESTAL || tileType === TILES.TREE || tileType === TILES.ROCK || tileType === TILES.POND) return false;
             if (getEnemyAt(x, y, zoneKey)) return false;
-            if (!ignoreChars && gameState.characters.some(c => c.id !== getActiveCharacter()?.id && c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
+            if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
             return true;
         }
 
@@ -1775,7 +1810,6 @@
 
         function findNearestMarked(character) {
             if (character.automation.markedTiles.length === 0) return null;
-            // Simply process the first mark in the queue
             const firstMark = character.automation.markedTiles[0];
             return findEnemyById(firstMark.enemyId);
         }
@@ -1820,9 +1854,7 @@
             const activeChar = getActiveCharacter(); 
             if (!activeChar || !gameState.level) return; 
             const teamStats = getTeamStats(); 
-            if(activeChar.zoneX === currentMapData.zoneX && activeChar.zoneY === currentMapData.zoneY) {
-                 // no need to rebuild if zone is the same
-            } else {
+            if(!currentMapData || activeChar.zoneX !== currentMapData.zoneX || activeChar.zoneY !== currentMapData.zoneY) {
                  currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
                  currentMapData.zoneX = activeChar.zoneX;
                  currentMapData.zoneY = activeChar.zoneY;
