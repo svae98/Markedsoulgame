@@ -286,7 +286,6 @@
         const TILES = { GRASS: 0, WALL: 1, GATEWAY: 2, PEDESTAL: 3, TREE: 4, ROCK: 5, POND: 6 };
         const ITEM_SPRITES = { soulFragment: '✧', wood: '🌲', copper_ore: '⛏️', fish: '🐟' };
         
-        // --- MODIFIED: Renamed 'enemy' to 'monster'
         const ITEM_DROP_DATA = {
             'green_goo': { name: 'Green Goo', monster: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
             'viscous_ichor': { name: 'Viscous Ichor', monster: 'YELLOW_SLIME', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 1 }, pedestalId: 'vi_pedestal', visual: { color: '#fde047', char: 'I' }, description: "+1 Damage" },
@@ -492,6 +491,11 @@
             ui.closeLevelsButton.addEventListener('click', closeLevels);
             ui.openInventoryButton.addEventListener('click', openInventory);
             ui.closeInventoryButton.addEventListener('click', closeInventory);
+            
+            // --- MODIFIED: Added click-outside-to-close logic for modals ---
+            ui.soulAltarModal.addEventListener('click', (e) => { if (e.target === ui.soulAltarModal) closeSoulAltar(); });
+            ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
+            ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
             
             await loadGameState();
             const activeChar = getActiveCharacter();
@@ -850,6 +854,7 @@
             } 
         }
 
+        // --- MODIFIED: Added skilling interruption logic ---
         function handleLeftClick(e) {
             const activeChar = getActiveCharacter();
             if (!activeChar || activeChar.isDead) return;
@@ -860,13 +865,11 @@
             const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
             const tileType = currentMapData[y]?.[x];
             
-            // If shift is held, always handle marking first.
             if (e.shiftKey) { 
                 handleMarking(x, y, enemy, activeChar);
-                return; // Exit after handling the mark, regardless of other states.
+                return;
             }
             
-            // Handle info popups
             if (enemy) {
                 handleMonsterClick(enemy);
             } else if (resource) {
@@ -875,12 +878,14 @@
                 handlePedestalClick(x, y, activeChar.zoneX, activeChar.zoneY);
             }
             
-            // Prevent movement/actions if character is automated.
             if (activeChar.automation.active) {
+                if (['woodcutting', 'mining', 'fishing'].includes(activeChar.automation.task) && !enemy && !resource) {
+                    stopAutomation(activeChar);
+                    handleMovementClick(x, y, activeChar);
+                }
                 return;
             }
             
-            // If we didn't click on an interactive object, it's a move command.
             if (!enemy && !resource && tileType !== TILES.PEDESTAL) {
                 handleMovementClick(x, y, activeChar);
             }
@@ -933,7 +938,6 @@
         }
 
         function handleMarking(x, y, enemy, activeChar) {
-            // Interrupt current movement to allow for immediate re-evaluation.
             activeChar.currentMoveId = null;
             activeChar.isMoving = false;
 
@@ -1022,6 +1026,7 @@
             }
         }
 
+        // --- MODIFIED: Removed "Stop hunting" option ---
         function handleRightClick(e) {
             e.preventDefault();
             const activeChar = getActiveCharacter();
@@ -1030,15 +1035,13 @@
             
             const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
         
-            if (activeChar.automation.active) {
+            if (activeChar.automation.active && activeChar.automation.task !== 'hunting') {
                 addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
             }
         
             if (activeChar.automation.markedTiles.length > 0) {
                 addContextMenuButton('Clear My Marks', () => {
-                    if (activeChar.automation.task === 'hunting') {
-                        stopAutomation(activeChar);
-                    }
+                    stopAutomation(activeChar); // This will stop combat if active
                     activeChar.automation.markedTiles = [];
                     saveGameState();
                 });
@@ -1048,7 +1051,7 @@
             if (anyCharHasMarks) {
                 addContextMenuButton('Clear All Marks', () => {
                     gameState.characters.forEach(char => {
-                        if (char.automation.task === 'hunting') stopAutomation(char);
+                        stopAutomation(char); // This will stop combat for each char
                         char.automation.markedTiles = [];
                     });
                     saveGameState();
@@ -1207,24 +1210,20 @@
                 if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
                 deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: Date.now() + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
                 delete enemies[zoneKey][combat.targetId];
-                
-                if (character.automation.active && character.automation.task === 'hunting') {
-                     // No longer uses state machine, just let updateAutomation take over
-                }
 
             } else if (!playerWon) {
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
                 
                 character.automation.markedTiles = []; 
                 stopAutomation(character);
-                character.isDead = true; // Set dead flag
+                character.isDead = true;
                 
                 setTimeout(() => {
                     character.player = { x: 15, y: 15 };
                     character.zoneX = 1;
                     character.zoneY = 1;
                     character.hp.current = character.hp.max;
-                    character.isDead = false; // Reset dead flag on respawn
+                    character.isDead = false;
                     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} respawned.`;
                     updateAllUI();
                 }, 3000);
@@ -1303,30 +1302,24 @@
             }
         }
         
-        // --- REFACTORED: Complete rewrite of hunting logic ---
         function updateHuntingTask(character, setStatus) {
             const { automation, player, zoneX, zoneY } = character;
 
             const desiredTarget = findNearestMarked(character);
             const desiredTargetId = desiredTarget ? desiredTarget.id : null;
 
-            // If we are moving, check if our move is still valid.
             if (character.isMoving) {
-                // If we're moving towards the correct target, let it continue.
                 if (automation.targetId === desiredTargetId) {
                     return;
                 }
-                // Otherwise, our move is invalid. Stop it.
                 else {
                     character.currentMoveId = null;
                     character.isMoving = false;
-                    // Fall through to re-evaluate what to do next.
                 }
             }
 
-            // If we are idle (not moving, not in combat)
             if (desiredTarget) {
-                automation.targetId = desiredTargetId; // Make sure targetId is up-to-date
+                automation.targetId = desiredTargetId;
                 
                 if (isAdjacent(player, desiredTarget)) {
                     setStatus("Initiating combat...");
@@ -1602,12 +1595,17 @@
             updateAllUI();
         }
 
+        // --- MODIFIED: Added combat check ---
         function stopAutomation(character) {
              if(!character.automation.active) return; 
+
+             if (character.combat.active) {
+                forceEndCombat(character);
+             }
+
              character.automation.active = false;
              character.automation.task = null; 
              character.automation.targetId = null; 
-             // Stop movement when automation stops
              character.currentMoveId = null;
              character.isMoving = false;
              if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
