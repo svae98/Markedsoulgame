@@ -148,7 +148,7 @@
             <header class="text-center pb-2 border-b border-gray-700 relative">
                 <h1 class="text-2xl font-bold text-fuchsia-400 tracking-wider">Gridfall</h1>
                 <p class="text-xs text-gray-500 mt-1">Marked Souls</p>
-                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.005</p>
+                <p id="version-display" class="absolute top-2 left-2 text-xs text-gray-600">v.006</p>
             </header>
 
             <section id="combat-info-section" class="space-y-2">
@@ -330,8 +330,8 @@
             BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: 'green_goo' },
             YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: 'viscous_ichor' },
             RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: 'pulsating_core' },
-            GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart' },
-            GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: {w: 3, h: 3}, regenRate: 20 },
+            GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: {w: 2, h: 2}, itemDrop: 'golem_heart', eyePattern: [{x:0, y:0}, {x:1, y:0}] },
+            GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: {w: 3, h: 3}, regenRate: 20, eyePattern: [{x:0,y:0}, {x:2,y:0}, {x:1,y:1}] },
             HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: 'tattered_cloth' },
             BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: 'boar_tusk' },
             WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: 'wolf_pelt' },
@@ -371,10 +371,15 @@
                 ],
                 spawns: [
                     { x: 7, y: 7, type: 'BLUE_SLIME' }, { x: 8, y: 9, type: 'BLUE_SLIME' }, { x: 6, y: 11, type: 'BLUE_SLIME' },
-                    { x: 22, y: 22, type: 'BLUE_SLIME' },
-                    { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' },
+                    { x: 9, y: 13, type: 'BLUE_SLIME' }, { x: 5, y: 9, type: 'BLUE_SLIME' }, { x: 8, y: 11, type: 'BLUE_SLIME' },
+                    { x: 22, y: 22, type: 'BLUE_SLIME' }, { x: 24, y: 24, type: 'BLUE_SLIME' }, { x: 26, y: 22, type: 'BLUE_SLIME' },
+                    { x: 23, y: 26, type: 'BLUE_SLIME' }, { x: 21, y: 24, type: 'BLUE_SLIME' }, { x: 24, y: 22, type: 'BLUE_SLIME' },
+                    { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' }, { x: 27, y: 9, type: 'YELLOW_SLIME' },
+                    { x: 23, y: 8, type: 'YELLOW_SLIME' }, { x: 25, y: 11, type: 'YELLOW_SLIME' }, { x: 28, y: 7, type: 'YELLOW_SLIME' },
                     { x: 2, y: 2, type: 'GOLEM'},
                     { x: 5, y: 2, type: 'RED_SLIME' }, { x: 2, y: 5, type: 'RED_SLIME' },
+                    { x: 2, y: 25, type: 'RED_SLIME' }, { x: 3, y: 27, type: 'RED_SLIME' }, { x: 4, y: 25, type: 'RED_SLIME' },
+                    { x: 5, y: 28, type: 'RED_SLIME' }, { x: 6, y: 26, type: 'RED_SLIME' }, { x: 2, y: 28, type: 'RED_SLIME' },
                 ],
             },
         };
@@ -671,28 +676,29 @@
             const height = size.h * TILE_SIZE;
             ui.ctx.fillStyle = enemyData.color;
             ui.ctx.fillRect(px, py, width, height);
+
             if (enemy.type.includes('GOLEM')) {
-                ui.ctx.fillStyle = '#57534e';
+                ui.ctx.fillStyle = '#57534e'; // dark stone color for eyes
                 const eyeSize = TILE_SIZE * 0.6;
                 const eyeOffset = (TILE_SIZE - eyeSize) / 2;
-                 for (let i = 0; i < size.w; i++) {
-                     for (let j = 0; j < size.h; j++) {
-                         if (Math.random() > 0.7)
-                            ui.ctx.fillRect(px + (i*TILE_SIZE) + eyeOffset, py + (j*TILE_SIZE) + eyeOffset, eyeSize, eyeSize);
-                     }
-                 }
+                if(enemyData.eyePattern) {
+                    enemyData.eyePattern.forEach(pos => {
+                        ui.ctx.fillRect(px + (pos.x * TILE_SIZE) + eyeOffset, py + (pos.y * TILE_SIZE) + eyeOffset, eyeSize, eyeSize);
+                    });
+                }
             }
         }
 
         function drawMarks(currentZoneKey) {
-            gameState.characters.forEach(char => {
-                ui.ctx.strokeStyle = char.automation.color;
-                ui.ctx.lineWidth = 2;
-                char.automation.markedTiles.forEach(tile => {
-                    if (`${tile.zoneX},${tile.zoneY}` === currentZoneKey) {
-                        ui.ctx.strokeRect(tile.x * TILE_SIZE + 1, tile.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
-                    }
-                });
+            ui.ctx.lineWidth = 2;
+            const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
+
+            allMarks.forEach(mark => {
+                if (`${mark.zoneX},${mark.zoneY}` === currentZoneKey) {
+                    const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
+                    ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
+                    ui.ctx.strokeRect(mark.x * TILE_SIZE + 1, mark.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                }
             });
         }
 
@@ -708,17 +714,14 @@
                 return;
             }
             
-            if (!isActive) {
-                ui.ctx.fillStyle = '#a855f7'; // purple-600
-                ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
-                return;
-            }
-
-            ui.ctx.fillStyle = '#2563eb'; // blue-600
+            ui.ctx.fillStyle = character.automation.color;
             ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
-            ui.ctx.strokeStyle = '#facc15'; // yellow-400
-            ui.ctx.lineWidth = 2;
-            ui.ctx.strokeRect(px + 3, py + 3, w - 6, h - 6);
+            
+            if (isActive) {
+                ui.ctx.strokeStyle = '#facc15'; // yellow-400
+                ui.ctx.lineWidth = 2;
+                ui.ctx.strokeRect(px + 3, py + 3, w - 6, h - 6);
+            }
         }
 
         function showDamagePopup(x, y, amount, isPlayerDamage) {
@@ -834,8 +837,10 @@
             const grid = ui.mapGridContainer;
             grid.innerHTML = '';
             const activeChar = getActiveCharacter();
-            const minX = 0, maxX = 1, minY = 0, maxY = 1;
+            const minX = 0, maxX = 1, minY = 0, maxY = 1; // Assuming a 2x2 world for now
 
+            const allKnownZoneKeys = Object.keys(worldData);
+            
             for(let y = minY; y <= maxY; y++) {
                 for(let x = minX; x <= maxX; x++) {
                     const zoneKey = `${x},${y}`;
@@ -849,7 +854,6 @@
                              zoneEl.classList.add('active-zone');
                         }
                         
-                        // Check for bosses in this zone
                         if(enemies[zoneKey]) {
                             for(const enemyId in enemies[zoneKey]) {
                                 const enemy = enemies[zoneKey][enemyId];
@@ -861,9 +865,8 @@
                                     bossIcon.title = enemy.name;
                                     bossIcon.addEventListener('click', (e) => {
                                         if (e.shiftKey) {
-                                            handleMarking(enemy.x, enemy.y, enemy, activeChar);
+                                            handleMapMarking(enemy, activeChar);
                                             e.stopPropagation();
-                                            showNotification(`Marked ${enemy.name} for ${activeChar.name}!`);
                                         }
                                     });
                                     zoneEl.appendChild(bossIcon);
@@ -951,7 +954,7 @@
             if (!isNaN(key) && key > 0 && key <= MAX_CHARACTERS) { 
                 const charIndex = key - 1; 
                 if (gameState.characters[charIndex]) { 
-                    gameState.activeCharacterIndex = charIndex; 
+                    gameState.activeCharacterIndex = index; 
                     saveGameState(); 
                     updateAllUI(); 
                 } 
@@ -978,7 +981,7 @@
             }
             
             if (e.shiftKey) { 
-                handleMarking(x, y, enemy, activeChar);
+                handleMarking(enemy, activeChar);
                 return;
             }
             
@@ -1049,57 +1052,52 @@
             }
         }
 
-        function handleMarking(x, y, enemy, activeChar) {
+        function handleMarking(enemy, activeChar) {
+            if (!enemy) return;
             activeChar.currentMoveId = null;
             activeChar.isMoving = false;
 
-            const targetEnemy = enemy || getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
-            if (!targetEnemy) return;
-
-            const markX = targetEnemy.x;
-            const markY = targetEnemy.y;
-
-            let existingMarkIndex = -1;
-            let existingMarkChar = null;
+            const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
+            const isMarkedByActiveChar = activeChar.automation.markedTiles.some(m => m.enemyId === enemy.id);
             
-            for (const char of gameState.characters) {
-                const index = char.automation.markedTiles.findIndex(tile => tile.x === markX && tile.y === markY && tile.zoneX === targetEnemy.zoneX && tile.zoneY === targetEnemy.zoneY);
-                if (index !== -1) {
-                    existingMarkIndex = index;
-                    existingMarkChar = char;
-                    break;
-                }
-            }
-        
-            if (existingMarkChar && existingMarkChar.id === activeChar.id) {
-                activeChar.automation.markedTiles.splice(existingMarkIndex, 1);
+            if (isMarkedByActiveChar) {
+                const markIndex = activeChar.automation.markedTiles.findIndex(m => m.enemyId === enemy.id);
+                if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
                 
-                if (activeChar.combat.active && activeChar.combat.targetId === targetEnemy.id) {
+                if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) {
                     forceEndCombat(activeChar);
                 }
-                
                 if (activeChar.automation.markedTiles.length === 0) {
                     stopAutomation(activeChar);
                 }
-            } 
-            else if (!existingMarkChar) {
-                const stats = getTeamStats();
-                
+            } else {
+                 const stats = getTeamStats();
                 if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
-                    const removedTile = activeChar.automation.markedTiles.shift();
-                    const removedEnemy = getEnemyAt(removedTile.x, removedTile.y, `${removedTile.zoneX},${removedTile.zoneY}`);
-                    if (activeChar.combat.active && removedEnemy && activeChar.combat.targetId === removedEnemy.id) {
-                        forceEndCombat(activeChar);
+                    const removedMark = activeChar.automation.markedTiles.shift();
+                    if(activeChar.combat.active && activeChar.combat.targetId === removedMark.enemyId) {
+                         forceEndCombat(activeChar);
                     }
                 }
                 
-                activeChar.automation.markedTiles.push({ x: markX, y: markY, zoneX: targetEnemy.zoneX, zoneY: targetEnemy.zoneY });
-                
-                startAutomation(activeChar, 'hunting');
+                const availableSpots = getWalkableNeighborsForEntity(enemy, true);
+                const markedSpots = allMarks.map(m => `${m.x},${m.y}`);
+                const openSpot = availableSpots.find(spot => !markedSpots.includes(`${spot.x},${spot.y}`));
+
+                if(openSpot) {
+                    activeChar.automation.markedTiles.push({ ...openSpot, enemyId: enemy.id });
+                    startAutomation(activeChar, 'hunting');
+                    showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
+                } else {
+                    showNotification(`${enemy.name} has no open attack spots!`);
+                }
             }
             
             saveGameState();
             updateAllUI();
+        }
+
+        function handleMapMarking(enemy, activeChar) {
+            handleMarking(enemy, activeChar);
         }
 
         async function moveAlongPath(character, path, moveId) {
@@ -1227,8 +1225,8 @@
             const combatDelta = gameTime - combat.lastUpdateTime; 
             if (combatDelta < 1500) return; 
             combat.lastUpdateTime = gameTime; 
-            const zoneKey = `${character.zoneX},${character.zoneY}`; 
-            const enemy = enemies[zoneKey]?.[combat.targetId]; 
+            
+            const enemy = findEnemyById(combat.targetId);
             if (!enemy) { endCombat(character, true); return; } 
             
             const playerStats = getTeamStats(); 
@@ -1260,8 +1258,7 @@
                 character.automation.active = true;
             }
 
-            const zoneKey = `${character.zoneX},${character.zoneY}`; 
-            const enemy = enemies[zoneKey]?.[enemyId]; 
+            const enemy = findEnemyById(enemyId);
             if (!enemy) return;
             
             const moveId = Date.now();
@@ -1269,7 +1266,12 @@
 
             if (!isAdjacent(character.player, enemy)) { 
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to monster..."; 
-                const targetPos = findWalkableNeighborForEntity(enemy, character.player); 
+                
+                const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
+                const reservedSpots = allMarks.filter(m => m.enemyId === enemyId).map(m => ({x: m.x, y: m.y}));
+
+                const targetPos = findWalkableNeighborForEntity(enemy, character.player, reservedSpots); 
+                
                 if (!targetPos) { 
                     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't reach target."; 
                     return; 
@@ -1283,8 +1285,9 @@
             } 
             
             if (character.currentMoveId !== moveId) return;
-
-            if (isAdjacent(character.player, enemy)) { 
+            
+            const finalEnemyCheck = findEnemyById(enemyId);
+            if (isAdjacent(character.player, finalEnemyCheck)) { 
                 character.combat.active = true; 
                 character.combat.targetId = enemyId; 
                 character.combat.isPlayerTurn = true; 
@@ -1305,10 +1308,12 @@
         }
 
         function endCombat(character, playerWon) { 
-            const { combat, zoneX, zoneY } = character; 
+            const { combat } = character; 
             if (!combat.targetId) return; 
-            const zoneKey = `${zoneX},${zoneY}`; 
+
+            const zoneKey = `${character.zoneX},${character.zoneY}`;
             const targetEnemy = enemies[zoneKey]?.[combat.targetId]; 
+            
             if (playerWon && targetEnemy) {
                 const enemyData = ENEMIES_DATA[targetEnemy.type];
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`; 
@@ -1327,11 +1332,15 @@
                 if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
                 deadEnemies[zoneKey].push({ id: targetEnemy.id, respawnTime: currentGameTime + RESPAWN_TIME, data: { ...targetEnemy, currentHp: enemyData.hp } });
                 delete enemies[zoneKey][combat.targetId];
-                
-                if (character.automation.active && character.automation.task === 'hunting') {
-                    character.automation.state = 'IDLE';
-                }
 
+                gameState.characters.forEach(c => {
+                    const markIndex = c.automation.markedTiles.findIndex(m => m.enemyId === combat.targetId);
+                    if (markIndex !== -1) {
+                        c.automation.markedTiles.splice(markIndex, 1);
+                        if(c.automation.markedTiles.length === 0) stopAutomation(c);
+                    }
+                });
+                
             } else if (!playerWon) {
                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
                 
@@ -1424,47 +1433,52 @@
         }
         
         function updateHuntingTask(character, setStatus) {
-            if (character.isMoving) return;
+            if (character.isMoving || character.combat.active) return;
 
-            const { automation, player, zoneX, zoneY } = character;
-            const desiredTarget = findNearestMarked(character);
+            const { automation } = character;
+            if (automation.markedTiles.length === 0) {
+                 stopAutomation(character);
+                 return;
+            }
+            
+            const mark = automation.markedTiles[0]; // Always target the first mark in the queue
+            const desiredTarget = findEnemyById(mark.enemyId);
             
             if (desiredTarget) {
                 if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
                     setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
-                    // Find a path to a gateway leading to the target zone
                     const path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY);
-                    if(path) {
+                    if(path && path.length > 0) {
                         const moveId = Date.now();
                         character.currentMoveId = moveId;
                         moveAlongPath(character, path, moveId);
                     } else {
                         setStatus(`Can't find path to zone!`);
+                        stopAutomation(character);
                     }
                     return;
                 }
-
-                automation.targetId = desiredTarget.id;
                 
-                if (isAdjacent(player, desiredTarget)) {
+                if (isAdjacent(character.player, desiredTarget)) {
                     setStatus("Initiating combat...");
                     startCombat(character, desiredTarget.id, true);
                 } else {
                     setStatus(`Walking to ${desiredTarget.name}...`);
-                    const targetPos = findWalkableNeighborForEntity(desiredTarget, player);
-                    if (targetPos) {
-                        const path = findPath(player, targetPos, zoneX, zoneY);
-                        if (path) { 
-                            const moveId = Date.now();
-                            character.currentMoveId = moveId;
-                            moveAlongPath(character, path, moveId);
-                        } 
-                        else { setStatus("Cannot find path!"); }
-                    } else { setStatus("Cannot reach target!"); }
+                    const path = findPath(character.player, { x: mark.x, y: mark.y }, character.zoneX, character.zoneY);
+                    if (path && path.length > 0) { 
+                        const moveId = Date.now();
+                        character.currentMoveId = moveId;
+                        moveAlongPath(character, path, moveId);
+                    } 
+                    else { 
+                        setStatus("Cannot find path to attack spot!");
+                        stopAutomation(character);
+                    }
                 }
             } else {
-                setStatus("Awaiting new marks...");
-                automation.targetId = null;
+                // Target is dead or gone, remove mark and find next
+                automation.markedTiles.shift();
+                if(automation.markedTiles.length === 0) stopAutomation(character);
             }
         }
 
@@ -1493,7 +1507,7 @@
                         automation.state = 'GATHERING';
                     } else {
                         setStatus(`Walking to ${resourceType.toLowerCase()}...`);
-                        const targetPos = findWalkableNeighborForEntity(targetNode, player);
+                        const targetPos = getWalkableNeighborsForEntity(targetNode, false)[0];
                         if (!targetPos) { setStatus("Can't reach resource!"); automation.state = 'FINDING_RESOURCE'; break; }
                         const path = findPath(player, targetPos, zoneX, zoneY);
                         if (path && path.length > 0) {
@@ -1649,48 +1663,41 @@
             return null;
         }
 
-        function isWalkable(x, y, zoneX, zoneY) {
+        function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
             const zoneKey = `${zoneX},${zoneY}`;
             if (x < 0 || x >= MAP_WIDTH_TILES || y < 0 || y >= MAP_HEIGHT_TILES) return false;
             if (!currentMapData[y] || currentMapData[y][x] === undefined) return false;
             const tileType = currentMapData[y][x];
             if (tileType === TILES.WALL || tileType === TILES.PEDESTAL || tileType === TILES.TREE || tileType === TILES.ROCK || tileType === TILES.POND) return false;
             if (getEnemyAt(x, y, zoneKey)) return false;
-            if (gameState.characters.some(c => c.id !== getActiveCharacter()?.id && c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
+            if (!ignoreChars && gameState.characters.some(c => c.id !== getActiveCharacter()?.id && c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
             return true;
         }
 
-        function findWalkableNeighborForEntity(entity, charPos) {
-            const size = (entity.type && (ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type])) 
-                ? (ENEMIES_DATA[entity.type]?.size || RESOURCE_DATA[entity.type]?.size || { w: 1, h: 1 }) 
-                : { w: 1, h: 1 };
-            
-            const entityTiles = [];
-            for (let i = 0; i < size.w; i++) {
-                for (let j = 0; j < size.h; j++) {
-                    entityTiles.push({x: entity.x + i, y: entity.y + j});
-                }
-            }
+        function getWalkableNeighborsForEntity(entity, isCombat) {
+            const size = (ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type])?.size || { w: 1, h: 1 };
             const perimeter = new Set();
-            entityTiles.forEach(tile => {
-                perimeter.add(`${tile.x},${tile.y - 1}`);
-                perimeter.add(`${tile.x},${tile.y + size.h}`);
-                perimeter.add(`${tile.x - 1},${tile.y}`);
-                perimeter.add(`${tile.x + size.w},${tile.y}`);
-                 for(let i=0; i<size.w; i++){
-                    perimeter.add(`${tile.x+i},${tile.y - 1}`);
-                    perimeter.add(`${tile.x+i},${tile.y + size.h}`);
-                }
-                for(let j=0; j<size.h; j++){
-                    perimeter.add(`${tile.x - 1},${tile.y+j}`);
-                    perimeter.add(`${tile.x + size.w},${tile.y+j}`);
-                }
-            });
-            const walkableNeighbors = [...perimeter]
-                .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]) }))
-                .filter(p => isWalkable(p.x, p.y, charPos.zoneX, charPos.zoneY));
-            if (walkableNeighbors.length === 0) return null; 
-            return walkableNeighbors.reduce((closest, p) => {
+            for(let i=0; i<size.w; i++){
+                perimeter.add(`${entity.x+i},${entity.y - 1}`);
+                perimeter.add(`${entity.x+i},${entity.y + size.h}`);
+            }
+            for(let j=0; j<size.h; j++){
+                perimeter.add(`${entity.x - 1},${entity.y+j}`);
+                perimeter.add(`${entity.x + size.w},${entity.y+j}`);
+            }
+            
+            return [...perimeter]
+                .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: entity.zoneX, zoneY: entity.zoneY }))
+                .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
+        }
+
+        function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
+            const walkableNeighbors = getWalkableNeighborsForEntity(entity, true);
+            const reservedSet = new Set(reservedSpots.map(s => `${s.x},${s.y}`));
+            const availableNeighbors = walkableNeighbors.filter(p => !reservedSet.has(`${p.x},${p.y}`));
+            if (availableNeighbors.length === 0) return null; 
+            
+            return availableNeighbors.reduce((closest, p) => {
                 const dist = Math.abs(p.x - charPos.x) + Math.abs(p.y - charPos.y);
                 return dist < closest.dist ? { pos: p, dist } : closest;
             }, { pos: null, dist: Infinity }).pos;
@@ -1762,28 +1769,15 @@
 
         function isAdjacent(charPos, entity) { 
             if(!entity) return false;
-            const eData = ENEMIES_DATA[entity.type];
-            const rData = RESOURCE_DATA[entity.type];
-            const size = eData?.size || rData?.size || { w: 1, h: 1 };
-            const { x: cx, y: cy } = charPos; 
-            const { x: ex, y: ey } = entity; 
-            const isHorizontallyAdjacent = (cy >= ey && cy < ey + size.h) && (cx === ex - 1 || cx === ex + size.w); 
-            const isVerticallyAdjacent = (cx >= ex && cx < ex + size.w) && (cy === ey - 1 || cy === ey + size.h); 
-            return isHorizontallyAdjacent || isVerticallyAdjacent; 
+            const neighbors = getWalkableNeighborsForEntity(entity, true);
+            return neighbors.some(n => n.x === charPos.x && n.y === charPos.y);
         }
 
-        function findNearestMarked(character) { 
-            let nearestEnemy = null; 
-            let minDistance = Infinity; 
-            for (const tile of character.automation.markedTiles) { 
-                const zoneKey = `${tile.zoneX},${tile.zoneY}`; 
-                const enemy = getEnemyAt(tile.x, tile.y, zoneKey); 
-                if (enemy) { 
-                    const distance = Math.abs(enemy.x - character.player.x) + Math.abs(enemy.y - character.player.y) + (Math.abs(enemy.zoneX - character.zoneX) + Math.abs(enemy.zoneY - character.zoneY)) * 1000; 
-                    if (distance < minDistance) { minDistance = distance; nearestEnemy = enemy; } 
-                } 
-            } 
-            return nearestEnemy; 
+        function findNearestMarked(character) {
+            if (character.automation.markedTiles.length === 0) return null;
+            // Simply process the first mark in the queue
+            const firstMark = character.automation.markedTiles[0];
+            return findEnemyById(firstMark.enemyId);
         }
 
         function renderCharacterSwitcher() { 
@@ -1810,8 +1804,8 @@
         function updateCombatPanelUI() { 
             const activeChar = getActiveCharacter(); 
             if (!activeChar) return; 
-            const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`; 
-            const enemy = enemies[zoneKey]?.[activeChar.combat.targetId]; 
+            
+            const enemy = findEnemyById(activeChar.combat.targetId); 
             if (enemy && activeChar.combat.active) { 
                 const enemyData = ENEMIES_DATA[enemy.type]; 
                 ui.enemyCombatInfo.classList.remove('hidden'); 
@@ -1826,14 +1820,23 @@
             const activeChar = getActiveCharacter(); 
             if (!activeChar || !gameState.level) return; 
             const teamStats = getTeamStats(); 
-            currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
+            if(activeChar.zoneX === currentMapData.zoneX && activeChar.zoneY === currentMapData.zoneY) {
+                 // no need to rebuild if zone is the same
+            } else {
+                 currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
+                 currentMapData.zoneX = activeChar.zoneX;
+                 currentMapData.zoneY = activeChar.zoneY;
+            }
             renderCharacterSwitcher(); 
             ui.activeCharacterName.textContent = activeChar.name; 
             ui.playerDamageStat.textContent = teamStats.damage; 
             ui.playerSpeedStat.textContent = teamStats.speed;
             const damageReduction = (teamStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
             ui.playerDefenseStat.textContent = `${teamStats.defense} (${damageReduction})`;
-            ui.markCount.textContent = `${activeChar.automation.markedTiles.length}/${teamStats.maxMarks}`; 
+            
+            const allMarksCount = gameState.characters.reduce((sum, char) => sum + char.automation.markedTiles.length, 0);
+            ui.markCount.textContent = `${allMarksCount}/${teamStats.maxMarks * gameState.characters.length}`; 
+
             ui.playerSouls.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`; 
             const { hp } = activeChar; 
             ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`; 
