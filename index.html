@@ -337,7 +337,9 @@
                 resources: [
                     { x: 10, y: 10, type: 'TREE', id: 'tree_1_1_1' }, { x: 12, y: 20, type: 'TREE', id: 'tree_1_1_2' }, { x: 25, y: 15, type: 'TREE', id: 'tree_1_1_3' },
                     { x: 20, y: 10, type: 'ROCK', id: 'rock_1_1_1' }, { x: 18, y: 20, type: 'ROCK', id: 'rock_1_1_2' }, { x: 25, y: 18, type: 'ROCK', id: 'rock_1_1_3' },
-                    { x: 4, y: 20, type: 'POND', id: 'pond_1_1_1', size: {w: 2, h: 2}}
+                    // --- MODIFIED: Changed pond to be four individual tiles ---
+                    { x: 4, y: 20, type: 'POND', id: 'pond_1_1_1' }, { x: 5, y: 20, type: 'POND', id: 'pond_1_1_2' },
+                    { x: 4, y: 21, type: 'POND', id: 'pond_1_1_3' }, { x: 5, y: 21, type: 'POND', id: 'pond_1_1_4' }
                 ],
                 spawns: [
                     { x: 7, y: 7, type: 'BLUE_SLIME' }, { x: 8, y: 9, type: 'BLUE_SLIME' }, { x: 6, y: 11, type: 'BLUE_SLIME' },
@@ -451,12 +453,13 @@
             return newMapData;
         }
 
+        // --- MODIFIED: Added isDead flag ---
         function getDefaultCharacterState(id, name, color) {
             return { 
                 id, name, zoneX: 1, zoneY: 1, 
                 player: { x: 15 + id, y: 16 }, 
                 hp: { current: 5, max: 5 },
-                isMoving: false, currentMoveId: null, lastRegenTime: 0,
+                isMoving: false, currentMoveId: null, lastRegenTime: 0, isDead: false,
                 automation: { active: false, task: null, state: 'IDLE', path: [], targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
                 combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
             };
@@ -633,7 +636,14 @@
             });
         }
 
+        // --- MODIFIED: Added drawing state for dead characters ---
         function drawPlayer(character, isActive) {
+            if (character.isDead) {
+                ui.ctx.fillStyle = '#7f1d1d'; // dark red
+                ui.ctx.fillRect(character.player.x * TILE_SIZE + 6, character.player.y * TILE_SIZE + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+                return;
+            }
+
             ui.ctx.fillStyle = isActive ? '#f472b6' : '#a855f7';
             ui.ctx.fillRect(character.player.x * TILE_SIZE + 6, character.player.y * TILE_SIZE + 6, TILE_SIZE - 12, TILE_SIZE - 12);
             if (isActive) {
@@ -829,6 +839,7 @@
             } 
         }
 
+        // --- MODIFIED: Reordered logic to allow marking while moving ---
         function handleLeftClick(e) {
             const activeChar = getActiveCharacter();
             if (!activeChar) return;
@@ -837,34 +848,21 @@
             const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
             const enemy = getEnemyAt(x, y, zoneKey);
             const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
-
-            // Always allow showing info popups.
-            if (enemy) {
-                handleEnemyClick(enemy);
-            } else if (resource) {
-                handleResourceClick(resource);
-            }
-
-            // --- Action-related logic below ---
             
-            // If moving, check if we should stop by clicking a walkable tile.
-            if (activeChar.isMoving) {
-                const tileType = currentMapData[y]?.[x];
-                // Stop if clicking on a walkable, non-interactive tile.
-                if (!enemy && !resource && (tileType === TILES.GRASS || tileType === TILES.GATEWAY)) {
-                    activeChar.currentMoveId = null; // This will break the moveAlongPath loop.
-                }
-                return; // Whether we stopped or not, no further action is taken on this click.
-            }
-
-            // If shift is held, handle marking.
+            // If shift is held, always handle marking first.
             if (e.shiftKey) { 
-                handleMarking(x, y, enemy, activeChar);
-                return;
+                if (!activeChar.isDead) handleMarking(x, y, enemy, activeChar);
+                return; // Exit after handling the mark, regardless of other states.
             }
+            
+            // Always allow showing info popups.
+            if (enemy) handleEnemyClick(enemy);
+            else if (resource) handleResourceClick(resource);
+            
+            // --- Action-related logic below ---
 
-            // If automated, don't allow manual actions.
-            if (activeChar.automation.active) {
+            // Prevent any actions if character is dead, moving, or automated.
+            if (activeChar.isDead || activeChar.isMoving || activeChar.automation.active) {
                 return;
             }
             
@@ -960,8 +958,8 @@
         }
 
         async function moveAlongPath(character, path, moveId) {
-            if (!path || path.length === 0) {
-                 character.isMoving = false; // Ensure isMoving is reset if path is bad
+            if (!path || path.length === 0 || character.isDead) {
+                 character.isMoving = false; // Ensure isMoving is reset if path is bad or char is dead
                  return;
             }
             
@@ -972,7 +970,7 @@
             if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Moving...';
         
             for (const step of path) {
-                if (character.currentMoveId !== moveId) break; // Check for cancellation
+                if (character.currentMoveId !== moveId || character.isDead) break; // Check for cancellation or death
                 character.player.x = step.x;
                 character.player.y = step.y;
                 await new Promise(r => setTimeout(r, moveDelay));
@@ -1005,7 +1003,7 @@
         function handleRightClick(e) {
             e.preventDefault();
             const activeChar = getActiveCharacter();
-            if (!activeChar) return;
+            if (!activeChar || activeChar.isDead) return;
             ui.contextMenu.innerHTML = '';
             
             const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
@@ -1088,7 +1086,7 @@
 
         function updateCombat(character, now) { 
             const { combat } = character; 
-            if (!combat.active) return;
+            if (!combat.active || character.isDead) return;
             const combatDelta = now - combat.lastUpdateTime; 
             if (combatDelta < 1500) return; 
             combat.lastUpdateTime = now; 
@@ -1116,7 +1114,7 @@
         }
 
         async function startCombat(character, enemyId, isAutomated = false) { 
-            if (character.combat.active || character.isMoving) return; 
+            if (character.combat.active || character.isMoving || character.isDead) return; 
             
             stopAutomation(character);
             if (isAutomated) {
@@ -1168,6 +1166,7 @@
              ui.actionStatus.textContent = 'Disengaged.';
         }
 
+        // --- MODIFIED: Added logic to handle character death state ---
         function endCombat(character, playerWon) { 
             const { combat, zoneX, zoneY } = character; 
             if (!combat.targetId) return; 
@@ -1201,12 +1200,14 @@
                 
                 character.automation.markedTiles = []; 
                 stopAutomation(character);
+                character.isDead = true; // Set dead flag
                 
                 setTimeout(() => {
                     character.player = { x: 15, y: 15 };
                     character.zoneX = 1;
                     character.zoneY = 1;
                     character.hp.current = character.hp.max;
+                    character.isDead = false; // Reset dead flag on respawn
                     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} respawned.`;
                     updateAllUI();
                 }, 3000);
@@ -1273,7 +1274,7 @@
         
         function updateAutomation(character, now) { 
             const { combat, isMoving } = character; 
-            if (!character.automation.active || combat.active || isMoving) return;
+            if (!character.automation.active || combat.active || isMoving || character.isDead) return;
 
             const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
             switch(character.automation.task) {
@@ -1427,7 +1428,7 @@
 
         function assignSkillTask(skillKey) {
             const activeChar = getActiveCharacter();
-            if (!activeChar) return;
+            if (!activeChar || activeChar.isDead) return;
             
             if (activeChar.automation.task === skillKey && activeChar.automation.active) {
                 stopAutomation(activeChar);
@@ -1496,7 +1497,7 @@
         function updateAllPlayerRegen(now) {
             const teamStats = getTeamStats();
             gameState.characters.forEach(char => {
-                if (char.hp.current >= char.hp.max) return;
+                if (char.isDead || char.hp.current >= char.hp.max) return;
 
                 if (now - (char.lastRegenTime || 0) > 1000) {
                     const baseRegen = char.hp.max * 0.01;
@@ -1578,6 +1579,7 @@
 
         // --- MODIFIED FUNCTION ---
         function startAutomation(character, task) {
+            if (character.isDead) return;
             // If we're already doing this task, do nothing.
             if (character.automation.active && character.automation.task === task) return;
 
@@ -1677,11 +1679,13 @@
             gameState.characters.forEach((char, index) => { 
                 const btn = document.createElement('button');
                 let taskEmoji = '';
-                if (char.automation.active) {
+                if(char.isDead) {
+                    taskEmoji = '💀';
+                } else if (char.automation.active) {
                     if (char.automation.task === 'hunting') taskEmoji = '⚔️';
                     else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
                     else if (char.automation.task === 'mining') taskEmoji = '⛏️';
-                    else if (char.automation.task === 'fishing') taskEmoji = '�';
+                    else if (char.automation.task === 'fishing') taskEmoji = '🎣';
                 }
                 btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
                 btn.className = 'char-button'; 
