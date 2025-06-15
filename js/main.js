@@ -72,6 +72,7 @@ let lastFrameTime = 0;
 let accumulator = 0;
 const LOGIC_TICK_RATE = 50;
 let currentGameTime = 0;
+const MOVEMENT_SPEED = 0.1; // Determines how fast the character visually moves between tiles
 
 function getActiveCharacter() {
     if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -133,13 +134,11 @@ function mergeDeep(target, ...sources) {
     return mergeDeep(target, ...sources); 
 }
 
-//-- New map building logic using the mapLayout string
 function buildMapData(zoneX, zoneY) {
     const zoneKey = `${zoneX},${zoneY}`;
     const zone = worldData[zoneKey];
-    if (!zone || !zone.mapLayout) return []; // Return empty if no layout
+    if (!zone || !zone.mapLayout) return []; 
     
-    // Legend for interpreting map characters
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         'T': TILES.GRASS, 'R': TILES.GRASS, 'P': TILES.GRASS, 'G': TILES.GRASS, 'H': TILES.GRASS,
@@ -155,7 +154,6 @@ function buildMapData(zoneX, zoneY) {
         }
     }
     
-    //-- Place interactable objects on top of the base layout
     if (zone.gateways) zone.gateways.forEach(gw => { newMapData[gw.y][gw.x] = TILES.GATEWAY; });
     if (zone.pedestals) zone.pedestals.forEach(p => { newMapData[p.y][p.x] = TILES.PEDESTAL; });
     if (zone.resources) zone.resources.forEach(r => {
@@ -171,11 +169,15 @@ function buildMapData(zoneX, zoneY) {
 }
 
 function getDefaultCharacterState(id, name, color) {
+    const startPos = { x: 25, y: 33 };
     return { 
         id, name, zoneX: 1, zoneY: 1, 
-        player: { x: 5, y: 5 }, //-- Updated starting position to a walkable tile
+        player: { x: startPos.x, y: startPos.y }, 
+        visual: { x: startPos.x, y: startPos.y }, // NEW: Visual position for smooth animation
+        target: { x: startPos.x, y: startPos.y }, // NEW: Target tile for movement
         hp: { current: 5, max: 5 },
-        isMoving: false, currentMoveId: null, lastRegenTime: 0, isDead: false,
+        isMoving: false, path: [], // NEW: 'path' array to hold movement queue
+        lastRegenTime: 0, isDead: false,
         automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
         combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
     };
@@ -194,7 +196,6 @@ function getDefaultGameState() {
 }
 
 async function initGame() {
-    //-- Canvas now takes full container size and is responsive
     ui.canvas.width = ui.canvasContainer.offsetWidth;
     ui.canvas.height = ui.canvasContainer.offsetHeight;
 
@@ -228,8 +229,8 @@ async function initGame() {
     currentGameTime = performance.now(); 
     await loadGameState();
     const activeChar = getActiveCharacter();
-    camera.x = activeChar.player.x;
-    camera.y = activeChar.player.y;
+    camera.x = activeChar.visual.x;
+    camera.y = activeChar.visual.y;
     currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
     Object.keys(worldData).forEach(zoneKey => {
         const [zoneX, zoneY] = zoneKey.split(',').map(Number);
@@ -245,9 +246,8 @@ function gameLoop(timestamp) {
     if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
 
     const activeChar = getActiveCharacter();
-    //-- Update camera target and smoothly move towards it
     if (activeChar) {
-        camera.target = activeChar.player;
+        camera.target = activeChar.visual; // Camera now follows visual position
         camera.x += (camera.target.x - camera.x) * camera.lerp;
         camera.y += (camera.target.y - camera.y) * camera.lerp;
     }
@@ -258,26 +258,81 @@ function gameLoop(timestamp) {
     
     if (accumulator > 1000) accumulator = 1000;
 
+    // Game Logic Tick
     while (accumulator >= LOGIC_TICK_RATE) {
         currentGameTime += LOGIC_TICK_RATE;
         checkAllRespawns(currentGameTime);
         updateAllPlayerRegen(currentGameTime);
         gameState.characters.forEach(char => {
             if (char) {
+                // NEW: Handle tile-based movement logic
+                updateCharacterMovement(char);
                 updateAutomation(char, currentGameTime);
                 updateCombat(char, currentGameTime);
             }
         });
         accumulator -= LOGIC_TICK_RATE;
     }
-    
+
+    // Rendering Tick (as fast as possible)
+    gameState.characters.forEach(char => {
+        // NEW: Smoothly interpolate visual position towards target position
+        char.visual.x += (char.target.x - char.visual.x) * MOVEMENT_SPEED;
+        char.visual.y += (char.target.y - char.visual.y) * MOVEMENT_SPEED;
+    });
+
     updateCombatPanelUI();
     draw(); 
     
     requestAnimationFrame(gameLoop);
 }
 
-//-- Complete rewrite of the rendering pipeline to support the camera
+// NEW function to handle movement logic per-tick
+function updateCharacterMovement(character) {
+    // If not moving and there's a path, start the next step
+    if (!character.isMoving && character.path && character.path.length > 0) {
+        const nextStep = character.path.shift();
+        character.target = { x: nextStep.x, y: nextStep.y };
+        character.isMoving = true;
+    }
+
+    // If moving, check if we've reached the target tile
+    if (character.isMoving) {
+        const dx = character.target.x - character.visual.x;
+        const dy = character.target.y - character.visual.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 0.1) {
+            // Snap to grid and finalize step
+            character.visual.x = character.target.x;
+            character.visual.y = character.target.y;
+            character.player.x = character.target.x;
+            character.player.y = character.target.y;
+            character.isMoving = false;
+
+            // If path is finished, check for gateways
+            if (character.path.length === 0) {
+                 const endTile = character.player;
+                 const zone = worldData[`${character.zoneX},${character.zoneY}`];
+                 if (zone && zone.gateways) {
+                     const gateway = zone.gateways.find(g => g.x === endTile.x && g.y === endTile.y);
+                     if (gateway) {
+                         character.zoneX = gateway.destZone.x;
+                         character.zoneY = gateway.destZone.y;
+                         const entryPos = {x: gateway.entry.x, y: gateway.entry.y};
+                         character.player = entryPos;
+                         character.target = entryPos;
+                         character.visual = entryPos;
+                         currentMapData = buildMapData(character.zoneX, character.zoneY);
+                         saveGameState();
+                         updateAllUI();
+                     }
+                 }
+            }
+        }
+    }
+}
+
 function draw() {
     const ctx = ui.ctx;
     ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
@@ -286,7 +341,6 @@ function draw() {
     
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
     
-    //-- Calculate visible tile range based on camera position and canvas size
     const halfWidth = ui.canvas.width / 2 / TILE_SIZE;
     const halfHeight = ui.canvas.height / 2 / TILE_SIZE;
     const startCol = Math.floor(camera.x - halfWidth);
@@ -294,17 +348,14 @@ function draw() {
     const startRow = Math.floor(camera.y - halfHeight);
     const endRow = Math.ceil(camera.y + halfHeight);
 
-    //-- Loop through only the visible tiles
     for (let y = startRow; y <= endRow; y++) {
         for (let x = startCol; x <= endCol; x++) {
-            // Check bounds before drawing
             if (x >= 0 && x < MAP_WIDTH_TILES && y >= 0 && y < MAP_HEIGHT_TILES) {
                 drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
             }
         }
     }
     
-    //-- Draw game objects within the viewport
     if(enemies[zoneKey]) {
         for(const enemyId in enemies[zoneKey]) {
             drawEnemy(enemies[zoneKey][enemyId]);
@@ -318,14 +369,12 @@ function draw() {
     drawMarks(zoneKey);
 }
 
-//-- Helper to convert world coordinates to screen (canvas) coordinates
 function worldToScreen(worldX, worldY) {
     const screenX = (worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2;
     const screenY = (worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2;
     return { x: screenX, y: screenY };
 }
 
-//-- Updated with more detailed tile drawing using the camera
 function drawTile(x, y, zoneX, zoneY) {
     const { x: drawX, y: drawY } = worldToScreen(x + 0.5, y + 0.5);
     const ctx = ui.ctx;
@@ -342,7 +391,6 @@ function drawTile(x, y, zoneX, zoneY) {
     ctx.fillStyle = baseColor;
     ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
     
-    //-- Add subtle texture to grass
     if(tileType === TILES.GRASS) {
         ctx.fillStyle = "rgba(0,0,0,0.05)";
         for(let i = 0; i < 3; i++) {
@@ -352,17 +400,17 @@ function drawTile(x, y, zoneX, zoneY) {
 
     switch(tileType) {
         case TILES.WALL:
-            ctx.fillStyle = '#6b7280'; // Lighter top
+            ctx.fillStyle = '#6b7280'; 
             ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, 2);
-            ctx.fillStyle = '#71717a'; // Lighter left
+            ctx.fillStyle = '#71717a'; 
             ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, 2, TILE_SIZE);
-            ctx.fillStyle = '#4b5563'; // Darker bottom
+            ctx.fillStyle = '#4b5563';
             ctx.fillRect(drawX - TILE_SIZE/2, drawY + TILE_SIZE/2 - 2, TILE_SIZE, 2);
-            ctx.fillStyle = '#4b5563'; // Darker right
+            ctx.fillStyle = '#4b5563';
             ctx.fillRect(drawX + TILE_SIZE/2 - 2, drawY - TILE_SIZE/2, 2, TILE_SIZE);
             break;
         case TILES.DEEP_FOREST:
-            ctx.fillStyle = '#052e16'; // Darker green
+            ctx.fillStyle = '#052e16';
             ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
             ctx.fillStyle = "rgba(0,0,0,0.1)";
             for(let i=0; i<5; i++) {
@@ -372,7 +420,7 @@ function drawTile(x, y, zoneX, zoneY) {
             }
             break;
         case TILES.DEEP_WATER:
-            ctx.fillStyle = '#1e3a8a'; // Darker blue
+            ctx.fillStyle = '#1e3a8a';
             ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
             break;
         case TILES.POND:
@@ -384,9 +432,9 @@ function drawTile(x, y, zoneX, zoneY) {
             ctx.fillRect(drawX - TILE_SIZE/2 + 3, drawY - TILE_SIZE/2 + 3, TILE_SIZE - 6, TILE_SIZE - 6);
             break;
         case TILES.TREE:
-             ctx.fillStyle = '#78350f'; // Trunk
+             ctx.fillStyle = '#78350f';
              ctx.fillRect(drawX - 4, drawY, 8, TILE_SIZE/2);
-             ctx.fillStyle = '#22c55e'; // Leaves
+             ctx.fillStyle = '#22c55e';
              ctx.beginPath();
              ctx.arc(drawX, drawY - 4, TILE_SIZE/2 * 0.8, 0, Math.PI*2);
              ctx.fill();
@@ -401,18 +449,15 @@ function drawTile(x, y, zoneX, zoneY) {
         case TILES.PEDESTAL:
             ctx.fillStyle = '#4b5563';
             ctx.fillRect(drawX - TILE_SIZE/2 + 2, drawY - TILE_SIZE/2 + 2, TILE_SIZE - 4, TILE_SIZE - 4);
-            // Drawing pedestal items is omitted for brevity but would need worldToScreen conversion
             break;
     }
 }
 
-//-- All draw functions now use worldToScreen
 function drawEnemy(enemy) {
     const enemyData = ENEMIES_DATA[enemy.type];
     if (!enemyData) return;
     const size = enemyData.size || {w: 1, h: 1};
     
-    // Use the top-left corner for positioning, converted to screen space
     const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y);
     
     const width = size.w * TILE_SIZE;
@@ -447,7 +492,8 @@ function drawMarks(currentZoneKey) {
 }
 
 function drawPlayer(character, isActive) {
-    const {x: screenX, y: screenY} = worldToScreen(character.player.x + 0.5, character.player.y + 0.5);
+    // NEW: Player is drawn using their visual position
+    const {x: screenX, y: screenY} = worldToScreen(character.visual.x + 0.5, character.visual.y + 0.5);
     const w = TILE_SIZE;
     const h = TILE_SIZE;
 
@@ -502,13 +548,11 @@ function showStatPopup(x, y, title, text) {
     }, 3000);
 }
 
-//-- Click handler now converts screen coords to world coords
 function getTileFromClick(e) { 
     const rect = ui.canvas.getBoundingClientRect(); 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Convert screen coordinates to world tile coordinates based on camera
     const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / TILE_SIZE) + (screenX / TILE_SIZE));
     const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / TILE_SIZE) + (screenY / TILE_SIZE));
     
@@ -549,7 +593,8 @@ function handleKeydown(e) {
 
 function handleLeftClick(e) {
     const activeChar = getActiveCharacter();
-    if (!activeChar || activeChar.isDead) return;
+    // NEW: Prevent new actions while the character is animating between tiles
+    if (!activeChar || activeChar.isDead || activeChar.isMoving) return;
 
     const { x, y } = getTileFromClick(e);
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
@@ -626,8 +671,7 @@ function handlePedestalClick(x, y, zoneX, zoneY) {
 }
 
 function handleMovementClick(x, y, activeChar) {
-    const moveId = Date.now();
-    activeChar.currentMoveId = moveId;
+    activeChar.path = []; // Clear any previous path
 
     let targetPos = null;
     if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY)) {
@@ -636,7 +680,7 @@ function handleMovementClick(x, y, activeChar) {
     if (targetPos) {
         const path = findPath(activeChar.player, targetPos, activeChar.zoneX, activeChar.zoneY);
         if (path && path.length > 0) {
-            moveAlongPath(activeChar, path, moveId);
+            activeChar.path = path; // Set the new path for the character
         }
     }
 }
@@ -657,8 +701,7 @@ function addMark(activeChar, enemy, approachSpot) {
 function handleMarking(enemy) {
     const activeChar = getActiveCharacter();
     if (!enemy || !activeChar) return;
-    activeChar.currentMoveId = null;
-    activeChar.isMoving = false;
+    activeChar.path = [];
 
     const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.enemyId === enemy.id);
     
@@ -697,45 +740,7 @@ function handleMapMarking(enemy, activeChar) {
     }
 }
 
-async function moveAlongPath(character, path, moveId) {
-    if (!path || path.length === 0 || character.isDead) {
-         character.isMoving = false;
-         return;
-    }
-    
-    const stats = getTeamStats();
-    const moveDelay = 200 / (1 + (stats.speed * 0.01));
-
-    character.isMoving = true;
-    if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Moving...';
-
-    for (const step of path) {
-        if (character.currentMoveId !== moveId || character.isDead) break;
-        character.player.x = step.x;
-        character.player.y = step.y;
-        await new Promise(r => setTimeout(r, moveDelay));
-    }
-
-    if (character.currentMoveId === moveId) {
-        const endTile = character.player;
-        const zone = worldData[`${character.zoneX},${character.zoneY}`];
-        if (zone && zone.gateways) {
-            const gateway = zone.gateways.find(g => g.x === endTile.x && g.y === endTile.y);
-            if (gateway) {
-                character.zoneX = gateway.destZone.x;
-                character.zoneY = gateway.destZone.y;
-                character.player.x = gateway.entry.x;
-                character.player.y = gateway.entry.y;
-                currentMapData = buildMapData(character.zoneX, character.zoneY);
-                saveGameState();
-                updateAllUI();
-            }
-        }
-         if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Idle';
-         character.currentMoveId = null; 
-         character.isMoving = false;
-    }
-}
+// REMOVED moveAlongPath as its logic is now in updateCharacterMovement
 
 function handleRightClick(e) {
     e.preventDefault();
@@ -793,11 +798,6 @@ function addContextMenuButton(text, onClick) {
     btn.onclick = () => { onClick(); ui.contextMenu.style.display = 'none'; };
     ui.contextMenu.appendChild(btn);
 }
-
-// ===================================================================
-// START OF MISSING UI FUNCTIONS
-// This entire block was missing, causing the error.
-// ===================================================================
 
 function showNotification(message) {
     if (notificationTimeout) clearTimeout(notificationTimeout);
@@ -987,10 +987,6 @@ function renderInventory() {
     }
 }
 
-// ===================================================================
-// END OF MISSING UI FUNCTIONS
-// ===================================================================
-
 function getTeamStats() { 
     const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
     let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
@@ -1056,9 +1052,6 @@ async function startCombat(character, enemyId, isAutomated = false) {
     const enemy = findEnemyById(enemyId);
     if (!enemy) return;
     
-    const moveId = Date.now();
-    character.currentMoveId = moveId;
-
     if (!isAdjacent(character.player, enemy)) { 
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to monster..."; 
         
@@ -1072,23 +1065,16 @@ async function startCombat(character, enemyId, isAutomated = false) {
             return; 
         } 
         const path = findPath(character.player, targetPos, character.zoneX, character.zoneY); 
-        if (path) { await moveAlongPath(character, path, moveId); } 
+        if (path) { 
+            character.path = path;
+        } 
         else { 
             if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't find a path."; 
             return; 
         } 
     } 
     
-    if (character.currentMoveId !== moveId) return;
-    
-    const finalEnemyCheck = findEnemyById(enemyId);
-    if (finalEnemyCheck && isAdjacent(character.player, finalEnemyCheck)) { 
-        character.combat.active = true; 
-        character.combat.targetId = enemyId; 
-        character.combat.isPlayerTurn = true; 
-        character.combat.lastUpdateTime = currentGameTime; 
-        if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
-    }
+    // Combat will start naturally once the character reaches the adjacent tile
 }
 
 function forceEndCombat(character) {
@@ -1113,7 +1099,6 @@ function endCombat(character, playerWon) {
         const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`;
 
-        // Boss Loot Logic
         if (enemyData.isBoss) {
             if (!gameState.firstKills.includes(targetEnemy.type)) {
                 gameState.inventory.ragingSoul += enemyData.loot.ragingSoul;
@@ -1126,7 +1111,6 @@ function endCombat(character, playerWon) {
             gameState.inventory.soulFragment += enemyData.loot.soulFragment;
         }
 
-        // Handle multiple item drops
         if (enemyData.itemDrop && Array.isArray(enemyData.itemDrop)) {
             enemyData.itemDrop.forEach(itemDropId => {
                 const itemData = ITEM_DROP_DATA[itemDropId];
@@ -1145,7 +1129,6 @@ function endCombat(character, playerWon) {
     } else if (!playerWon) {
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
         
-        // Monster heals when player dies
         if (targetEnemy) {
             const healAmount = targetEnemy.hp * 0.10;
             targetEnemy.currentHp = Math.min(targetEnemy.hp, targetEnemy.currentHp + healAmount);
@@ -1157,7 +1140,10 @@ function endCombat(character, playerWon) {
         character.isDead = true;
         
         setTimeout(() => {
-            character.player = { x: 25, y: 33 };
+            const respawnPos = { x: 25, y: 33 };
+            character.player = respawnPos;
+            character.visual = respawnPos;
+            character.target = respawnPos;
             character.zoneX = 1;
             character.zoneY = 1;
             character.hp.current = character.hp.max;
@@ -1227,14 +1213,12 @@ function gainSkillXp(skill, amount) {
 }
 
 function updateAutomation(character, gameTime) { 
-    const { combat } = character; 
-    if (!character.automation.active || combat.active || character.isDead) return;
+    if (!character.automation.active || character.combat.active || character.isDead || character.isMoving) return;
 
     const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
     switch(character.automation.task) {
         case 'hunting': updateHuntingTask(character, setStatus); break;
         case 'woodcutting': case 'mining': case 'fishing':
-            if (character.isMoving) return; 
             updateSkillingTask(character, gameTime, setStatus);
             break;
     }
@@ -1255,33 +1239,19 @@ function updateHuntingTask(character, setStatus) {
     if (desiredTarget) {
         if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
             setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
-            const path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY);
-            if(path && path.length > 0) {
-                const moveId = Date.now();
-                character.currentMoveId = moveId;
-                moveAlongPath(character, path, moveId);
-            } else {
-                setStatus(`Can't find path to zone!`);
-                automation.markedTiles.shift();
-            }
+            character.path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY) || [];
             return;
         }
         
         if (isAdjacent(character.player, desiredTarget)) {
             setStatus("Initiating combat...");
-            startCombat(character, desiredTarget.id, true);
+            character.combat.active = true;
+            character.combat.targetId = desiredTarget.id;
+            character.combat.isPlayerTurn = true;
+            character.combat.lastUpdateTime = currentGameTime;
         } else {
             setStatus(`Walking to ${desiredTarget.name}...`);
-            const path = findPath(character.player, mark, character.zoneX, character.zoneY);
-            if (path && path.length > 0) { 
-                const moveId = Date.now();
-                character.currentMoveId = moveId;
-                moveAlongPath(character, path, moveId);
-            } 
-            else { 
-                setStatus("Cannot find path to attack spot!");
-                automation.markedTiles.shift();
-            }
+            character.path = findPath(character.player, mark, character.zoneX, character.zoneY) || [];
         }
     } else {
         if (isEnemyDead(mark.enemyId)) {
@@ -1289,9 +1259,7 @@ function updateHuntingTask(character, setStatus) {
         } else {
             setStatus(`Invalid mark, removing.`);
             automation.markedTiles.shift();
-            if (automation.markedTiles.length === 0) {
-                stopAutomation(character);
-            }
+            if (automation.markedTiles.length === 0) stopAutomation(character);
         }
     }
 }
@@ -1323,15 +1291,7 @@ function updateSkillingTask(character, gameTime, setStatus) {
                 setStatus(`Walking to ${resourceType.toLowerCase()}...`);
                 const targetPos = getWalkableNeighborsForEntity(targetNode, false)[0];
                 if (!targetPos) { setStatus("Can't reach resource!"); automation.state = 'FINDING_RESOURCE'; break; }
-                const path = findPath(player, targetPos, zoneX, zoneY);
-                if (path && path.length > 0) {
-                    const moveId = Date.now();
-                    character.currentMoveId = moveId;
-                    moveAlongPath(character, path, moveId);
-                } else {
-                    setStatus("Can't find a path!");
-                    automation.state = 'FINDING_RESOURCE';
-                }
+                character.path = findPath(player, targetPos, zoneX, zoneY) || [];
             }
             break;
         case 'GATHERING':
@@ -1358,7 +1318,6 @@ function gatherResource(character, gameTime, setStatus) {
         showNotification(`+1 ${resourceData.item.replace('_', ' ')}`);
         if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
     }
-    // The resource depletion check has been removed.
     saveGameState();
 }
 
@@ -1549,7 +1508,7 @@ function stopAutomation(character) {
      character.automation.task = null; 
      character.automation.targetId = null; 
      character.automation.state = 'IDLE'; 
-     character.currentMoveId = null;
+     character.path = [];
      character.isMoving = false;
      if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
      if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
@@ -1702,11 +1661,19 @@ async function loadGameState() {
 
     let needsSave = false;
     gameState.characters.forEach(char => {
+        // Ensure new properties exist on loaded characters
+        if(!char.visual) char.visual = { x: char.player.x, y: char.player.y };
+        if(!char.target) char.target = { x: char.player.x, y: char.player.y };
+        if(!char.path) char.path = [];
+
         if (char.isDead) {
             console.log(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            char.player = { x: 25, y: 33 };
+            const respawnPos = { x: 25, y: 33 };
+            char.player = respawnPos;
+            char.visual = respawnPos;
+            char.target = respawnPos;
             char.zoneX = 1;
             char.zoneY = 1;
             char.combat = { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 };
