@@ -25,6 +25,7 @@ export const TILES = {
 
 export const ITEM_SPRITES = {
     soulFragment: '✧',
+    ragingSoul: '✧', // Using same sprite but will be colored differently
     wood: '🌲',
     copper_ore: '⛏️',
     fish: '🐟'
@@ -40,19 +41,21 @@ export const ITEM_DROP_DATA = {
     'boar_tusk': { name: 'Boar Tusk', monster: 'BOAR', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 2 }, pedestalId: 'bt_pedestal', visual: { color: '#e5e7eb', char: 'B' }, description: "+2 Damage" },
     'wolf_pelt': { name: 'Wolf Pelt', monster: 'WOLF', dropChance: 0.04, effect: { type: 'ADD_SPEED', value: 2 }, pedestalId: 'wp_pedestal', visual: { color: '#9ca3af', char: 'W' }, description: "+2 Speed" },
     'golem_heart': { name: 'Golem Heart', monster: 'GOLEM', dropChance: 0.01, effect: { type: 'ADD_MAX_HP', value: 50 }, pedestalId: 'gh_pedestal', visual: { color: '#a8a29e', char: 'H' }, description: "+50 Max HP" },
+    'kings_fragment': { name: "King's Fragment", monster: 'GOLEM_KING', dropChance: 0.10, effect: { type: 'ADD_DEFENSE', value: 5 }, pedestalId: null, visual: { color: '#fca5a5', char: 'F' }, description: "+5 Defense" },
+    'perfect_golem_heart': { name: "Perfect Golem Heart", monster: 'GOLEM_KING', dropChance: 0.01, effect: { type: 'ADD_MAX_HP', value: 100 }, pedestalId: null, visual: { color: '#fca5a5', char: '♥' }, description: "+100 Max HP" },
 };
 
 // --- Enemy Definitions ---
 // Contains stats and information for all enemies in the game.
 export const ENEMIES_DATA = {
-    BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: 'green_goo' },
-    YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: 'viscous_ichor' },
-    RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: 'pulsating_core' },
-    GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { soulFragment: 5 }, size: { w: 2, h: 2 }, itemDrop: 'golem_heart', eyePattern: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
-    GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { soulFragment: 100 }, size: { w: 3, h: 3 }, eyePattern: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }] },
-    HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: 'tattered_cloth' },
-    BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: 'boar_tusk' },
-    WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: 'wolf_pelt' },
+    BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: ['green_goo'] },
+    YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: ['viscous_ichor'] },
+    RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: ['pulsating_core'] },
+    GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { ragingSoul: 1, soulFragment: 25 }, size: { w: 2, h: 2 }, itemDrop: ['golem_heart'], eyePattern: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
+    GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { ragingSoul: 1, soulFragment: 100 }, size: { w: 3, h: 3 }, itemDrop: ['kings_fragment', 'perfect_golem_heart'], eyePattern: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }] },
+    HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: ['tattered_cloth'] },
+    BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: ['boar_tusk'] },
+    WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: ['wolf_pelt'] },
 };
 
 // --- Resource Definitions ---
@@ -109,10 +112,10 @@ export const worldData = {
 // --- Altar Upgrades ---
 // Defines the available upgrades at the Soul Altar and their costs.
 export const ALTAR_UPGRADES = {
-    plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
-    plusTwoMaxHp: { name: "+2 Max HP", maxLevel: 10, cost: (level) => Math.floor(2 * Math.pow(3, level)) },
-    plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => Math.floor(5 * Math.pow(3, level)) },
-    plusOneDefense: { name: "+1 Defense", maxLevel: 10, cost: (level) => Math.floor(5 * Math.pow(3, level)) },
-    plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => Math.floor(30 * Math.pow(3, level)) },
-    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => Math.floor(100 * Math.pow(3, level)) }
+    plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(2 * Math.pow(3, level)) }) },
+    plusTwoMaxHp: { name: "+2 Max HP", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(2 * Math.pow(3, level)) }) },
+    plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
+    plusOneDefense: { name: "+1 Defense", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
+    plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => ({ soulFragment: Math.floor(30 * Math.pow(3, level)) }) },
+    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) }
 };

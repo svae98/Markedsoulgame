@@ -169,12 +169,13 @@ function getDefaultCharacterState(id, name, color) {
 
 function getDefaultGameState() {
     return { 
-        characters: [], activeCharacterIndex: 0, souls: 1000000, 
+        characters: [], activeCharacterIndex: 0,
+        inventory: { soulFragment: 1000, ragingSoul: 0, wood: 0, copper_ore: 0, fish: 0 },
         level: { current: 1, xp: 0 }, 
         skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
-        inventory: { wood: 0, copper_ore: 0, fish: 0 },
         upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
-        collectedItemDrops: []
+        collectedItemDrops: [],
+        firstKills: [], // NEW: Track first-time boss kills
     };
 }
 
@@ -368,7 +369,7 @@ function drawMarks(currentZoneKey) {
                 const enemyData = ENEMIES_DATA[enemy.type];
                 const size = enemyData.size || {w: 1, h: 1};
                 const {x: approachX, y: approachY} = mark;
-                const {x: enemyX, y: enemyY} = enemy;
+                const {x: enemyX, y: enemyY} = enemy.data ? enemy.data : enemy;
                 
                 let targetX = -1, targetY = -1;
 
@@ -462,7 +463,9 @@ function showNotification(message) {
 function renderAltarList() {
     const listContainer = ui.altarListContainer;
     listContainer.innerHTML = '';
-    ui.altarSoulsDisplay.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`;
+    const soulsText = `${gameState.inventory.soulFragment || 0} ${ITEM_SPRITES.soulFragment}`;
+    const ragingSoulsText = `${gameState.inventory.ragingSoul || 0} <span class="text-red-500">${ITEM_SPRITES.ragingSoul}</span>`;
+    ui.altarSoulsDisplay.innerHTML = `${soulsText} &nbsp;&nbsp; ${ragingSoulsText}`;
 
     Object.keys(ALTAR_UPGRADES).forEach(id => {
         const upgrade = ALTAR_UPGRADES[id];
@@ -482,8 +485,16 @@ function renderAltarList() {
             costEl.textContent = "MAX";
         } else {
             const cost = upgrade.cost(currentLevel);
-            costEl.textContent = `${cost} ${ITEM_SPRITES.soulFragment}`;
-            if (gameState.souls < cost) itemEl.classList.add('cannot-afford');
+            let costString = '';
+            let canAfford = true;
+            for(const currency in cost) {
+                costString += `${cost[currency]} ${ITEM_SPRITES[currency]} `;
+                if((gameState.inventory[currency] || 0) < cost[currency]) {
+                    canAfford = false;
+                }
+            }
+            costEl.innerHTML = costString.trim();
+            if (!canAfford) itemEl.classList.add('cannot-afford');
             itemEl.addEventListener('click', () => purchaseUpgrade(id));
         }
         
@@ -499,19 +510,28 @@ function purchaseUpgrade(id) {
     if (currentLevel >= upgrade.maxLevel) return;
 
     const cost = upgrade.cost(currentLevel);
-    if (gameState.souls >= cost) {
-        gameState.souls -= cost;
-        if (id === 'addCharacter') {
-            const newId = gameState.characters.length;
-            gameState.characters.push(getDefaultCharacterState(newId, `Character ${newId + 1}`, CHARACTER_COLORS[newId % CHARACTER_COLORS.length]));
-        } else {
-            gameState.upgrades[id]++;
-        }
-        recalculateTeamStats();
-        saveGameState();
-        renderAltarList();
-        updateAllUI();
+    
+    // Check if player can afford
+    for(const currency in cost) {
+        if((gameState.inventory[currency] || 0) < cost[currency]) return;
     }
+    
+    // Deduct cost
+    for(const currency in cost) {
+        gameState.inventory[currency] -= cost[currency];
+    }
+
+    // Apply upgrade
+    if (id === 'addCharacter') {
+        const newId = gameState.characters.length;
+        gameState.characters.push(getDefaultCharacterState(newId, `Character ${newId + 1}`, CHARACTER_COLORS[newId % CHARACTER_COLORS.length]));
+    } else {
+        gameState.upgrades[id]++;
+    }
+    recalculateTeamStats();
+    saveGameState();
+    renderAltarList();
+    updateAllUI();
 }
 
 function openModal(modal) { modal.classList.remove('hidden'); }
@@ -603,8 +623,14 @@ function renderInventory() {
         if(gameState.inventory[item] > 0) {
             const itemEl = document.createElement('div');
             itemEl.className = 'flex flex-col items-center justify-center p-2 border border-zinc-600 rounded-lg bg-zinc-800';
+            
+            let itemSprite = ITEM_SPRITES[item];
+            if(item === 'ragingSoul') {
+                itemSprite = `<span class="text-red-500">${itemSprite}</span>`;
+            }
+
             itemEl.innerHTML = `
-                <span class="text-3xl">${ITEM_SPRITES[item]}</span>
+                <span class="text-3xl">${itemSprite}</span>
                 <span class="text-sm font-bold">${gameState.inventory[item]}</span>
             `;
             ui.inventoryListContainer.appendChild(itemEl);
@@ -697,10 +723,13 @@ function handleLeftClick(e) {
 function handleMonsterClick(enemy) {
     const enemyData = ENEMIES_DATA[enemy.type];
     let content = `❤️ ${Math.ceil(enemy.currentHp)}/${enemyData.hp}<br>👊 ${enemyData.attack}<br>💰 ${enemyData.loot.soulFragment}`;
-    const itemDropId = enemyData.itemDrop;
-    if (itemDropId && !gameState.collectedItemDrops.includes(itemDropId)) {
-        const itemData = ITEM_DROP_DATA[itemDropId];
-        content += `<br><span style="color:#67e8f9;">${itemData.dropChance * 100}% 💧</span>`;
+    if (enemyData.itemDrop && Array.isArray(enemyData.itemDrop)) {
+        enemyData.itemDrop.forEach(itemDropId => {
+            if (!gameState.collectedItemDrops.includes(itemDropId)) {
+                const itemData = ITEM_DROP_DATA[itemDropId];
+                content += `<br><span style="color:#67e8f9;">${itemData.dropChance * 100}% 💧</span>`;
+            }
+        });
     }
     showStatPopup(enemy.x, enemy.y, enemyData.name, content);
 }
@@ -765,12 +794,11 @@ function handleMarking(enemy, activeChar, clickedBossTile = null) {
          if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
          if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) forceEndCombat(activeChar);
          if (activeChar.automation.markedTiles.length === 0) stopAutomation(activeChar);
-    } else if (clickedBossTile) {
-        const neighbors = [{x:clickedBossTile.x,y:clickedBossTile.y-1},{x:clickedBossTile.x,y:clickedBossTile.y+1},{x:clickedBossTile.x-1,y:clickedBossTile.y},{x:clickedBossTile.x+1,y:clickedBossTile.y}];
-        const validApproachSpots = neighbors.filter(n => isWalkable(n.x, n.y, enemy.zoneX, enemy.zoneY, true));
-        
-        if (validApproachSpots.length > 0) {
-            addMark(activeChar, enemy, {...validApproachSpots[0], zoneX: enemy.zoneX, zoneY: enemy.zoneY });
+    } else {
+        // NEW: Path to closest tile
+        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
+        if(closestSpot) {
+            addMark(activeChar, enemy, closestSpot);
         } else {
             showNotification("No valid approach for that tile.");
         }
@@ -784,15 +812,14 @@ function handleMapMarking(enemy, activeChar) {
     const availableSpots = getWalkableNeighborsForEntity(enemy, true);
 
     if (availableSpots.length > 0) {
-        availableSpots.sort((a,b) => {
-            const distA = Math.abs(a.x - activeChar.player.x) + Math.abs(a.y - activeChar.player.y);
-            const distB = Math.abs(b.x - activeChar.player.x) + Math.abs(b.y - activeChar.player.y);
-            return distA - distB;
-        });
-        const closestSpot = availableSpots[0];
-        addMark(activeChar, enemy, closestSpot);
-        saveGameState();
-        updateAllUI();
+        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
+        if (closestSpot) {
+            addMark(activeChar, enemy, closestSpot);
+            saveGameState();
+            updateAllUI();
+        } else {
+            showNotification(`${enemy.name} has no open attack spots!`);
+        }
     } else {
         showNotification(`${enemy.name} has no open attack spots!`);
     }
@@ -911,6 +938,7 @@ function getTeamStats() {
                 case 'ADD_DAMAGE': totalDamage += itemDrop.effect.value; break;
                 case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
                 case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
+                case 'ADD_DEFENSE': totalDefense += itemDrop.effect.value; break;
             }
         });
     }
@@ -1014,17 +1042,31 @@ function endCombat(character, playerWon) {
     if (playerWon && targetEnemy) {
         const enemyData = ENEMIES_DATA[targetEnemy.type];
         const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
-        if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`; 
-        gameState.souls += enemyData.loot.soulFragment;
+        if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`;
 
-        const itemDropId = enemyData.itemDrop;
-        if (itemDropId && !gameState.collectedItemDrops.includes(itemDropId)) {
-            const itemData = ITEM_DROP_DATA[itemDropId];
-            if (Math.random() < itemData.dropChance) {
-                gameState.collectedItemDrops.push(itemDropId);
-                showNotification(`Item Dropped: ${itemData.name}!`);
-                recalculateTeamStats();
+        // NEW: Boss Loot Logic
+        if (enemyData.isBoss) {
+            if (!gameState.firstKills.includes(targetEnemy.type)) {
+                gameState.inventory.ragingSoul += enemyData.loot.ragingSoul;
+                showNotification(`+${enemyData.loot.ragingSoul} Raging Soul!`);
+                gameState.firstKills.push(targetEnemy.type);
+            } else {
+                gameState.inventory.soulFragment += enemyData.loot.soulFragment;
             }
+        } else {
+            gameState.inventory.soulFragment += enemyData.loot.soulFragment;
+        }
+
+        // NEW: Handle multiple item drops
+        if (enemyData.itemDrop && Array.isArray(enemyData.itemDrop)) {
+            enemyData.itemDrop.forEach(itemDropId => {
+                const itemData = ITEM_DROP_DATA[itemDropId];
+                if (Math.random() < itemData.dropChance) {
+                    gameState.collectedItemDrops.push(itemDropId);
+                    showNotification(`Item Dropped: ${itemData.name}!`);
+                    recalculateTeamStats();
+                }
+            });
         }
 
         if (!deadEnemies[zoneKey]) deadEnemies[zoneKey] = [];
@@ -1034,6 +1076,13 @@ function endCombat(character, playerWon) {
     } else if (!playerWon) {
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
         
+        // NEW: Monster heals when player dies
+        if (targetEnemy) {
+            const healAmount = targetEnemy.hp * 0.10;
+            targetEnemy.currentHp = Math.min(targetEnemy.hp, targetEnemy.currentHp + healAmount);
+            showNotification(`${targetEnemy.name} healed!`);
+        }
+
         character.automation.markedTiles = []; 
         stopAutomation(character);
         character.isDead = true;
@@ -1167,7 +1216,7 @@ function updateHuntingTask(character, setStatus) {
             }
         }
     } else {
-        // NEW LOGIC: Target is not alive. Check if it's waiting to respawn.
+        // Target is not alive. Check if it's waiting to respawn.
         if (isEnemyDead(mark.enemyId)) {
             setStatus("Waiting for respawn...");
             // Do nothing, just wait. The mark remains.
@@ -1270,7 +1319,7 @@ function findEnemyById(id) {
 function findDeadEnemyById(id) {
     for (const zoneKey in deadEnemies) {
         const deadEnemy = deadEnemies[zoneKey].find(dead => dead.id === id);
-        if (deadEnemy) return deadEnemy.data;
+        if (deadEnemy) return deadEnemy;
     }
     return null;
 }
@@ -1320,7 +1369,8 @@ function updateAllEnemyRegen(gameTime) {
             const enemyData = ENEMIES_DATA[enemy.type];
             if (enemy.currentHp < enemyData.hp) {
                 if (gameTime - (enemy.lastRegenTime || 0) > 1000) {
-                     const regenAmount = enemyData.regenRate || (enemyData.hp * 0.01);
+                     // NEW: Periodic regen disabled by setting rate to 0
+                     const regenAmount = enemyData.regenRate || (enemyData.hp * 0.00);
                      enemy.currentHp = Math.min(enemyData.hp, enemy.currentHp + regenAmount);
                      enemy.lastRegenTime = gameTime;
                 }
@@ -1392,19 +1442,24 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
 }
 
 function getWalkableNeighborsForEntity(entity, isCombat) {
-    const size = (ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type])?.size || { w: 1, h: 1 };
+    const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
+    if (!entityData) return [];
+    
+    const size = entityData.size || { w: 1, h: 1 };
     const perimeter = new Set();
+    const entityPos = entity.data ? entity.data : entity;
+
     for(let i=0; i<size.w; i++){
-        perimeter.add(`${entity.x+i},${entity.y - 1}`);
-        perimeter.add(`${entity.x+i},${entity.y + size.h}`);
+        perimeter.add(`${entityPos.x+i},${entityPos.y - 1}`);
+        perimeter.add(`${entityPos.x+i},${entityPos.y + size.h}`);
     }
     for(let j=0; j<size.h; j++){
-        perimeter.add(`${entity.x - 1},${entity.y+j}`);
-        perimeter.add(`${entity.x + size.w},${entity.y+j}`);
+        perimeter.add(`${entityPos.x - 1},${entityPos.y+j}`);
+        perimeter.add(`${entityPos.x + size.w},${entityPos.y+j}`);
     }
     
     return [...perimeter]
-        .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: entity.zoneX, zoneY: entity.zoneY }))
+        .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: entityPos.zoneX, zoneY: entityPos.zoneY }))
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
 }
 
@@ -1414,10 +1469,14 @@ function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
     const availableNeighbors = walkableNeighbors.filter(p => !reservedSet.has(`${p.x},${p.y}`));
     if (availableNeighbors.length === 0) return null; 
     
-    return availableNeighbors.reduce((closest, p) => {
-        const dist = Math.abs(p.x - charPos.x) + Math.abs(p.y - charPos.y);
-        return dist < closest.dist ? { pos: p, dist } : closest;
-    }, { pos: null, dist: Infinity }).pos;
+    // NEW: Sort by distance to find the closest tile
+    availableNeighbors.sort((a, b) => {
+        const distA = Math.abs(a.x - charPos.x) + Math.abs(a.y - charPos.y);
+        const distB = Math.abs(b.x - charPos.x) + Math.abs(b.y - charPos.y);
+        return distA - distB;
+    });
+
+    return availableNeighbors[0];
 }
 
 function startAutomation(character, task) {
@@ -1502,7 +1561,7 @@ function renderCharacterSwitcher() {
         const btn = document.createElement('button');
         let taskEmoji = '';
         if(char.isDead) {
-            taskEmoji = '�';
+            taskEmoji = '💀';
         } else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
@@ -1551,7 +1610,7 @@ function updateAllUI() {
     const allMarksCount = gameState.characters.reduce((sum, char) => sum + char.automation.markedTiles.length, 0);
     ui.markCount.textContent = `${allMarksCount}/${teamStats.maxMarks * gameState.characters.length}`; 
 
-    ui.playerSouls.textContent = `${gameState.souls} ${ITEM_SPRITES.soulFragment}`; 
+    ui.playerSouls.textContent = `${gameState.inventory.soulFragment || 0} ${ITEM_SPRITES.soulFragment}`; 
     const { hp } = activeChar; 
     ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`; 
     ui.playerHpBar.textContent = `${Math.ceil(hp.current)}/${hp.max}`;
