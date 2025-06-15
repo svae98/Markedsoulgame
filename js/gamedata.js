@@ -75,7 +75,9 @@ export const worldData = {
     },
     '1,0': {
         name: "The Quiet Grove", theme: 'dark_forest', gateways: [{ x: 30, y: 58, destZone: { x: 1, y: 1 }, entry: { x: 30, y: 1 } }],
-        spawns: [ { x: 30, y: 30, type: 'GOLEM_KING' }, ],
+        spawns: [ 
+            // { x: 30, y: 30, type: 'GOLEM_KING' }, 
+        ],
         mapLayout: Array(60).fill(" ".repeat(60)) // Placeholder empty map
     },
     '1,1': {
@@ -89,16 +91,17 @@ export const worldData = {
             { x: 15, y: 16, type: 'POND', id: 'pond_1' }, { x: 16, y: 16, type: 'POND', id: 'pond_2' },
         ],
         spawns: [
-            { x: 18, y: 45, type: 'BLUE_SLIME' }, { x: 20, y: 46, type: 'BLUE_SLIME' },
-            { x: 12, y: 40, type: 'YELLOW_SLIME' },
-            { x: 52, y: 22, type: 'RED_SLIME' },
-            { x: 8, y: 8, type: 'GOLEM' },
-            { x: 45, y: 45, type: 'HUMAN' }, { x: 46, y: 46, type: 'BOAR' }, { x: 47, y: 45, type: 'WOLF' },
+            // All spawns are temporarily removed as requested.
+            // { x: 18, y: 45, type: 'BLUE_SLIME' }, { x: 20, y: 46, type: 'BLUE_SLIME' },
+            // { x: 12, y: 40, type: 'YELLOW_SLIME' },
+            // { x: 52, y: 22, type: 'RED_SLIME' },
+            // { x: 8, y: 8, type: 'GOLEM' },
+            // { x: 45, y: 45, type: 'HUMAN' }, { x: 46, y: 46, type: 'BOAR' }, { x: 47, y: 45, type: 'WOLF' },
         ],
         // F = Deep Forest, D = Deep Water, W = Wall, ' ' = Grass
         mapLayout: [
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            "FFFFFFFFFFFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFFFFFFFFFFFF           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFFFFFFFFFFFFFF       FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFFFFFFFFFFFFF   WWW   FFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFFFFFFFFFFFF   W   W   FFFFFFFFFFFFFFFFFFFFFFFFFFFF",
@@ -110,9 +113,9 @@ export const worldData = {
             "FFDDDDDDDFFFFFFFFFF  F FFFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFDDDDDDDDFFFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFDDDDDDDDDFFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            "FFDDDDDDDDDDFFFFFFF  F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            "FFFDDDDDDDDDFFFFF    F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            "FFFFDDDDDDDDDFFF  FF F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFDDDDDDDDDDFFFFFFF    FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFDDDDDDDDDFFFFF      FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFDDDDDDDDDFFF     F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFPPPPPDDDF  FFF F FFFFWFWFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFFFFPDDDDF  FFFFF FFFFWFWFFFFFFFFFFFFFFWWWWWWWFFFFFF",
             "FFFFFFFFFFFFFFF  FFFFF FFFFWFWFFFFFFFFFFFFFFW     WFFFFFF",
@@ -121,7 +124,7 @@ export const worldData = {
             "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFW W   WWFFFFFF",
             "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFW  B  WWFFFFFF",
             "FFFFFFFFFFFFF FFFFFFFF FFFFWFWFFFFFFFFFFFFFFWWWWWWWWFFFFFF",
-            "FFFFF                 WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "FFFFF                  FWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFF FFFFFFFFFFFFFF  WFWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",

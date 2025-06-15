@@ -173,7 +173,7 @@ function buildMapData(zoneX, zoneY) {
 function getDefaultCharacterState(id, name, color) {
     return { 
         id, name, zoneX: 1, zoneY: 1, 
-        player: { x: 30, y: 30 }, //-- Updated starting position
+        player: { x: 5, y: 5 }, //-- Updated starting position to a walkable tile
         hp: { current: 5, max: 5 },
         isMoving: false, currentMoveId: null, lastRegenTime: 0, isDead: false,
         automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
@@ -1157,7 +1157,7 @@ function endCombat(character, playerWon) {
         character.isDead = true;
         
         setTimeout(() => {
-            character.player = { x: 30, y: 30 };
+            character.player = { x: 25, y: 33 };
             character.zoneX = 1;
             character.zoneY = 1;
             character.hp.current = character.hp.max;
@@ -1706,7 +1706,7 @@ async function loadGameState() {
             console.log(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            char.player = { x: 30, y: 30 };
+            char.player = { x: 25, y: 33 };
             char.zoneX = 1;
             char.zoneY = 1;
             char.combat = { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 };
