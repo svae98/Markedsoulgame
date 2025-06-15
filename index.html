@@ -366,11 +366,14 @@
         let gameState = {};
         let enemies = {};
         let deadEnemies = {};
-        let isPerformingAction = {}; 
-        let lastLogicUpdateTime = 0;
         let statPopupTimeout = null;
         let currentMapData = [];
         let notificationTimeout = null;
+
+        // --- New global variables for the game loop ---
+        let lastFrameTime = 0;
+        let accumulator = 0;
+        const LOGIC_TICK_RATE = 50; // ms per logic update (20 updates/sec)
 
         function getActiveCharacter() {
             if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -492,7 +495,6 @@
             ui.openInventoryButton.addEventListener('click', openInventory);
             ui.closeInventoryButton.addEventListener('click', closeInventory);
             
-            // --- MODIFIED: Added click-outside-to-close logic for modals ---
             ui.soulAltarModal.addEventListener('click', (e) => { if (e.target === ui.soulAltarModal) closeSoulAltar(); });
             ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
             ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
@@ -508,22 +510,40 @@
             requestAnimationFrame(gameLoop);
         }
         
+        // --- MODIFIED: New time-based game loop ---
         function gameLoop(timestamp) {
-            const now = timestamp || 0;
-            if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
-            const logicDelta = now - lastLogicUpdateTime;
-            if (logicDelta > 60) {
+            if (!gameState.characters) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            if (!lastFrameTime) {
+                lastFrameTime = timestamp;
+            }
+
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+            accumulator += deltaTime;
+
+            const now = performance.now();
+
+            while (accumulator >= LOGIC_TICK_RATE) {
                 checkAllRespawns();
                 updateAllEnemyRegen(now);
                 updateAllPlayerRegen(now);
                 gameState.characters.forEach(char => {
-                    updateAutomation(char, now);
-                    updateCombat(char, now);
+                    if (char) {
+                        updateAutomation(char, now);
+                        updateCombat(char, now);
+                    }
                 });
-                updateCombatPanelUI();
-                lastLogicUpdateTime = now;
+                
+                accumulator -= LOGIC_TICK_RATE;
             }
-            draw();
+            
+            updateCombatPanelUI();
+            draw(); 
+            
             requestAnimationFrame(gameLoop);
         }
 
@@ -556,10 +576,10 @@
             const zone = worldData[`${zoneX},${zoneY}`];
             const theme = zone?.theme || 'plains';
             
-            let bgColor = '#18181b'; // Default dark
+            let bgColor = '#18181b'; 
             if (theme === 'forest') bgColor = '#166534';
             else if (theme === 'dark_forest') bgColor = '#14532d';
-            else if (theme === 'library') bgColor = '#27272a'; // Zinc-800
+            else if (theme === 'library') bgColor = '#27272a';
 
             ui.ctx.fillStyle = bgColor;
             ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -854,7 +874,6 @@
             } 
         }
 
-        // --- MODIFIED: Added skilling interruption logic ---
         function handleLeftClick(e) {
             const activeChar = getActiveCharacter();
             if (!activeChar || activeChar.isDead) return;
@@ -1026,7 +1045,6 @@
             }
         }
 
-        // --- MODIFIED: Removed "Stop hunting" option ---
         function handleRightClick(e) {
             e.preventDefault();
             const activeChar = getActiveCharacter();
@@ -1041,7 +1059,7 @@
         
             if (activeChar.automation.markedTiles.length > 0) {
                 addContextMenuButton('Clear My Marks', () => {
-                    stopAutomation(activeChar); // This will stop combat if active
+                    stopAutomation(activeChar); 
                     activeChar.automation.markedTiles = [];
                     saveGameState();
                 });
@@ -1051,7 +1069,7 @@
             if (anyCharHasMarks) {
                 addContextMenuButton('Clear All Marks', () => {
                     gameState.characters.forEach(char => {
-                        stopAutomation(char); // This will stop combat for each char
+                        stopAutomation(char); 
                         char.automation.markedTiles = [];
                     });
                     saveGameState();
@@ -1595,7 +1613,6 @@
             updateAllUI();
         }
 
-        // --- MODIFIED: Added combat check ---
         function stopAutomation(character) {
              if(!character.automation.active) return; 
 
