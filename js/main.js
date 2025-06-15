@@ -1,11 +1,11 @@
 // js/main.js
-// A Walk in the Park Update
+// A Walk in the Park Update - Connection & Resource Fix
 
 // --- Game Data Import ---
 import {
     TILE_SIZE, MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
     TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES
-} from './gameData.js';
+} from './gamedata.js';
 
 
 // --- Firebase Integration ---
@@ -28,14 +28,20 @@ async function initFirebase() {
         } else {
             console.log("Running in Live Environment");
             appId = 'Markedsoulgame';
+
+            // ===================================================================
+            // PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
+            // This is the primary fix for your connection issue.
+            // ===================================================================
             firebaseConfig = {
-                apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
-                authDomain: "gridfall-2661e.firebaseapp.com",
-                projectId: "gridfall-2661e",
-                storageBucket: "gridfall-2661e.firebasestorage.app",
-                messagingSenderId: "623611849102",
-                appId: "1:623611849102:web:6ffb21d284b72574abdcdf",
-            };
+                    apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
+                    authDomain: "gridfall-2661e.firebaseapp.com",
+                    projectId: "gridfall-2661e",
+                    storageBucket: "gridfall-2661e.firebasestorage.app",
+                    messagingSenderId: "623611849102",
+                    appId: "1:623611849102:web:6ffb21d284b72574abdcdf"
+                    };
+            // ===================================================================
         }
 
         app = initializeApp(firebaseConfig);
@@ -53,7 +59,7 @@ async function initFirebase() {
 
     } catch (error) {
         console.error("Firebase Initialization Error:", error);
-        document.getElementById('action-status').textContent = "Connection failed!";
+        document.getElementById('action-status').textContent = "Connection failed! Check Firebase config.";
     }
 }
 
@@ -1158,9 +1164,7 @@ function gatherResource(character, gameTime, setStatus) {
         showNotification(`+1 ${resourceData.item.replace('_', ' ')}`);
         if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
     }
-    if (RESOURCE_DATA[node.type]?.depletes) {
-         automation.state = 'FINDING_RESOURCE';
-    }
+    // The resource depletion check has been removed.
     saveGameState();
 }
 
