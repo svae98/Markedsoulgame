@@ -220,7 +220,7 @@
         import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase variables
-        let app, db, auth, userId;
+        let app, db, auth, userId, appId;
         
         
         async function initFirebase() {
@@ -236,7 +236,7 @@
                 };
 
                 // 2. USE A HARDCODED APP ID
-                const appId = 'Markedsoulgame'; 
+                appId = 'Markedsoulgame'; 
 
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
