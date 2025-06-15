@@ -363,7 +363,7 @@ function drawMarks(currentZoneKey) {
         if (`${mark.zoneX},${mark.zoneY}` === currentZoneKey) {
             const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
             ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
-            const enemy = findEnemyById(mark.enemyId);
+            const enemy = findEnemyById(mark.enemyId) || findDeadEnemyById(mark.enemyId);
             if(enemy) {
                 const enemyData = ENEMIES_DATA[enemy.type];
                 const size = enemyData.size || {w: 1, h: 1};
@@ -1127,14 +1127,15 @@ function updateHuntingTask(character, setStatus) {
 
     const { automation } = character;
     if (automation.markedTiles.length === 0) {
-         stopAutomation(character);
-         return;
+        stopAutomation(character);
+        return;
     }
-    
+
     const mark = automation.markedTiles[0];
     const desiredTarget = findEnemyById(mark.enemyId);
-    
+
     if (desiredTarget) {
+        // This is the existing logic to move towards and attack a live target. It's correct.
         if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
             setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
             const path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY);
@@ -1144,7 +1145,7 @@ function updateHuntingTask(character, setStatus) {
                 moveAlongPath(character, path, moveId);
             } else {
                 setStatus(`Can't find path to zone!`);
-                automation.markedTiles.shift(); // Remove unpathable mark
+                automation.markedTiles.shift();
             }
             return;
         }
@@ -1162,13 +1163,22 @@ function updateHuntingTask(character, setStatus) {
             } 
             else { 
                 setStatus("Cannot find path to attack spot!");
-                automation.markedTiles.shift(); // Remove unpathable mark
+                automation.markedTiles.shift();
             }
         }
     } else {
-        // Target is dead or gone, move to the next mark in the queue
-        automation.markedTiles.shift();
-        if(automation.markedTiles.length === 0) stopAutomation(character);
+        // NEW LOGIC: Target is not alive. Check if it's waiting to respawn.
+        if (isEnemyDead(mark.enemyId)) {
+            setStatus("Waiting for respawn...");
+            // Do nothing, just wait. The mark remains.
+        } else {
+            // The mark is invalid (no live or dead enemy with this ID). Remove it.
+            setStatus(`Invalid mark, removing.`);
+            automation.markedTiles.shift();
+            if (automation.markedTiles.length === 0) {
+                stopAutomation(character);
+            }
+        }
     }
 }
 
@@ -1255,6 +1265,23 @@ function findEnemyById(id) {
         if (enemies[zoneKey][id]) return enemies[zoneKey][id];
     }
     return null;
+}
+
+function findDeadEnemyById(id) {
+    for (const zoneKey in deadEnemies) {
+        const deadEnemy = deadEnemies[zoneKey].find(dead => dead.id === id);
+        if (deadEnemy) return deadEnemy.data;
+    }
+    return null;
+}
+
+function isEnemyDead(enemyId) {
+    for (const zoneKey in deadEnemies) {
+        if (deadEnemies[zoneKey].some(dead => dead.id === enemyId)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function findResourceById(id) {
@@ -1475,7 +1502,7 @@ function renderCharacterSwitcher() {
         const btn = document.createElement('button');
         let taskEmoji = '';
         if(char.isDead) {
-            taskEmoji = '💀';
+            taskEmoji = '�';
         } else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
