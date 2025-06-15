@@ -88,6 +88,25 @@ export const worldData = {
         gateways: [
             { x: 15, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 15, y: 29 } }, { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 29, y: 15 } },
         ],
+        // NEW: Structures defined with wall coordinates
+        walls: [
+            // Slime pit (top-left)
+            {x: 5, y: 5}, {x: 6, y: 5}, {x: 7, y: 5}, {x: 8, y: 5}, {x: 9, y: 5},
+            {x: 5, y: 6}, {x: 9, y: 6},
+            {x: 5, y: 7}, {x: 9, y: 7},
+            {x: 5, y: 8}, {x: 6, y: 8}, {x: 8, y: 8}, {x: 9, y: 8},
+            // Red Slime Pen (top-right)
+            {x: 23, y: 3}, {x: 24, y: 3}, {x: 25, y: 3}, {x: 26, y: 3}, {x: 27, y: 3},
+            {x: 23, y: 4},
+            {x: 23, y: 5},
+            {x: 23, y: 6}, {x: 25, y: 6}, {x: 26, y: 6}, {x: 27, y: 6},
+            // Humanoid Hut (bottom-right)
+            {x: 23, y: 23}, {x: 24, y: 23}, {x: 25, y: 23}, {x: 26, y: 23}, {x: 27, y: 23},
+            {x: 23, y: 24}, {x: 27, y: 24},
+            {x: 23, y: 25}, {x: 27, y: 25},
+            {x: 23, y: 26}, {x: 27, y: 26},
+            {x: 23, y: 27}, {x: 24, y: 27}, {x: 26, y: 27}, {x: 27, y: 27},
+        ],
         resources: [
             { x: 10, y: 10, type: 'TREE', id: 'tree_1_1_1' }, { x: 12, y: 20, type: 'TREE', id: 'tree_1_1_2' }, { x: 25, y: 15, type: 'TREE', id: 'tree_1_1_3' },
             { x: 20, y: 10, type: 'ROCK', id: 'rock_1_1_1' }, { x: 18, y: 20, type: 'ROCK', id: 'rock_1_1_2' }, { x: 25, y: 18, type: 'ROCK', id: 'rock_1_1_3' },
@@ -95,16 +114,16 @@ export const worldData = {
             { x: 4, y: 21, type: 'POND', id: 'pond_1_1_3' }, { x: 5, y: 21, type: 'POND', id: 'pond_1_1_4' }
         ],
         spawns: [
-            { x: 7, y: 7, type: 'BLUE_SLIME' }, { x: 8, y: 9, type: 'BLUE_SLIME' }, { x: 6, y: 11, type: 'BLUE_SLIME' },
-            { x: 9, y: 13, type: 'BLUE_SLIME' }, { x: 5, y: 9, type: 'BLUE_SLIME' }, { x: 8, y: 11, type: 'BLUE_SLIME' },
-            { x: 22, y: 22, type: 'BLUE_SLIME' }, { x: 24, y: 24, type: 'BLUE_SLIME' }, { x: 26, y: 22, type: 'BLUE_SLIME' },
-            { x: 23, y: 26, type: 'BLUE_SLIME' }, { x: 21, y: 24, type: 'BLUE_SLIME' }, { x: 24, y: 22, type: 'BLUE_SLIME' },
-            { x: 25, y: 5, type: 'YELLOW_SLIME' }, { x: 26, y: 7, type: 'YELLOW_SLIME' }, { x: 27, y: 9, type: 'YELLOW_SLIME' },
-            { x: 23, y: 8, type: 'YELLOW_SLIME' }, { x: 25, y: 11, type: 'YELLOW_SLIME' }, { x: 28, y: 7, type: 'YELLOW_SLIME' },
+            // Golem spawn remains in its own clearing
             { x: 2, y: 2, type: 'GOLEM' },
-            { x: 5, y: 2, type: 'RED_SLIME' }, { x: 2, y: 5, type: 'RED_SLIME' },
-            { x: 2, y: 25, type: 'RED_SLIME' }, { x: 3, y: 27, type: 'RED_SLIME' }, { x: 4, y: 25, type: 'RED_SLIME' },
-            { x: 5, y: 28, type: 'RED_SLIME' }, { x: 6, y: 26, type: 'RED_SLIME' }, { x: 2, y: 28, type: 'RED_SLIME' },
+            // Red slimes moved to their pen
+            { x: 24, y: 4, type: 'RED_SLIME' }, { x: 26, y: 4, type: 'RED_SLIME' }, 
+            { x: 25, y: 5, type: 'RED_SLIME' },
+            // Slimes moved to their pit
+            { x: 7, y: 6, type: 'BLUE_SLIME' }, { x: 8, y: 7, type: 'BLUE_SLIME' }, 
+            { x: 6, y: 7, type: 'BLUE_SLIME' }, { x: 7, y: 7, type: 'YELLOW_SLIME' },
+            // Humanoids and their beasts moved to their hut
+            { x: 25, y: 25, type: 'HUMAN' }, { x: 24, y: 26, type: 'BOAR' }, { x: 26, y: 26, type: 'WOLF' },
         ],
     },
 };
