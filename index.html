@@ -286,14 +286,15 @@
         const TILES = { GRASS: 0, WALL: 1, GATEWAY: 2, PEDESTAL: 3, TREE: 4, ROCK: 5, POND: 6 };
         const ITEM_SPRITES = { soulFragment: '✧', wood: '🌲', copper_ore: '⛏️', fish: '🐟' };
         
+        // --- MODIFIED: Renamed 'enemy' to 'monster'
         const ITEM_DROP_DATA = {
-            'green_goo': { name: 'Green Goo', enemy: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
-            'viscous_ichor': { name: 'Viscous Ichor', enemy: 'YELLOW_SLIME', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 1 }, pedestalId: 'vi_pedestal', visual: { color: '#fde047', char: 'I' }, description: "+1 Damage" },
-            'pulsating_core': { name: 'Pulsating Core', enemy: 'RED_SLIME', dropChance: 0.02, effect: { type: 'ADD_SPEED', value: 1 }, pedestalId: 'pc_pedestal', visual: { color: '#f87171', char: 'C' }, description: "+1 Speed" },
-            'tattered_cloth': { name: 'Tattered Cloth', enemy: 'HUMAN', dropChance: 0.15, effect: { type: 'ADD_HP_REGEN', value: 0.001 }, pedestalId: 'tc_pedestal', visual: { color: '#d1d5db', char: 'T' }, description: "+0.1% HP Regen" },
-            'boar_tusk': { name: 'Boar Tusk', enemy: 'BOAR', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 2 }, pedestalId: 'bt_pedestal', visual: { color: '#e5e7eb', char: 'B' }, description: "+2 Damage" },
-            'wolf_pelt': { name: 'Wolf Pelt', enemy: 'WOLF', dropChance: 0.04, effect: { type: 'ADD_SPEED', value: 2 }, pedestalId: 'wp_pedestal', visual: { color: '#9ca3af', char: 'W' }, description: "+2 Speed" },
-            'golem_heart': { name: 'Golem Heart', enemy: 'GOLEM', dropChance: 0.01, effect: { type: 'ADD_MAX_HP', value: 50 }, pedestalId: 'gh_pedestal', visual: { color: '#a8a29e', char: 'H' }, description: "+50 Max HP" },
+            'green_goo': { name: 'Green Goo', monster: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
+            'viscous_ichor': { name: 'Viscous Ichor', monster: 'YELLOW_SLIME', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 1 }, pedestalId: 'vi_pedestal', visual: { color: '#fde047', char: 'I' }, description: "+1 Damage" },
+            'pulsating_core': { name: 'Pulsating Core', monster: 'RED_SLIME', dropChance: 0.02, effect: { type: 'ADD_SPEED', value: 1 }, pedestalId: 'pc_pedestal', visual: { color: '#f87171', char: 'C' }, description: "+1 Speed" },
+            'tattered_cloth': { name: 'Tattered Cloth', monster: 'HUMAN', dropChance: 0.15, effect: { type: 'ADD_HP_REGEN', value: 0.001 }, pedestalId: 'tc_pedestal', visual: { color: '#d1d5db', char: 'T' }, description: "+0.1% HP Regen" },
+            'boar_tusk': { name: 'Boar Tusk', monster: 'BOAR', dropChance: 0.05, effect: { type: 'ADD_DAMAGE', value: 2 }, pedestalId: 'bt_pedestal', visual: { color: '#e5e7eb', char: 'B' }, description: "+2 Damage" },
+            'wolf_pelt': { name: 'Wolf Pelt', monster: 'WOLF', dropChance: 0.04, effect: { type: 'ADD_SPEED', value: 2 }, pedestalId: 'wp_pedestal', visual: { color: '#9ca3af', char: 'W' }, description: "+2 Speed" },
+            'golem_heart': { name: 'Golem Heart', monster: 'GOLEM', dropChance: 0.01, effect: { type: 'ADD_MAX_HP', value: 50 }, pedestalId: 'gh_pedestal', visual: { color: '#a8a29e', char: 'H' }, description: "+50 Max HP" },
         };
 
         const ENEMIES_DATA = { 
@@ -337,7 +338,6 @@
                 resources: [
                     { x: 10, y: 10, type: 'TREE', id: 'tree_1_1_1' }, { x: 12, y: 20, type: 'TREE', id: 'tree_1_1_2' }, { x: 25, y: 15, type: 'TREE', id: 'tree_1_1_3' },
                     { x: 20, y: 10, type: 'ROCK', id: 'rock_1_1_1' }, { x: 18, y: 20, type: 'ROCK', id: 'rock_1_1_2' }, { x: 25, y: 18, type: 'ROCK', id: 'rock_1_1_3' },
-                    // --- MODIFIED: Changed pond to be four individual tiles ---
                     { x: 4, y: 20, type: 'POND', id: 'pond_1_1_1' }, { x: 5, y: 20, type: 'POND', id: 'pond_1_1_2' },
                     { x: 4, y: 21, type: 'POND', id: 'pond_1_1_3' }, { x: 5, y: 21, type: 'POND', id: 'pond_1_1_4' }
                 ],
@@ -453,14 +453,13 @@
             return newMapData;
         }
 
-        // --- MODIFIED: Added isDead flag ---
         function getDefaultCharacterState(id, name, color) {
             return { 
                 id, name, zoneX: 1, zoneY: 1, 
                 player: { x: 15 + id, y: 16 }, 
                 hp: { current: 5, max: 5 },
                 isMoving: false, currentMoveId: null, lastRegenTime: 0, isDead: false,
-                automation: { active: false, task: null, state: 'IDLE', path: [], targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+                automation: { active: false, task: null, targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
                 combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
             };
         }
@@ -553,10 +552,10 @@
             const zone = worldData[`${zoneX},${zoneY}`];
             const theme = zone?.theme || 'plains';
             
-            let bgColor = '#18181b'; 
+            let bgColor = '#18181b'; // Default dark
             if (theme === 'forest') bgColor = '#166534';
             else if (theme === 'dark_forest') bgColor = '#14532d';
-            else if (theme === 'library') bgColor = '#4338ca';
+            else if (theme === 'library') bgColor = '#27272a'; // Zinc-800
 
             ui.ctx.fillStyle = bgColor;
             ui.ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -636,22 +635,34 @@
             });
         }
 
-        // --- MODIFIED: Added drawing state for dead characters ---
         function drawPlayer(character, isActive) {
+            const px = character.player.x * TILE_SIZE;
+            const py = character.player.y * TILE_SIZE;
+            const w = TILE_SIZE;
+            const h = TILE_SIZE;
+
             if (character.isDead) {
                 ui.ctx.fillStyle = '#7f1d1d'; // dark red
-                ui.ctx.fillRect(character.player.x * TILE_SIZE + 6, character.player.y * TILE_SIZE + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+                ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
+                return;
+            }
+            
+            if (!isActive) {
+                ui.ctx.fillStyle = '#a855f7'; // purple-600
+                ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
                 return;
             }
 
-            ui.ctx.fillStyle = isActive ? '#f472b6' : '#a855f7';
-            ui.ctx.fillRect(character.player.x * TILE_SIZE + 6, character.player.y * TILE_SIZE + 6, TILE_SIZE - 12, TILE_SIZE - 12);
-            if (isActive) {
-                ui.ctx.strokeStyle = 'white';
-                ui.ctx.lineWidth = 1;
-                ui.ctx.strokeRect(character.player.x * TILE_SIZE + 4, character.player.y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-            }
+            // Active character is dark blue
+            ui.ctx.fillStyle = '#2563eb'; // blue-600
+            ui.ctx.fillRect(px + 4, py + 4, w - 8, h - 8);
+
+            // With a yellow halo
+            ui.ctx.strokeStyle = '#facc15'; // yellow-400
+            ui.ctx.lineWidth = 2;
+            ui.ctx.strokeRect(px + 3, py + 3, w - 6, h - 6);
         }
+
         function showDamagePopup(x, y, amount, isPlayerDamage) {
             if (amount <= 0) return;
             const popup = document.createElement('div');
@@ -839,40 +850,43 @@
             } 
         }
 
-        // --- MODIFIED: Reordered logic to allow marking while moving ---
         function handleLeftClick(e) {
             const activeChar = getActiveCharacter();
-            if (!activeChar) return;
+            if (!activeChar || activeChar.isDead) return;
 
             const { x, y } = getTileFromClick(e);
             const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
             const enemy = getEnemyAt(x, y, zoneKey);
             const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
+            const tileType = currentMapData[y]?.[x];
             
             // If shift is held, always handle marking first.
             if (e.shiftKey) { 
-                if (!activeChar.isDead) handleMarking(x, y, enemy, activeChar);
+                handleMarking(x, y, enemy, activeChar);
                 return; // Exit after handling the mark, regardless of other states.
             }
             
-            // Always allow showing info popups.
-            if (enemy) handleEnemyClick(enemy);
-            else if (resource) handleResourceClick(resource);
+            // Handle info popups
+            if (enemy) {
+                handleMonsterClick(enemy);
+            } else if (resource) {
+                handleResourceClick(resource);
+            } else if (tileType === TILES.PEDESTAL) {
+                handlePedestalClick(x, y, activeChar.zoneX, activeChar.zoneY);
+            }
             
-            // --- Action-related logic below ---
-
-            // Prevent any actions if character is dead, moving, or automated.
-            if (activeChar.isDead || activeChar.isMoving || activeChar.automation.active) {
+            // Prevent movement/actions if character is automated.
+            if (activeChar.automation.active) {
                 return;
             }
             
-            // If we didn't click on an enemy or resource, it's a move command.
-            if (!enemy && !resource) {
+            // If we didn't click on an interactive object, it's a move command.
+            if (!enemy && !resource && tileType !== TILES.PEDESTAL) {
                 handleMovementClick(x, y, activeChar);
             }
         }
         
-        function handleEnemyClick(enemy) {
+        function handleMonsterClick(enemy) {
             const enemyData = ENEMIES_DATA[enemy.type];
             let content = `❤️ ${Math.ceil(enemy.currentHp)}/${enemyData.hp}<br>👊 ${enemyData.attack}<br>💰 ${enemyData.loot.soulFragment}`;
             const itemDropId = enemyData.itemDrop;
@@ -886,6 +900,20 @@
         function handleResourceClick(resource) {
              const resourceData = RESOURCE_DATA[resource.type];
              showStatPopup(resource.x, resource.y, resourceData.name, `Level ${resourceData.levelReq} ${resourceData.skill}`);
+        }
+        
+        function handlePedestalClick(x, y, zoneX, zoneY) {
+            const zone = worldData[`${zoneX},${zoneY}`];
+            if (!zone || !zone.pedestals) return;
+
+            const pedestalData = zone.pedestals.find(p => p.x === x && p.y === y);
+            if (!pedestalData) return;
+            
+            const itemDropId = Object.keys(ITEM_DROP_DATA).find(id => ITEM_DROP_DATA[id].pedestalId === pedestalData.id);
+            if (itemDropId && gameState.collectedItemDrops.includes(itemDropId)) {
+                const itemData = ITEM_DROP_DATA[itemDropId];
+                showStatPopup(x, y, itemData.name, itemData.description);
+            }
         }
 
         function handleMovementClick(x, y, activeChar) {
@@ -905,10 +933,13 @@
         }
 
         function handleMarking(x, y, enemy, activeChar) {
+            // Interrupt current movement to allow for immediate re-evaluation.
+            activeChar.currentMoveId = null;
+            activeChar.isMoving = false;
+
             let existingMarkIndex = -1;
             let existingMarkChar = null;
             
-            // Check if any character has this tile marked
             for (const char of gameState.characters) {
                 const index = char.automation.markedTiles.findIndex(tile => tile.x === x && tile.y === y && tile.zoneX === activeChar.zoneX && tile.zoneY === activeChar.zoneY);
                 if (index !== -1) {
@@ -918,7 +949,6 @@
                 }
             }
         
-            // Case 1: The active character is un-marking their own tile.
             if (existingMarkChar && existingMarkChar.id === activeChar.id) {
                 activeChar.automation.markedTiles.splice(existingMarkIndex, 1);
                 const enemyOnTile = getEnemyAt(x, y, `${activeChar.zoneX},${activeChar.zoneY}`);
@@ -927,16 +957,13 @@
                     forceEndCombat(activeChar);
                 }
                 
-                // If no marks are left, stop the hunting task completely.
                 if (activeChar.automation.markedTiles.length === 0) {
                     stopAutomation(activeChar);
                 }
             } 
-            // Case 2: No mark exists here and we are clicking a valid enemy tile. Add a mark.
             else if (!existingMarkChar && enemy) {
                 const stats = getTeamStats();
                 
-                // If the character's mark list is full, remove the oldest one.
                 if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
                     const removedTile = activeChar.automation.markedTiles.shift();
                     const removedEnemy = getEnemyAt(removedTile.x, removedTile.y, `${removedTile.zoneX},${removedTile.zoneY}`);
@@ -947,11 +974,8 @@
                 
                 activeChar.automation.markedTiles.push({ x, y, zoneX: activeChar.zoneX, zoneY: activeChar.zoneY });
                 
-                // This is the core change: adding a mark now starts the hunting process.
-                // It will also switch from any skilling task to hunting.
                 startAutomation(activeChar, 'hunting');
             }
-            // Note: We ignore clicks on tiles marked by other characters.
             
             saveGameState();
             updateAllUI();
@@ -959,7 +983,7 @@
 
         async function moveAlongPath(character, path, moveId) {
             if (!path || path.length === 0 || character.isDead) {
-                 character.isMoving = false; // Ensure isMoving is reset if path is bad or char is dead
+                 character.isMoving = false;
                  return;
             }
             
@@ -970,7 +994,7 @@
             if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Moving...';
         
             for (const step of path) {
-                if (character.currentMoveId !== moveId || character.isDead) break; // Check for cancellation or death
+                if (character.currentMoveId !== moveId || character.isDead) break;
                 character.player.x = step.x;
                 character.player.y = step.y;
                 await new Promise(r => setTimeout(r, moveDelay));
@@ -993,11 +1017,9 @@
                     }
                 }
                  if (character.id === getActiveCharacter().id && !character.automation.active) ui.actionStatus.textContent = 'Idle';
-                 character.currentMoveId = null; // Clear move ID on completion
-            } else {
-                 if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Movement stopped.';
+                 character.currentMoveId = null; 
+                 character.isMoving = false;
             }
-            character.isMoving = false;
         }
 
         function handleRightClick(e) {
@@ -1008,12 +1030,10 @@
             
             const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
         
-            // Button to stop the current character's task
             if (activeChar.automation.active) {
                 addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
             }
         
-            // Button to clear the current character's marks
             if (activeChar.automation.markedTiles.length > 0) {
                 addContextMenuButton('Clear My Marks', () => {
                     if (activeChar.automation.task === 'hunting') {
@@ -1024,7 +1044,6 @@
                 });
             }
         
-            // Button to clear all marks from all characters
             const anyCharHasMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
             if (anyCharHasMarks) {
                 addContextMenuButton('Clear All Marks', () => {
@@ -1036,7 +1055,6 @@
                 });
             }
             
-            // Button to stop all skilling tasks
             if (anyCharHasSkillingTask) {
                 addContextMenuButton('Stop All Skilling', () => {
                     gameState.characters.forEach(char => {
@@ -1130,7 +1148,7 @@
             character.currentMoveId = moveId;
 
             if (!isAdjacent(character.player, enemy)) { 
-                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to enemy..."; 
+                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to monster..."; 
                 const targetPos = findWalkableNeighborForEntity(enemy, character.player); 
                 if (!targetPos) { 
                     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't reach target."; 
@@ -1166,7 +1184,6 @@
              ui.actionStatus.textContent = 'Disengaged.';
         }
 
-        // --- MODIFIED: Added logic to handle character death state ---
         function endCombat(character, playerWon) { 
             const { combat, zoneX, zoneY } = character; 
             if (!combat.targetId) return; 
@@ -1174,7 +1191,7 @@
             const targetEnemy = enemies[zoneKey]?.[combat.targetId]; 
             if (playerWon && targetEnemy) {
                 const enemyData = ENEMIES_DATA[targetEnemy.type];
-                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Target neutralized.`; 
+                if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`; 
                 gameState.souls += enemyData.loot.soulFragment;
 
                 const itemDropId = enemyData.itemDrop;
@@ -1192,7 +1209,7 @@
                 delete enemies[zoneKey][combat.targetId];
                 
                 if (character.automation.active && character.automation.task === 'hunting') {
-                    character.automation.state = 'IDLE';
+                     // No longer uses state machine, just let updateAutomation take over
                 }
 
             } else if (!playerWon) {
@@ -1273,85 +1290,63 @@
         }
         
         function updateAutomation(character, now) { 
-            const { combat, isMoving } = character; 
-            if (!character.automation.active || combat.active || isMoving || character.isDead) return;
+            const { combat } = character; 
+            if (!character.automation.active || combat.active || character.isDead) return;
 
             const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
             switch(character.automation.task) {
                 case 'hunting': updateHuntingTask(character, setStatus); break;
                 case 'woodcutting': case 'mining': case 'fishing':
+                    if (character.isMoving) return; 
                     updateSkillingTask(character, now, setStatus);
                     break;
             }
         }
         
-        function findGatewayToZone(fromX, fromY, toX, toY) {
-            const zoneKey = `${fromX},${fromY}`;
-            const zoneData = worldData[zoneKey];
-            if (!zoneData || !zoneData.gateways) return null;
-            return zoneData.gateways.find(g => g.destZone.x === toX && g.destZone.y === toY);
-        }
-
+        // --- REFACTORED: Complete rewrite of hunting logic ---
         function updateHuntingTask(character, setStatus) {
             const { automation, player, zoneX, zoneY } = character;
-            const { state } = automation;
 
-            if (state === 'IDLE') {
-                automation.state = 'FINDING_TARGET';
-            } else if (state === 'FINDING_TARGET') {
-                setStatus("Finding marked enemy...");
-                const targetEnemy = findNearestMarked(character);
-                if (targetEnemy) {
-                    automation.targetId = targetEnemy.id;
-                    automation.state = 'WALKING_TO_TARGET';
-                } else {
-                    setStatus("Awaiting respawns...");
-                    automation.state = 'WAITING_FOR_RESPAWN';
-                }
-            } else if (state === 'WALKING_TO_TARGET') {
-                const targetEnemy = findEnemyById(automation.targetId);
-                if (!targetEnemy) {
-                    automation.state = 'FINDING_TARGET';
+            const desiredTarget = findNearestMarked(character);
+            const desiredTargetId = desiredTarget ? desiredTarget.id : null;
+
+            // If we are moving, check if our move is still valid.
+            if (character.isMoving) {
+                // If we're moving towards the correct target, let it continue.
+                if (automation.targetId === desiredTargetId) {
                     return;
                 }
+                // Otherwise, our move is invalid. Stop it.
+                else {
+                    character.currentMoveId = null;
+                    character.isMoving = false;
+                    // Fall through to re-evaluate what to do next.
+                }
+            }
 
-                // Is the target in another zone?
-                if (targetEnemy.zoneX !== zoneX || targetEnemy.zoneY !== zoneY) {
-                    setStatus("Pathing to other zone...");
-                    const gateway = findGatewayToZone(zoneX, zoneY, targetEnemy.zoneX, targetEnemy.zoneY);
-                    if (gateway) {
-                        const path = findPath(player, { x: gateway.x, y: gateway.y }, zoneX, zoneY);
+            // If we are idle (not moving, not in combat)
+            if (desiredTarget) {
+                automation.targetId = desiredTargetId; // Make sure targetId is up-to-date
+                
+                if (isAdjacent(player, desiredTarget)) {
+                    setStatus("Initiating combat...");
+                    startCombat(character, desiredTargetId, true);
+                } else {
+                    setStatus(`Walking to ${desiredTarget.name}...`);
+                    const targetPos = findWalkableNeighborForEntity(desiredTarget, player);
+                    if (targetPos) {
+                        const path = findPath(player, targetPos, zoneX, zoneY);
                         if (path) { 
                             const moveId = Date.now();
                             character.currentMoveId = moveId;
-                            moveAlongPath(character, path, moveId); 
+                            moveAlongPath(character, path, moveId);
                         } 
-                        else { setStatus("Blocked from gateway!"); automation.state = 'FINDING_TARGET'; }
-                    } else { setStatus("No path to target's zone!"); automation.state = 'FINDING_TARGET'; }
-                } else { // Target is in the same zone
-                    if (isAdjacent(player, targetEnemy)) {
-                        automation.state = 'FIGHTING';
-                    } else {
-                        setStatus("Walking to target...");
-                        const targetPos = findWalkableNeighborForEntity(targetEnemy, player);
-                        if (targetPos) {
-                            const path = findPath(player, targetPos, zoneX, zoneY);
-                            if (path) { 
-                                const moveId = Date.now();
-                                character.currentMoveId = moveId;
-                                moveAlongPath(character, path, moveId);
-                            } 
-                            else { setStatus("Cannot find path!"); automation.state = 'FINDING_TARGET'; }
-                        } else { setStatus("Cannot reach target!"); automation.state = 'FINDING_TARGET'; }
-                    }
+                        else { setStatus("Cannot find path!"); }
+                    } else { setStatus("Cannot reach target!"); }
                 }
-            } else if (state === 'FIGHTING') {
-                setStatus("Initiating combat...");
-                startCombat(character, automation.targetId, true);
-            } else if (state === 'WAITING_FOR_RESPAWN') {
-                if (automation.markedTiles.some(tile => !!getEnemyAt(tile.x, tile.y, `${tile.zoneX},${tile.zoneY}`))) {
-                    automation.state = 'FINDING_TARGET';
-                }
+            } else {
+                setStatus("Awaiting new marks...");
+                automation.targetId = null;
             }
         }
 
@@ -1359,28 +1354,30 @@
             const { automation, player, zoneX, zoneY } = character;
             const resourceType = automation.task === 'woodcutting' ? 'TREE' : automation.task === 'mining' ? 'ROCK' : 'POND';
 
-            switch(automation.state) {
-                case 'IDLE': automation.state = 'FINDING_RESOURCE'; break;
+            const currentState = automation.skillingState || 'IDLE';
+
+            switch(currentState) {
+                case 'IDLE': automation.skillingState = 'FINDING_RESOURCE'; break;
                 case 'FINDING_RESOURCE':
                      setStatus(`Finding ${resourceType.toLowerCase()}...`);
                      const node = findNearestResource(character, resourceType);
                      if (node) {
                          automation.targetId = node.id;
-                         automation.state = 'WALKING_TO_RESOURCE';
+                         automation.skillingState = 'WALKING_TO_RESOURCE';
                      } else {
                          setStatus(`No ${resourceType.toLowerCase()}s available...`);
-                         automation.state = 'WAITING_FOR_RESPAWN';
+                         automation.skillingState = 'WAITING_FOR_RESPAWN';
                      }
                     break;
                 case 'WALKING_TO_RESOURCE':
                     const targetNode = findResourceById(automation.targetId);
-                    if (!targetNode) { automation.state = 'FINDING_RESOURCE'; break; }
+                    if (!targetNode) { automation.skillingState = 'FINDING_RESOURCE'; break; }
                     if (isAdjacent(player, targetNode)) {
-                        automation.state = 'GATHERING';
+                        automation.skillingState = 'GATHERING';
                     } else {
                         setStatus(`Walking to ${resourceType.toLowerCase()}...`);
                         const targetPos = findWalkableNeighborForEntity(targetNode, player);
-                        if (!targetPos) { setStatus("Can't reach resource!"); automation.state = 'FINDING_RESOURCE'; break; }
+                        if (!targetPos) { setStatus("Can't reach resource!"); automation.skillingState = 'FINDING_RESOURCE'; break; }
                         const path = findPath(player, targetPos, zoneX, zoneY);
                         if (path && path.length > 0) {
                             const moveId = Date.now();
@@ -1388,7 +1385,7 @@
                             moveAlongPath(character, path, moveId);
                         } else {
                             setStatus("Can't find a path!");
-                            automation.state = 'FINDING_RESOURCE';
+                            automation.skillingState = 'FINDING_RESOURCE';
                         }
                     }
                     break;
@@ -1397,7 +1394,7 @@
                     break;
                 case 'WAITING_FOR_RESPAWN':
                     const hasRespawned = worldData[`${zoneX},${zoneY}`]?.resources?.some(r => r.type === resourceType);
-                    if (hasRespawned) automation.state = 'FINDING_RESOURCE';
+                    if (hasRespawned) automation.skillingState = 'FINDING_RESOURCE';
                     break;
             }
         }
@@ -1405,7 +1402,7 @@
         function gatherResource(character, now, setStatus) {
             const { automation } = character;
             const node = findResourceById(automation.targetId);
-            if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
+            if (!node) { automation.skillingState = 'FINDING_RESOURCE'; return; }
             const resourceData = RESOURCE_DATA[node.type];
 
             if (now - automation.gatheringState.lastHitTime < resourceData.time) return;
@@ -1421,7 +1418,7 @@
             }
             
             if (RESOURCE_DATA[node.type]?.depletes) {
-                 automation.state = 'FINDING_RESOURCE';
+                 automation.skillingState = 'FINDING_RESOURCE';
             }
             saveGameState();
         }
@@ -1577,43 +1574,46 @@
             }, { pos: null, dist: Infinity }).pos;
         }
 
-        // --- MODIFIED FUNCTION ---
         function startAutomation(character, task) {
             if (character.isDead) return;
-            // If we're already doing this task, do nothing.
             if (character.automation.active && character.automation.task === task) return;
 
-            // --- NEW: If the character is in combat, force it to end before switching tasks.
             if (character.combat.active) {
                 forceEndCombat(character);
             }
         
-            // Stop any current action. This is a lightweight flag reset.
             stopAutomation(character);
         
-            // Cleanup based on the NEW task.
             if (task !== 'hunting') {
-                // If we're starting a skilling task, clear this character's marks.
                 character.automation.markedTiles = [];
             }
             
-            // Now, set up and start the new task.
             character.automation.task = task;
             
-            // A check to ensure we can actually perform the task.
             if (task === 'hunting' && character.automation.markedTiles.length === 0) {
-                if (character.id === getActiveCharacter().id) showNotification('Mark an enemy to start hunting.');
-                return; // Abort. Don't set active to true.
+                if (character.id === getActiveCharacter().id) showNotification('Mark a monster to start hunting.');
+                return;
             }
             
             character.automation.active = true;
-            character.automation.state = 'IDLE';
             
             saveGameState();
             if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
             updateAllUI();
         }
-        function stopAutomation(character) { if(!character.automation.active) return; character.automation.active = false; character.automation.state = 'IDLE'; character.automation.task = null; character.automation.targetId = null; if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); updateAllUI(); }
+
+        function stopAutomation(character) {
+             if(!character.automation.active) return; 
+             character.automation.active = false;
+             character.automation.task = null; 
+             character.automation.targetId = null; 
+             // Stop movement when automation stops
+             character.currentMoveId = null;
+             character.isMoving = false;
+             if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
+             if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
+             updateAllUI(); 
+        }
 
         function spawnEnemiesForZone(zoneX, zoneY) { 
             const zoneKey = `${zoneX},${zoneY}`; 
