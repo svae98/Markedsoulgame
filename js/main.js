@@ -1,5 +1,5 @@
 // js/main.js
-// A Walk in the Park Update
+// The Island Update - Static Map & Spawn Point Info
 
 // --- Game Data Import ---
 import {
@@ -64,15 +64,15 @@ let deadEnemies = {};
 let statPopupTimeout = null;
 let currentMapData = [];
 let notificationTimeout = null;
-
-//-- New camera object to track viewport
 let camera = { x: 30, y: 30, target: null, lerp: 0.1 };
 
 let lastFrameTime = 0;
 let accumulator = 0;
-const LOGIC_TICK_RATE = 50;
 let currentGameTime = 0;
-const MOVEMENT_SPEED = 0.1; // Determines how fast the character visually moves between tiles
+
+// --- Movement and Logic Constants ---
+const LOGIC_TICK_RATE = 20; // Run logic updates 50 times per second
+const BASE_MOVEMENT_SPEED = 2.5; // Base tiles per second
 
 function getActiveCharacter() {
     if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -139,16 +139,20 @@ function buildMapData(zoneX, zoneY) {
     const zone = worldData[zoneKey];
     if (!zone || !zone.mapLayout) return []; 
     
+    // Use the zone's specific dimensions
+    const width = zone.width || MAP_WIDTH_TILES;
+    const height = zone.height || MAP_HEIGHT_TILES;
+    
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         'T': TILES.GRASS, 'R': TILES.GRASS, 'P': TILES.GRASS, 'G': TILES.GRASS, 'H': TILES.GRASS,
-        'S': TILES.GRASS, 'Y': TILES.GRASS, 'B': TILES.GRASS
+        'S': TILES.GRASS, 'Y': TILES.GRASS, 'B': TILES.GRASS, '.': TILES.PATH
     };
 
-    const newMapData = Array.from({ length: MAP_HEIGHT_TILES }, () => Array(MAP_WIDTH_TILES).fill(TILES.GRASS));
+    const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
 
-    for(let y=0; y<MAP_HEIGHT_TILES; y++) {
-        for(let x=0; x<MAP_WIDTH_TILES; x++) {
+    for(let y=0; y<height; y++) {
+        for(let x=0; x<width; x++) {
             const char = zone.mapLayout[y]?.[x] || ' ';
             newMapData[y][x] = legend[char] ?? TILES.GRASS;
         }
@@ -160,7 +164,9 @@ function buildMapData(zoneX, zoneY) {
          const size = r.size || {w: 1, h: 1};
          for(let i=0; i<size.w; i++) {
             for(let j=0; j<size.h; j++) {
-                newMapData[r.y+j][r.x+i] = TILES[r.type]; 
+                if (newMapData[r.y+j] && newMapData[r.y+j][r.x+i] !== undefined) {
+                    newMapData[r.y+j][r.x+i] = TILES[r.type];
+                }
             }
          }
     });
@@ -169,14 +175,17 @@ function buildMapData(zoneX, zoneY) {
 }
 
 function getDefaultCharacterState(id, name, color) {
-    const startPos = { x: 25, y: 33 };
+    // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
+    // Change the x and y values in the startPos object below.
+    const startPos = { x: 74, y: 74 };
     return { 
         id, name, zoneX: 1, zoneY: 1, 
-        player: { x: startPos.x, y: startPos.y }, 
-        visual: { x: startPos.x, y: startPos.y }, // NEW: Visual position for smooth animation
-        target: { x: startPos.x, y: startPos.y }, // NEW: Target tile for movement
+        player: { ...startPos },        
+        visual: { ...startPos },       
+        target: { ...startPos },       
+        path: [],                                        
+        movementCooldown: 0,                             
         hp: { current: 5, max: 5 },
-        isMoving: false, path: [], // NEW: 'path' array to hold movement queue
         lastRegenTime: 0, isDead: false,
         automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
         combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
@@ -229,9 +238,11 @@ async function initGame() {
     currentGameTime = performance.now(); 
     await loadGameState();
     const activeChar = getActiveCharacter();
-    camera.x = activeChar.visual.x;
-    camera.y = activeChar.visual.y;
-    currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
+    if (activeChar) {
+        camera.x = activeChar.visual.x;
+        camera.y = activeChar.visual.y;
+        currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
+    }
     Object.keys(worldData).forEach(zoneKey => {
         const [zoneX, zoneY] = zoneKey.split(',').map(Number);
         spawnEnemiesForZone(zoneX, zoneY);
@@ -247,7 +258,7 @@ function gameLoop(timestamp) {
 
     const activeChar = getActiveCharacter();
     if (activeChar) {
-        camera.target = activeChar.visual; // Camera now follows visual position
+        camera.target = activeChar.visual;
         camera.x += (camera.target.x - camera.x) * camera.lerp;
         camera.y += (camera.target.y - camera.y) * camera.lerp;
     }
@@ -258,15 +269,13 @@ function gameLoop(timestamp) {
     
     if (accumulator > 1000) accumulator = 1000;
 
-    // Game Logic Tick
     while (accumulator >= LOGIC_TICK_RATE) {
         currentGameTime += LOGIC_TICK_RATE;
         checkAllRespawns(currentGameTime);
         updateAllPlayerRegen(currentGameTime);
         gameState.characters.forEach(char => {
             if (char) {
-                // NEW: Handle tile-based movement logic
-                updateCharacterMovement(char);
+                updateCharacterLogic(char, LOGIC_TICK_RATE);
                 updateAutomation(char, currentGameTime);
                 updateCombat(char, currentGameTime);
             }
@@ -274,11 +283,8 @@ function gameLoop(timestamp) {
         accumulator -= LOGIC_TICK_RATE;
     }
 
-    // Rendering Tick (as fast as possible)
     gameState.characters.forEach(char => {
-        // NEW: Smoothly interpolate visual position towards target position
-        char.visual.x += (char.target.x - char.visual.x) * MOVEMENT_SPEED;
-        char.visual.y += (char.target.y - char.visual.y) * MOVEMENT_SPEED;
+        updateCharacterVisuals(char, deltaTime);
     });
 
     updateCombatPanelUI();
@@ -287,48 +293,75 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-// NEW function to handle movement logic per-tick
-function updateCharacterMovement(character) {
-    // If not moving and there's a path, start the next step
-    if (!character.isMoving && character.path && character.path.length > 0) {
-        const nextStep = character.path.shift();
-        character.target = { x: nextStep.x, y: nextStep.y };
-        character.isMoving = true;
+function getEffectiveMoveSpeeds() {
+    const stats = getTeamStats();
+    const speedBonus = 1 + (stats.speed * 0.07);
+    const effectiveTileSpeed = BASE_MOVEMENT_SPEED * speedBonus;
+    return {
+        stepInterval: 1000 / effectiveTileSpeed,
+        visualSpeed: effectiveTileSpeed 
+    };
+}
+
+function updateCharacterLogic(character, logicDelta) {
+    if (character.movementCooldown > 0) {
+        character.movementCooldown -= logicDelta;
     }
 
-    // If moving, check if we've reached the target tile
-    if (character.isMoving) {
-        const dx = character.target.x - character.visual.x;
-        const dy = character.target.y - character.visual.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+    if (character.movementCooldown <= 0 && character.path && character.path.length > 0) {
+        const nextStep = character.path.shift();
+        character.player.x = nextStep.x;
+        character.player.y = nextStep.y;
+        character.target.x = nextStep.x;
+        character.target.y = nextStep.y;
+        
+        const speeds = getEffectiveMoveSpeeds();
+        character.movementCooldown = speeds.stepInterval;
 
-        if (distance < 0.1) {
-            // Snap to grid and finalize step
-            character.visual.x = character.target.x;
-            character.visual.y = character.target.y;
-            character.player.x = character.target.x;
-            character.player.y = character.target.y;
-            character.isMoving = false;
+        if (character.path.length === 0) {
+             checkForGateway(character);
+        }
+    }
+}
 
-            // If path is finished, check for gateways
-            if (character.path.length === 0) {
-                 const endTile = character.player;
-                 const zone = worldData[`${character.zoneX},${character.zoneY}`];
-                 if (zone && zone.gateways) {
-                     const gateway = zone.gateways.find(g => g.x === endTile.x && g.y === endTile.y);
-                     if (gateway) {
-                         character.zoneX = gateway.destZone.x;
-                         character.zoneY = gateway.destZone.y;
-                         const entryPos = {x: gateway.entry.x, y: gateway.entry.y};
-                         character.player = entryPos;
-                         character.target = entryPos;
-                         character.visual = entryPos;
-                         currentMapData = buildMapData(character.zoneX, character.zoneY);
-                         saveGameState();
-                         updateAllUI();
-                     }
-                 }
-            }
+function updateCharacterVisuals(character, frameDelta) {
+    const visualX = character.visual.x;
+    const visualY = character.visual.y;
+    const targetX = character.target.x;
+    const targetY = character.target.y;
+
+    if (visualX === targetX && visualY === targetY) return;
+
+    const dx = targetX - visualX;
+    const dy = targetY - visualY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    const speeds = getEffectiveMoveSpeeds();
+    const moveAmount = (speeds.visualSpeed / 1000) * frameDelta; 
+
+    if (distance <= moveAmount) {
+        character.visual.x = targetX;
+        character.visual.y = targetY;
+    } else {
+        character.visual.x += (dx / distance) * moveAmount;
+        character.visual.y += (dy / distance) * moveAmount;
+    }
+}
+
+function checkForGateway(character) {
+    const zone = worldData[`${character.zoneX},${character.zoneY}`];
+    if (zone && zone.gateways) {
+        const gateway = zone.gateways.find(g => g.x === character.player.x && g.y === character.player.y);
+        if (gateway) {
+            character.zoneX = gateway.destZone.x;
+            character.zoneY = gateway.destZone.y;
+            const entryPos = { x: gateway.entry.x, y: gateway.entry.y };
+            character.player = { ...entryPos };
+            character.target = { ...entryPos };
+            character.visual = { ...entryPos };
+            currentMapData = buildMapData(character.zoneX, character.zoneY);
+            saveGameState();
+            updateAllUI();
         }
     }
 }
@@ -340,6 +373,11 @@ function draw() {
     if(!activeChar) return;
     
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+    const zone = worldData[zoneKey];
+    if (!zone) return;
+
+    const zoneWidth = zone.width || MAP_WIDTH_TILES;
+    const zoneHeight = zone.height || MAP_HEIGHT_TILES;
     
     const halfWidth = ui.canvas.width / 2 / TILE_SIZE;
     const halfHeight = ui.canvas.height / 2 / TILE_SIZE;
@@ -350,7 +388,7 @@ function draw() {
 
     for (let y = startRow; y <= endRow; y++) {
         for (let x = startCol; x <= endCol; x++) {
-            if (x >= 0 && x < MAP_WIDTH_TILES && y >= 0 && y < MAP_HEIGHT_TILES) {
+            if (x >= 0 && x < zoneWidth && y >= 0 && y < zoneHeight) {
                 drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
             }
         }
@@ -384,11 +422,13 @@ function drawTile(x, y, zoneX, zoneY) {
     
     const zone = worldData[`${zoneX},${zoneY}`];
     const theme = zone?.theme || 'plains';
-    let baseColor = '#166534'; // Forest green
+    let baseColor = '#166534'; 
     if (theme === 'dark_forest') baseColor = '#14532d';
-    else if (theme === 'library') baseColor = '#27272a';
+    else if (theme === 'library') baseColor = '#4a5568';
     
     ctx.fillStyle = baseColor;
+    if (tileType === TILES.PATH) ctx.fillStyle = '#845421';
+
     ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
     
     if(tileType === TILES.GRASS) {
@@ -401,23 +441,11 @@ function drawTile(x, y, zoneX, zoneY) {
     switch(tileType) {
         case TILES.WALL:
             ctx.fillStyle = '#6b7280'; 
-            ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, 2);
-            ctx.fillStyle = '#71717a'; 
-            ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, 2, TILE_SIZE);
-            ctx.fillStyle = '#4b5563';
-            ctx.fillRect(drawX - TILE_SIZE/2, drawY + TILE_SIZE/2 - 2, TILE_SIZE, 2);
-            ctx.fillStyle = '#4b5563';
-            ctx.fillRect(drawX + TILE_SIZE/2 - 2, drawY - TILE_SIZE/2, 2, TILE_SIZE);
+            ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
             break;
         case TILES.DEEP_FOREST:
             ctx.fillStyle = '#052e16';
             ctx.fillRect(drawX - TILE_SIZE/2, drawY - TILE_SIZE/2, TILE_SIZE, TILE_SIZE);
-            ctx.fillStyle = "rgba(0,0,0,0.1)";
-            for(let i=0; i<5; i++) {
-                ctx.beginPath();
-                ctx.arc(drawX - TILE_SIZE/2 + Math.random()*TILE_SIZE, drawY - TILE_SIZE/2 + Math.random()*TILE_SIZE, TILE_SIZE*0.2, 0, Math.PI*2);
-                ctx.fill();
-            }
             break;
         case TILES.DEEP_WATER:
             ctx.fillStyle = '#1e3a8a';
@@ -457,9 +485,7 @@ function drawEnemy(enemy) {
     const enemyData = ENEMIES_DATA[enemy.type];
     if (!enemyData) return;
     const size = enemyData.size || {w: 1, h: 1};
-    
     const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y);
-    
     const width = size.w * TILE_SIZE;
     const height = size.h * TILE_SIZE;
     ui.ctx.fillStyle = enemyData.color;
@@ -492,7 +518,6 @@ function drawMarks(currentZoneKey) {
 }
 
 function drawPlayer(character, isActive) {
-    // NEW: Player is drawn using their visual position
     const {x: screenX, y: screenY} = worldToScreen(character.visual.x + 0.5, character.visual.y + 0.5);
     const w = TILE_SIZE;
     const h = TILE_SIZE;
@@ -552,10 +577,8 @@ function getTileFromClick(e) {
     const rect = ui.canvas.getBoundingClientRect(); 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-
     const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / TILE_SIZE) + (screenX / TILE_SIZE));
     const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / TILE_SIZE) + (screenY / TILE_SIZE));
-    
     return {x: worldX, y: worldY};
 }
 
@@ -593,8 +616,7 @@ function handleKeydown(e) {
 
 function handleLeftClick(e) {
     const activeChar = getActiveCharacter();
-    // NEW: Prevent new actions while the character is animating between tiles
-    if (!activeChar || activeChar.isDead || activeChar.isMoving) return;
+    if (!activeChar || activeChar.isDead) return;
 
     const { x, y } = getTileFromClick(e);
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
@@ -659,10 +681,8 @@ function handleResourceClick(resource) {
 function handlePedestalClick(x, y, zoneX, zoneY) {
     const zone = worldData[`${zoneX},${zoneY}`];
     if (!zone || !zone.pedestals) return;
-
     const pedestalData = zone.pedestals.find(p => p.x === x && p.y === y);
     if (!pedestalData) return;
-    
     const itemDropId = Object.keys(ITEM_DROP_DATA).find(id => ITEM_DROP_DATA[id].pedestalId === pedestalData.id);
     if (itemDropId && gameState.collectedItemDrops.includes(itemDropId)) {
         const itemData = ITEM_DROP_DATA[itemDropId];
@@ -671,8 +691,7 @@ function handlePedestalClick(x, y, zoneX, zoneY) {
 }
 
 function handleMovementClick(x, y, activeChar) {
-    activeChar.path = []; // Clear any previous path
-
+    activeChar.path = []; 
     let targetPos = null;
     if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY)) {
         targetPos = {x, y};
@@ -680,7 +699,7 @@ function handleMovementClick(x, y, activeChar) {
     if (targetPos) {
         const path = findPath(activeChar.player, targetPos, activeChar.zoneX, activeChar.zoneY);
         if (path && path.length > 0) {
-            activeChar.path = path; // Set the new path for the character
+            activeChar.path = path;
         }
     }
 }
@@ -693,7 +712,7 @@ function addMark(activeChar, enemy, approachSpot) {
              forceEndCombat(activeChar);
         }
     }
-    activeChar.automation.markedTiles.push({ ...approachSpot, enemyId: enemy.id });
+    activeChar.automation.markedTiles.push({ ...approachSpot, enemyId: enemy.id, zoneX: enemy.zoneX, zoneY: enemy.zoneY });
     startAutomation(activeChar, 'hunting');
     showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
 }
@@ -704,7 +723,6 @@ function handleMarking(enemy) {
     activeChar.path = [];
 
     const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.enemyId === enemy.id);
-    
     if (existingMarkForChar) {
          const markIndex = activeChar.automation.markedTiles.findIndex(m => m.enemyId === enemy.id);
          if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
@@ -718,14 +736,12 @@ function handleMarking(enemy) {
             showNotification("No valid approach for that tile.");
         }
     }
-    
     saveGameState();
     updateAllUI();
 }
 
 function handleMapMarking(enemy, activeChar) {
     const availableSpots = getWalkableNeighborsForEntity(enemy, true);
-
     if (availableSpots.length > 0) {
         const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
         if (closestSpot) {
@@ -740,20 +756,16 @@ function handleMapMarking(enemy, activeChar) {
     }
 }
 
-// REMOVED moveAlongPath as its logic is now in updateCharacterMovement
-
 function handleRightClick(e) {
     e.preventDefault();
     const activeChar = getActiveCharacter();
     if (!activeChar || activeChar.isDead) return;
     ui.contextMenu.innerHTML = '';
-    
     const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
 
     if (activeChar.automation.active && activeChar.automation.task !== 'hunting') {
         addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
     }
-
     if (activeChar.automation.markedTiles.length > 0) {
         addContextMenuButton('Clear My Marks', () => {
             stopAutomation(activeChar); 
@@ -761,7 +773,6 @@ function handleRightClick(e) {
             saveGameState();
         });
     }
-
     const anyCharHasMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
     if (anyCharHasMarks) {
         addContextMenuButton('Clear All Marks', () => {
@@ -772,7 +783,6 @@ function handleRightClick(e) {
             saveGameState();
         });
     }
-    
     if (anyCharHasSkillingTask) {
         addContextMenuButton('Stop All Skilling', () => {
             gameState.characters.forEach(char => {
@@ -825,7 +835,6 @@ function renderAltarList() {
 
         let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
         const maxLevel = upgrade.maxLevel;
-
         nameEl.textContent = `${upgrade.name} (${currentLevel}/${maxLevel})`;
         
         if (currentLevel >= maxLevel) {
@@ -849,7 +858,6 @@ function renderAltarList() {
             if (!canAfford) itemEl.classList.add('cannot-afford');
             itemEl.addEventListener('click', () => purchaseUpgrade(id));
         }
-        
         itemEl.append(nameEl, costEl);
         listContainer.appendChild(itemEl);
     });
@@ -858,15 +866,11 @@ function renderAltarList() {
 function purchaseUpgrade(id) {
     const upgrade = ALTAR_UPGRADES[id];
     let currentLevel = (id === 'addCharacter') ? gameState.characters.length - 1 : (gameState.upgrades[id] || 0);
-
     if (currentLevel >= upgrade.maxLevel) return;
-
     const cost = upgrade.cost(currentLevel);
-    
     for(const currency in cost) {
         if((gameState.inventory[currency] || 0) < cost[currency]) return;
     }
-    
     for(const currency in cost) {
         gameState.inventory[currency] -= cost[currency];
     }
@@ -898,44 +902,41 @@ function renderMap() {
     const grid = ui.mapGridContainer;
     grid.innerHTML = '';
     const activeChar = getActiveCharacter();
-    const minX = 0, maxX = 1, minY = 0, maxY = 1;
 
-    for(let y = minY; y <= maxY; y++) {
-        for(let x = minX; x <= maxX; x++) {
-            const zoneKey = `${x},${y}`;
-            const zoneData = worldData[zoneKey];
-            const zoneEl = document.createElement('div');
-            zoneEl.className = 'map-zone';
+    Object.keys(worldData).forEach(zoneKey => {
+        const [x, y] = zoneKey.split(',').map(Number);
+        const zoneData = worldData[zoneKey];
+        const zoneEl = document.createElement('div');
+        zoneEl.className = 'map-zone';
+        
+        if (zoneData) {
+            zoneEl.textContent = zoneData.name;
+            if (activeChar.zoneX === x && activeChar.zoneY === y) {
+                 zoneEl.classList.add('active-zone');
+            }
             
-            if (zoneData) {
-                zoneEl.textContent = zoneData.name;
-                if (activeChar.zoneX === x && activeChar.zoneY === y) {
-                     zoneEl.classList.add('active-zone');
-                }
-                
-                if(enemies[zoneKey]) {
-                    for(const enemyId in enemies[zoneKey]) {
-                        const enemy = enemies[zoneKey][enemyId];
-                        const enemyData = ENEMIES_DATA[enemy.type];
-                        if(enemyData.isBoss) {
-                            const bossIcon = document.createElement('div');
-                            bossIcon.textContent = '💀';
-                            bossIcon.className = 'boss-icon';
-                            bossIcon.title = enemy.name;
-                            bossIcon.addEventListener('click', (e) => {
-                                handleMapMarking(enemy, activeChar);
-                                e.stopPropagation();
-                            });
-                            zoneEl.appendChild(bossIcon);
-                        }
+            if(enemies[zoneKey]) {
+                for(const enemyId in enemies[zoneKey]) {
+                    const enemy = enemies[zoneKey][enemyId];
+                    const enemyData = ENEMIES_DATA[enemy.type];
+                    if(enemyData.isBoss) {
+                        const bossIcon = document.createElement('div');
+                        bossIcon.textContent = '💀';
+                        bossIcon.className = 'boss-icon';
+                        bossIcon.title = enemy.name;
+                        bossIcon.addEventListener('click', (e) => {
+                            handleMapMarking(enemy, activeChar);
+                            e.stopPropagation();
+                        });
+                        zoneEl.appendChild(bossIcon);
                     }
                 }
-            } else {
-                zoneEl.style.backgroundColor = '#111';
             }
-            grid.appendChild(zoneEl);
+        } else {
+            zoneEl.style.backgroundColor = '#111';
         }
-    }
+        grid.appendChild(zoneEl);
+    });
 }
 
 function renderLevels() {
@@ -972,16 +973,9 @@ function renderInventory() {
         if(gameState.inventory[item] > 0) {
             const itemEl = document.createElement('div');
             itemEl.className = 'flex flex-col items-center justify-center p-2 border border-zinc-600 rounded-lg bg-zinc-800';
-            
             let itemSprite = ITEM_SPRITES[item];
-            if(item === 'ragingSoul') {
-                itemSprite = `<span class="text-red-500">${itemSprite}</span>`;
-            }
-
-            itemEl.innerHTML = `
-                <span class="text-3xl">${itemSprite}</span>
-                <span class="text-sm font-bold">${gameState.inventory[item]}</span>
-            `;
+            if(item === 'ragingSoul') itemSprite = `<span class="text-red-500">${itemSprite}</span>`;
+            itemEl.innerHTML = `<span class="text-3xl">${itemSprite}</span><span class="text-sm font-bold">${gameState.inventory[item]}</span>`;
             ui.inventoryListContainer.appendChild(itemEl);
         }
     }
@@ -1041,8 +1035,7 @@ function updateCombat(character, gameTime) {
 }
 
 async function startCombat(character, enemyId, isAutomated = false) { 
-    if (character.combat.active || character.isMoving || character.isDead) return; 
-    
+    if (character.combat.active || character.path.length > 0 || character.isDead) return;
     stopAutomation(character);
     if (isAutomated) {
         character.automation.task = 'hunting';
@@ -1054,7 +1047,6 @@ async function startCombat(character, enemyId, isAutomated = false) {
     
     if (!isAdjacent(character.player, enemy)) { 
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Walking to monster..."; 
-        
         const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
         const reservedSpots = allMarks.filter(m => m.enemyId === enemyId).map(m => ({x: m.x, y: m.y}));
         const charMark = character.automation.markedTiles.find(m => m.enemyId === enemyId);
@@ -1067,14 +1059,10 @@ async function startCombat(character, enemyId, isAutomated = false) {
         const path = findPath(character.player, targetPos, character.zoneX, character.zoneY); 
         if (path) { 
             character.path = path;
-        } 
-        else { 
+        } else { 
             if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Can't find a path."; 
-            return; 
         } 
     } 
-    
-    // Combat will start naturally once the character reaches the adjacent tile
 }
 
 function forceEndCombat(character) {
@@ -1115,9 +1103,11 @@ function endCombat(character, playerWon) {
             enemyData.itemDrop.forEach(itemDropId => {
                 const itemData = ITEM_DROP_DATA[itemDropId];
                 if (itemData && Math.random() < itemData.dropChance) {
-                    gameState.collectedItemDrops.push(itemDropId);
-                    showNotification(`Item Dropped: ${itemData.name}!`);
-                    recalculateTeamStats();
+                    if(!gameState.collectedItemDrops.includes(itemDropId)) {
+                        gameState.collectedItemDrops.push(itemDropId);
+                        showNotification(`Item Dropped: ${itemData.name}!`);
+                        recalculateTeamStats();
+                    }
                 }
             });
         }
@@ -1128,7 +1118,6 @@ function endCombat(character, playerWon) {
 
     } else if (!playerWon) {
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `${character.name} has been defeated!`;
-        
         if (targetEnemy) {
             const healAmount = targetEnemy.hp * 0.10;
             targetEnemy.currentHp = Math.min(targetEnemy.hp, targetEnemy.currentHp + healAmount);
@@ -1140,10 +1129,12 @@ function endCombat(character, playerWon) {
         character.isDead = true;
         
         setTimeout(() => {
-            const respawnPos = { x: 25, y: 33 };
-            character.player = respawnPos;
-            character.visual = respawnPos;
-            character.target = respawnPos;
+            // HOW TO CHANGE THE RESPAWN POINT AFTER DEATH:
+            // Change the x and y values in the respawnPos object below.
+            const respawnPos = { x: 75, y: 75 };
+            character.player = { ...respawnPos };
+            character.visual = { ...respawnPos };
+            character.target = { ...respawnPos };
             character.zoneX = 1;
             character.zoneY = 1;
             character.hp.current = character.hp.max;
@@ -1160,7 +1151,6 @@ function endCombat(character, playerWon) {
 
 function recalculateTeamStats() {
     let allBonuses = { ADD_MAX_HP: 0 };
-    
     if(gameState.collectedItemDrops) {
         gameState.collectedItemDrops.forEach(itemDropId => {
             const itemDrop = ITEM_DROP_DATA[itemDropId];
@@ -1213,8 +1203,7 @@ function gainSkillXp(skill, amount) {
 }
 
 function updateAutomation(character, gameTime) { 
-    if (!character.automation.active || character.combat.active || character.isDead || character.isMoving) return;
-
+    if (!character.automation.active || character.combat.active || character.isDead || character.path.length > 0) return;
     const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
     switch(character.automation.task) {
         case 'hunting': updateHuntingTask(character, setStatus); break;
@@ -1225,8 +1214,7 @@ function updateAutomation(character, gameTime) {
 }
 
 function updateHuntingTask(character, setStatus) {
-    if (character.isMoving || character.combat.active) return;
-
+    if (character.path.length > 0 || character.combat.active) return;
     const { automation } = character;
     if (automation.markedTiles.length === 0) {
         stopAutomation(character);
@@ -1309,13 +1297,13 @@ function gatherResource(character, gameTime, setStatus) {
     const node = findResourceById(automation.targetId);
     if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
     const resourceData = RESOURCE_DATA[node.type];
-    if (gameTime - automation.gatheringState.lastHitTime < resourceData.time) return;
+    if (gameTime - (automation.gatheringState.lastHitTime || 0) < resourceData.time) return;
     automation.gatheringState.lastHitTime = gameTime;
     setStatus(`Gathering...`);
     gainSkillXp(resourceData.skill, resourceData.xp);
     if(resourceData.item) {
         gameState.inventory[resourceData.item]++;
-        showNotification(`+1 ${resourceData.item.replace('_', ' ')}`);
+        showNotification(`+1 ${resourceData.item.replace(/_/g, ' ')}`);
         if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
     }
     saveGameState();
@@ -1338,19 +1326,9 @@ function findEnemyById(id) {
     return null;
 }
 
-function findDeadEnemyById(id) {
-    for (const zoneKey in deadEnemies) {
-        const deadEnemy = deadEnemies[zoneKey].find(dead => dead.id === id);
-        if (deadEnemy) return deadEnemy;
-    }
-    return null;
-}
-
 function isEnemyDead(enemyId) {
     for (const zoneKey in deadEnemies) {
-        if (deadEnemies[zoneKey].some(dead => dead.id === enemyId)) {
-            return true;
-        }
+        if (deadEnemies[zoneKey].some(dead => dead.id === enemyId)) return true;
     }
     return false;
 }
@@ -1400,7 +1378,9 @@ function updateAllPlayerRegen(gameTime) {
 }
 
 function findPath(start, end, zoneX, zoneY) { 
-    if (!end) return null; 
+    const zone = worldData[`${zoneX},${zoneY}`];
+    if (!zone || !end || (start.x === end.x && start.y === end.y)) return null; 
+
     const queue = [[start]]; 
     const visited = new Set([`${start.x},${start.y}`]); 
     while (queue.length > 0) { 
@@ -1409,7 +1389,7 @@ function findPath(start, end, zoneX, zoneY) {
         if (x === end.x && y === end.y) return path.slice(1); 
         const neighbors = [{x:x,y:y-1},{x:x,y:y+1},{x:x-1,y:y},{x:x+1,y:y}]; 
         for (const n of neighbors) { 
-            if (isWalkable(n.x, n.y, zoneX, zoneY)) { 
+            if (isWalkable(n.x, n.y, zoneX, zoneY) || (n.x === end.x && n.y === end.y)) { 
                 const vKey = `${n.x},${n.y}`; 
                 if(!visited.has(vKey)) { 
                     visited.add(vKey); 
@@ -1426,7 +1406,6 @@ function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
     const currentZoneData = worldData[currentZoneKey];
     if (!currentZoneData || !currentZoneData.gateways) return null;
-
     for (const gateway of currentZoneData.gateways) {
         if (gateway.destZone.x === targetZoneX && gateway.destZone.y === targetZoneY) {
             return findPath(character.player, gateway, character.zoneX, character.zoneY);
@@ -1436,13 +1415,20 @@ function findPathToZone(character, targetZoneX, targetZoneY) {
 }
 
 function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
-    const zoneKey = `${zoneX},${zoneY}`;
-    if (x < 0 || x >= MAP_WIDTH_TILES || y < 0 || y >= MAP_HEIGHT_TILES) return false;
+    const zone = worldData[`${zoneX},${zoneY}`];
+    if (!zone) return false;
+    const { width, height } = zone;
+
+    if (x < 0 || x >= width || y < 0 || y >= height) return false;
     if (!currentMapData[y] || currentMapData[y][x] === undefined) return false;
+    
     const tileType = currentMapData[y][x];
-    if ([TILES.WALL, TILES.PEDESTAL, TILES.TREE, TILES.ROCK, TILES.POND, TILES.DEEP_FOREST, TILES.DEEP_WATER].includes(tileType)) return false;
-    if (getEnemyAt(x, y, zoneKey)) return false;
+    const nonWalkableTiles = [TILES.WALL, TILES.PEDESTAL, TILES.TREE, TILES.ROCK, TILES.POND, TILES.DEEP_FOREST, TILES.DEEP_WATER];
+    if (nonWalkableTiles.includes(tileType)) return false;
+    
+    if (getEnemyAt(x, y, `${zoneX},${zoneY}`)) return false;
     if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
+    
     return true;
 }
 
@@ -1509,7 +1495,6 @@ function stopAutomation(character) {
      character.automation.targetId = null; 
      character.automation.state = 'IDLE'; 
      character.path = [];
-     character.isMoving = false;
      if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
      if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
      updateAllUI(); 
@@ -1553,20 +1538,13 @@ function isAdjacent(charPos, entity) {
     return neighbors.some(n => n.x === charPos.x && n.y === charPos.y);
 }
 
-function findNearestMarked(character) {
-    if (character.automation.markedTiles.length === 0) return null;
-    const firstMark = character.automation.markedTiles[0];
-    return findEnemyById(firstMark.enemyId);
-}
-
 function renderCharacterSwitcher() { 
     ui.characterSwitcher.innerHTML = ''; 
     gameState.characters.forEach((char, index) => { 
         const btn = document.createElement('button');
         let taskEmoji = '';
-        if(char.isDead) {
-            taskEmoji = '💀';
-        } else if (char.automation.active) {
+        if(char.isDead) { taskEmoji = '💀'; } 
+        else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
@@ -1583,7 +1561,6 @@ function renderCharacterSwitcher() {
 function updateCombatPanelUI() { 
     const activeChar = getActiveCharacter(); 
     if (!activeChar) return; 
-    
     const enemy = findEnemyById(activeChar.combat.targetId); 
     if (enemy && activeChar.combat.active) { 
         const enemyData = ENEMIES_DATA[enemy.type]; 
@@ -1607,7 +1584,10 @@ function updateAllUI() {
     renderCharacterSwitcher(); 
     ui.activeCharacterName.textContent = activeChar.name; 
     ui.playerDamageStat.textContent = teamStats.damage; 
-    ui.playerSpeedStat.textContent = teamStats.speed;
+    
+    const speeds = getEffectiveMoveSpeeds();
+    ui.playerSpeedStat.textContent = `${teamStats.speed} (${speeds.visualSpeed.toFixed(1)} t/s)`;
+
     const damageReduction = (teamStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
     ui.playerDefenseStat.textContent = `${teamStats.defense} (${damageReduction})`;
     
@@ -1661,19 +1641,19 @@ async function loadGameState() {
 
     let needsSave = false;
     gameState.characters.forEach(char => {
-        // Ensure new properties exist on loaded characters
-        if(!char.visual) char.visual = { x: char.player.x, y: char.player.y };
-        if(!char.target) char.target = { x: char.player.x, y: char.player.y };
-        if(!char.path) char.path = [];
+        if(!char.visual) { char.visual = { x: char.player.x, y: char.player.y }; needsSave = true; }
+        if(!char.target) { char.target = { x: char.player.x, y: char.player.y }; needsSave = true; }
+        if(!char.path) { char.path = []; needsSave = true; }
+        if(char.movementCooldown === undefined) { char.movementCooldown = 0; needsSave = true; }
 
         if (char.isDead) {
             console.log(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            const respawnPos = { x: 25, y: 33 };
-            char.player = respawnPos;
-            char.visual = respawnPos;
-            char.target = respawnPos;
+            const respawnPos = { x: 75, y: 75 };
+            char.player = { ...respawnPos };
+            char.visual = { ...respawnPos };
+            char.target = { ...respawnPos };
             char.zoneX = 1;
             char.zoneY = 1;
             char.combat = { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 };
