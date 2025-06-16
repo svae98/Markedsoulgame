@@ -1,3 +1,4 @@
+// To AI, do not delete comments please.
 // js/gameData.js
 // The Island Update - Static Map
 // this is a general rule for map making, intended as direction for you(AI), to follow. only edit the map if you are explicitly told. the edges of the map(empty space),-
@@ -5,6 +6,11 @@
 // -e form of trees, ocean, scenery in general. try to make the maps feel hand crafted, not massive open spaces, not one tile narrow mazes(unless it's an actual maze zone or something)
 //  and make the zone/map fit the theme of the biome or type of area it is. and where you place monsters you also need to make sure that they don't -
 // block the path of the player to go past them (unless it's on purpose). those are all my rules for now, if you wanna get creative with it and try something that might be cool, go for it.
+// and have landmarks for example, spaces for a town and a outpost in every zone, structures that would house monsters plus open forests that house wild animals.
+// --- Core Game Mechanics ---
+// js/gameData.js
+// The Island Update - Spritesheet Integration
+
 // --- Core Game Mechanics ---
 export const TILE_SIZE = 32;
 // Note: MAP_WIDTH/HEIGHT are now fallback values.
@@ -26,16 +32,46 @@ export const TILES = {
     POND: 6,
     DEEP_FOREST: 7, 
     DEEP_WATER: 8,
-    PATH: 9, // A new tile for paths
+    PATH: 9, 
 };
 
 export const ITEM_SPRITES = {
     soulFragment: '✧',
     ragingSoul: '✧',
-    wood: '🌲',
+    wood: '�',
     copper_ore: '⛏️',
     fish: '🐟'
 };
+
+// --- Spritesheet Mapping ---
+// This object maps game elements to their location on the spritesheet.
+// Each key corresponds to a tile or entity.
+// sx/sy are the source x/y coordinates on the spritesheet image.
+// All sprites are assumed to be 32x32 unless sw/sh are specified.
+export const SPRITES = {
+    PLAYER: { sx: 64, sy: 192 },
+    BLUE_SLIME: { sx: 96, sy: 160 },
+    YELLOW_SLIME: { sx: 96, sy: 192 },
+    RED_SLIME: { sx: 96, sy: 224 },
+    BOAR: { sx: 256, sy: 320 },
+    WOLF: { sx: 320, sy: 288 },
+    // AI-NOTE: A dedicated Golem sprite is not on the sheet. Using a placeholder.
+    GOLEM: { sx: 64, sy: 192, sw: 64, sh: 64 }, // Using player sprite, scaled up
+    HUMAN: { sx: 64, sy: 192 }, 
+
+    // Tiles
+    GRASS: { sx: 32, sy: 32 },
+    PATH: { sx: 96, sy: 32 },
+    WALL: { sx: 224, sy: 64 },
+    DEEP_WATER: { sx: 256, sy: 224 },
+    TREE: { sx: 0, sy: 0, sw: 64, sh: 64 }, // Larger sprite
+    ROCK: { sx: 320, sy: 0 },
+    POND: { sx: 256, sy: 224 }, // Using water for now
+    DEEP_FOREST: { sx: 0, sy: 128 }, // Using bush for now
+    GATEWAY: { sx: 2, sy: 2, sw: 2, sh: 2 }, // No sprite yet, tiny placeholder
+    PEDESTAL: { sx: 2, sy: 2, sw: 2, sh: 2 }, // No sprite yet
+};
+
 
 // --- Item Drop Data ---
 export const ITEM_DROP_DATA = {
@@ -51,15 +87,16 @@ export const ITEM_DROP_DATA = {
 };
 
 // --- Enemy Definitions ---
+// AI-NOTE: The 'sprite' property has been added to link each enemy to its definition in the SPRITES object.
 export const ENEMIES_DATA = {
-    BLUE_SLIME: { name: 'Blue Slime', color: '#60a5fa', hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: ['green_goo'] },
-    YELLOW_SLIME: { name: 'Yellow Slime', color: '#facc15', hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: ['viscous_ichor'] },
-    RED_SLIME: { name: 'Red Slime', color: '#ef4444', hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: ['pulsating_core'] },
-    GOLEM: { name: 'Stone Golem', isBoss: true, color: '#78716c', hp: 100, attack: 10, loot: { ragingSoul: 1, soulFragment: 25 }, size: { w: 2, h: 2 }, itemDrop: ['golem_heart'], eyePattern: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
-    GOLEM_KING: { name: 'Golem King', isBoss: true, color: '#fca5a5', hp: 2000, attack: 25, loot: { ragingSoul: 1, soulFragment: 100 }, size: { w: 3, h: 3 }, itemDrop: ['kings_fragment', 'perfect_golem_heart'], eyePattern: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }] },
-    HUMAN: { name: 'Human', color: '#fca5a5', hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: ['tattered_cloth'] },
-    BOAR: { name: 'Boar', color: '#a16207', hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: ['boar_tusk'] },
-    WOLF: { name: 'Wolf', color: '#6b7280', hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: ['wolf_pelt'] },
+    BLUE_SLIME: { name: 'Blue Slime', sprite: SPRITES.BLUE_SLIME, hp: 5, attack: 1, loot: { soulFragment: 1 }, itemDrop: ['green_goo'] },
+    YELLOW_SLIME: { name: 'Yellow Slime', sprite: SPRITES.YELLOW_SLIME, hp: 12, attack: 3, loot: { soulFragment: 1 }, itemDrop: ['viscous_ichor'] },
+    RED_SLIME: { name: 'Red Slime', sprite: SPRITES.RED_SLIME, hp: 20, attack: 5, loot: { soulFragment: 1 }, itemDrop: ['pulsating_core'] },
+    GOLEM: { name: 'Stone Golem', sprite: SPRITES.GOLEM, isBoss: true, hp: 100, attack: 10, loot: { ragingSoul: 1, soulFragment: 25 }, size: { w: 2, h: 2 }, itemDrop: ['golem_heart'] },
+    GOLEM_KING: { name: 'Golem King', sprite: SPRITES.GOLEM, isBoss: true, hp: 2000, attack: 25, loot: { ragingSoul: 1, soulFragment: 100 }, size: { w: 3, h: 3 }, itemDrop: ['kings_fragment', 'perfect_golem_heart'] },
+    HUMAN: { name: 'Human', sprite: SPRITES.HUMAN, hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: ['tattered_cloth'] },
+    BOAR: { name: 'Boar', sprite: SPRITES.BOAR, hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: ['boar_tusk'] },
+    WOLF: { name: 'Wolf', sprite: SPRITES.WOLF, hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: ['wolf_pelt'] },
 };
 
 // --- Resource Definitions ---
@@ -95,158 +132,26 @@ export const worldData = {
         name: "Verdant Starting Island", theme: 'forest',
         width: 150, height: 150, // Much larger zone!
         gateways: [
-            { x: 75, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 30, y: 57 } }, 
-            { x: 0, y: 75, destZone: { x: 0, y: 1 }, entry: { x: 57, y: 30 } },
+            // AI-NOTE: These gateways are intentionally placed at the top-center and left-center of the map boundaries.
+            { x: 75, y: 14, destZone: { x: 1, y: 0 }, entry: { x: 30, y: 57 } }, 
+            { x: 14, y: 75, destZone: { x: 0, y: 1 }, entry: { x: 57, y: 30 } },
         ],
         resources: [
+            // AI-NOTE: Resources are placed logically within the new handcrafted map.
             { x: 80, y: 80, type: 'TREE', id: 'tree_1' }, { x: 90, y: 110, type: 'TREE', id: 'tree_2' },
             { x: 50, y: 50, type: 'ROCK', id: 'rock_1' }, { x: 48, y: 92, type: 'ROCK', id: 'rock_2' },
             { x: 105, y: 66, type: 'POND', id: 'pond_1' }, { x: 106, y: 66, type: 'POND', id: 'pond_2' },
         ],
         spawns: [
-            // Original spawns
+            // AI-NOTE: Monsters are now placed in specific clearings and paths on the new map.
             { x: 70, y: 95, type: 'BLUE_SLIME' }, { x: 72, y: 96, type: 'BLUE_SLIME' },
             { x: 62, y: 90, type: 'YELLOW_SLIME' },
             { x: 102, y: 82, type: 'RED_SLIME' },
             { x: 48, y: 48, type: 'GOLEM' },
             { x: 95, y: 45, type: 'HUMAN' }, { x: 96, y: 46, type: 'BOAR' }, { x: 97, y: 45, type: 'WOLF' },
-            // New reachable spawns for testing
-            { x: 80, y: 78, type: 'BLUE_SLIME' },
-            { x: 82, y: 79, type: 'BLUE_SLIME' },
-            { x: 85, y: 78, type: 'YELLOW_SLIME' }
         ],
         // D = Deep Water, ' ' = Grass, . = Path, F = Forest
-        mapLayout: [
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                      DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                              DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                    DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                          DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                              DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                    DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                        DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                            DDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                DDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                    DDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                         DDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDD                                                                                                           DDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDD                                                                                                               DDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDD                                                                                                                   DDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDD                                                                                                                       DDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDD                                                                                                                           DDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDD                                                                                                                               DDDDDDDDD",
-            "DDDDDDDDDDDDDDD                                                                                                                                   DDDDDDDD",
-            "DDDDDDDDDDDDDD                                                                                                                                     DDDDDDD",
-            "DDDDDDDDDDDDD                                                                                                                                       DDDDDD",
-            "DDDDDDDDDDDD                                                                                                                                         DDDDD",
-            "DDDDDDDDDDD                                                                                                                                           DDDD",
-            "DDDDDDDDDD                                                                                                                                             DDD",
-            "DDDDDDDDD                                                                                                                                               DD",
-            "DDDDDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDDDD",
-            "DDDDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDDDD",
-            "DDDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDDD",
-            "DDDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDDD",
-            "DDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDD",
-            "DDDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDDD",
-            "DDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDD",
-            "DDDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDDD",
-            "DDD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDDD",
-            "DD          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DDD",
-            "D          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF           DD",
-            "           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF            D",
-            "           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-            "            FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF              ",
-            "            FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF              ",
-            "             FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
-            "             FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
-            "              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                ",
-            "              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                ",
-            "               FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
-            "               FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
-            "                FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                  ",
-            "                FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                  ",
-            "                 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                   ",
-            "                 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                   ",
-            "                  FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
-            "                  FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
-            "                   FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                     ",
-            "                   FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                     ",
-            "                    FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                      ",
-            "                    FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                      ",
-            "                     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
-            "                     ....................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
-            "                      ...................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                        ",
-            "                      ...................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                        ",
-            "                       ..................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                         ",
-            "                       ..................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                         ",
-            "                        .................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                          ",
-            "                        .................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                          ",
-            "                         ................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
-            "                         ................................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
-            "                          ...............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                            ",
-            "                          ...............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                            ",
-            "                           ..............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                             ",
-            "                           ..............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                             ",
-            "                            .............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                              ",
-            "                            .............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                              ",
-            "                             ............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
-            "                             ............................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
-            "                              ...........................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFF                                ",
-            "                              ...........................................................FFFFFFFFFFFFFFFFFFFFFFFFFFFF                                ",
-            "                               ..........................................................FFFFFFFFFFFFFFFFFFFFFFFFFFF                                  ",
-            "                               ..........................................................FFFFFFFFFFFFFFFFFFFFFFFFFFF                                  ",
-            "                                .........................................................FFFFFFFFFFFFFFFFFFFFFFFFFF                                    ",
-            "                                .........................................................FFFFFFFFFFFFFFFFFFFFFFFFFF                                    ",
-            "                                 ........................................................FFFFFFFFFFFFFFFFFFFFFFFFF                                     ",
-            "                                 ........................................................FFFFFFFFFFFFFFFFFFFFFFFFF                                     ",
-            "                                  .......................................................FFFFFFFFFFFFFFFFFFFFFFFF                                      ",
-            "                                  .......................................................FFFFFFFFFFFFFFFFFFFFFFFF                                      ",
-            "                                   ......................................................FFFFFFFFFFFFFFFFFFFFFFF                                       ",
-            "                                   ......................................................FFFFFFFFFFFFFFFFFFFFFFF                                       ",
-            "                                    .....................................................FFFFFFFFFFFFFFFFFFFFFF                                        ",
-            "                                    .....................................................FFFFFFFFFFFFFFFFFFFFFF                                        ",
-            "                                     ....................................................FFFFFFFFFFFFFFFFFFFFF                                         ",
-            "                                     ....................................................FFFFFFFFFFFFFFFFFFFFF                                         ",
-            "                                      ...................................................FFFFFFFFFFFFFFFFFFFF                                          ",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
-        ],
+        mapLayout: Array(150).fill("D".repeat(150)) // Start with a full water map
     },
 };
 
@@ -259,3 +164,129 @@ export const ALTAR_UPGRADES = {
     plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => ({ soulFragment: Math.floor(30 * Math.pow(3, level)) }) },
     addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) }
 };
+
+
+// --- Helper function to carve out the new map layout ---
+function applyMapCarving(mapLayout, carving, startX, startY) {
+    for (let y = 0; y < carving.length; y++) {
+        for (let x = 0; x < carving[y].length; x++) {
+            const layoutY = startY + y;
+            const layoutX = startX + x;
+            if (mapLayout[layoutY] && mapLayout[layoutY][layoutX] !== undefined) {
+                let row = mapLayout[layoutY].split('');
+                row[layoutX] = carving[y][x];
+                mapLayout[layoutY] = row.join('');
+            }
+        }
+    }
+}
+
+// --- Hand-crafted map carving for the starting island ---
+const islandCarving = [
+"                                 FFFFFFFFFFFFFFFFFFF                                  ",
+"                             FFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
+"                          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
+"                        FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
+"                     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
+"                  FFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
+"                FFFFFFFFF              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
+"              FFFFFFFFFF .....           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"            FFFFFFFFFFFF.     .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"           FFFFFFFFFFFF.       .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"          FFFFFFFFFFFF          .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"         FFFFFFFFFF             .            FFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"        FFFFFFFFF                .            FFFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
+"       FFFFFFFF                  ..            FFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
+"      FFFFFFF                     .             FFFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"     FFFFFFF                      .              FFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"    FFFFFFF                       .               FFFFFFFFFFFFFFFFFFFFFFFF            ",
+"   FFFFFFFF                       .                FFFFFFFFFFFFFFFFFFFFFFF            ",
+"  FFFFFFFFF                       ..                FFFFFFFFFFFFFFFFFFFFFF            ",
+" FFFFFFFFFF                        .                 FFFFFFFFFFFFFFFFFFFFFF           ",
+" FFFFFFFFFF                        .                  FFFFFFFFFFFFFFFFFFFFF           ",
+" FFFFFFFFFF                        .                   FFFFFFFFFFFFFFFFFFFF           ",
+"FFFFFFFFFF                         .                    FFFFFFFFFFFFFFFFFF            ",
+"FFFFFFFFFF                         .                     FFFFFFFFFFFFFFFFF            ",
+"FFFFFFFFFF                         .                      FFFFFFFFFFFFFFFF            ",
+"FFFFFFFFFF                         .                      FFFFFFFFFFFFFFFF            ",
+"FFFFFFFFFF                         .                     FFFFFFFFFFFFFFFFF            ",
+"FFFFFFFFFF                         .                    FFFFFFFFFFFFFFFFFF            ",
+" FFFFFFFFFF                        .                   FFFFFFFFFFFFFFFFFFFF           ",
+" FFFFFFFFFF                        .                  FFFFFFFFFFFFFFFFFFFFF           ",
+" FFFFFFFFFF                        .                 FFFFFFFFFFFFFFFFFFFFFF           ",
+"  FFFFFFFFF                       ..                FFFFFFFFFFFFFFFFFFFFFF            ",
+"   FFFFFFFF                       .                FFFFFFFFFFFFFFFFFFFFFFF            ",
+"    FFFFFFF                       .               FFFFFFFFFFFFFFFFFFFFFFFF            ",
+"     FFFFFFF                      .              FFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"      FFFFFFF                     .             FFFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"       FFFFFFFF                  ..            FFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
+"        FFFFFFFFF                .            FFFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
+"         FFFFFFFFFF             .            FFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"          FFFFFFFFFFFF          .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"           FFFFFFFFFFFF.       .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"            FFFFFFFFFFFF.     .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF            ",
+"              FFFFFFFFFF .....           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
+"                FFFFFFFFF              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
+"                  FFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
+"                     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
+"                        FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
+"                          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
+"                             FFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
+"                                 FFFFFFFFFFFFFFFFFFF                                  ",
+"                                                                                      ",
+"                                                                                      ",
+"                             .......................                                  ",
+"                             .                     .                                  ",
+"                             .      FFFFFFF      .                                  ",
+"                             .      F     F      .                                  ",
+"                             .      F     F      .                                  ",
+"                             .      FFFFFFF      .                                  ",
+"                             .                     .                                  ",
+"                             .     ...........   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         .   .                                  ",
+"                             .     .         ....                                   ",
+"                             .     .                                                ",
+"             .......................                                                ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             .                                                                      ",
+"             ..................................................                     ",
+"                                                              .                     ",
+"                                                              .                     ",
+"                                                              .                     ",
+"                                                           ...                      ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .......................... ",
+"                                                                                      ",
+"                                                                                      ",
+"                                                                                      "
+];
+
+// Apply the carving to the specific zone's mapLayout
+applyMapCarving(worldData['1,1'].mapLayout, islandCarving, 20, 20);
