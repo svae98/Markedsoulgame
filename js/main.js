@@ -129,28 +129,119 @@ const ui = {
 function loadSpriteSheet() {
     return new Promise((resolve, reject) => {
         spriteSheet = new Image();
-        // IMPORTANT: Make sure you have an 'assets' folder with your 'spritesheet.jpg' inside it.
-        spriteSheet.src = 'assets/spritesheet.jpg'; 
+        // IMPORTANT: Make sure you have an 'images' folder with your spritesheet inside it.
+        spriteSheet.src = 'images/spritesheet.png'; 
         spriteSheet.onload = () => {
             console.log("Spritesheet loaded successfully.");
             resolve();
         };
         spriteSheet.onerror = () => {
-            console.error("Failed to load spritesheet. Make sure 'assets/spritesheet.jpg' exists.");
+            console.error("Failed to load spritesheet. Make sure 'images/spritesheet.png' exists.");
             reject();
         };
     });
 }
 
+function isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
+function mergeDeep(target, ...sources) { 
+    if (!sources.length) return target; 
+    const source = sources.shift(); 
+    if (isObject(target) && isObject(source)) { 
+        for (const key in source) { 
+            if (isObject(source[key])) { 
+                if (!target[key]) Object.assign(target, { [key]: {} }); 
+                mergeDeep(target[key], source[key]); 
+            } else { Object.assign(target, { [key]: source[key] }); } 
+        } 
+    } 
+    return mergeDeep(target, ...sources); 
+}
+
+function buildMapData(zoneX, zoneY) {
+    const zoneKey = `${zoneX},${zoneY}`;
+    const zone = worldData[zoneKey];
+    if (!zone || !zone.mapLayout) return []; 
+    
+    // Use the zone's specific dimensions
+    const width = zone.width || MAP_WIDTH_TILES;
+    const height = zone.height || MAP_HEIGHT_TILES;
+    
+    const legend = {
+        ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
+        'T': TILES.GRASS, 'R': TILES.GRASS, 'P': TILES.GRASS, 'G': TILES.GRASS, 'H': TILES.GRASS,
+        'S': TILES.GRASS, 'Y': TILES.GRASS, 'B': TILES.GRASS, '.': TILES.PATH
+    };
+
+    const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
+
+    for(let y=0; y<height; y++) {
+        for(let x=0; x<width; x++) {
+            const char = zone.mapLayout[y]?.[x] || ' ';
+            newMapData[y][x] = legend[char] ?? TILES.GRASS;
+        }
+    }
+    
+    if (zone.gateways) zone.gateways.forEach(gw => { newMapData[gw.y][gw.x] = TILES.GATEWAY; });
+    if (zone.pedestals) zone.pedestals.forEach(p => { newMapData[p.y][p.x] = TILES.PEDESTAL; });
+    if (zone.resources) zone.resources.forEach(r => {
+         const size = r.size || {w: 1, h: 1};
+         for(let i=0; i<size.w; i++) {
+            for(let j=0; j<size.h; j++) {
+                if (newMapData[r.y+j] && newMapData[r.y+j][r.x+i] !== undefined) {
+                    newMapData[r.y+j][r.x+i] = TILES[r.type];
+                }
+            }
+         }
+    });
+
+    return newMapData;
+}
+
+
+function getDefaultCharacterState(id, name, color) {
+    // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
+    // Change the x and y values in the startPos object below.
+    const startPos = { x: 75, y: 75 };
+    return { 
+        id, name, zoneX: 1, zoneY: 1, 
+        player: { ...startPos },        
+        visual: { ...startPos },       
+        target: { ...startPos },       
+        path: [],                                        
+        movementCooldown: 0,                             
+        hp: { current: 5, max: 5 },
+        lastRegenTime: 0, isDead: false,
+        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+        combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
+    };
+}
+
+function getDefaultGameState() {
+    return { 
+        characters: [], activeCharacterIndex: 0,
+        inventory: { soulFragment: 1000, ragingSoul: 0, wood: 0, copper_ore: 0, fish: 0 },
+        level: { current: 1, xp: 0 }, 
+        skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
+        upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
+        collectedItemDrops: [],
+        firstKills: [], 
+    };
+}
+
 
 async function initGame() {
-    ui.canvas.width = ui.canvasContainer.offsetWidth;
-    ui.canvas.height = ui.canvasContainer.offsetHeight;
-
-    window.addEventListener('resize', () => {
+    function resizeCanvasAndCenterCamera() {
         ui.canvas.width = ui.canvasContainer.offsetWidth;
         ui.canvas.height = ui.canvasContainer.offsetHeight;
-    });
+        // Center camera on active character if possible
+        const activeChar = getActiveCharacter && getActiveCharacter();
+        if (activeChar) {
+            camera.x = activeChar.player.x;
+            camera.y = activeChar.player.y;
+        }
+    }
+    resizeCanvasAndCenterCamera();
+    window.addEventListener('resize', resizeCanvasAndCenterCamera);
     
     try {
         await loadSpriteSheet(); // Wait for spritesheet to load
@@ -355,8 +446,9 @@ function draw() {
 }
 
 function worldToScreen(worldX, worldY) {
-    const screenX = (worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2;
-    const screenY = (worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2;
+    // Ensure integer pixel positions to avoid seams
+    const screenX = Math.round((worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2);
+    const screenY = Math.round((worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2);
     return { x: screenX, y: screenY };
 }
 
@@ -366,8 +458,8 @@ function drawSprite(sprite, destX, destY, destW = TILE_SIZE, destH = TILE_SIZE) 
     const sy = sprite.sy;
     const sw = sprite.sw || TILE_SIZE;
     const sh = sprite.sh || TILE_SIZE;
-
-    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, destX, destY, destW, destH);
+    // Draw at integer positions to prevent seams
+    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), destW, destH);
 }
 
 function drawTile(x, y, zoneX, zoneY) {
@@ -379,7 +471,13 @@ function drawTile(x, y, zoneX, zoneY) {
     
     let sprite;
     switch(tileType) {
-        case TILES.GRASS: sprite = SPRITES.GRASS; break;
+        case TILES.GRASS:
+            // Use a pseudo-random but consistent index based on tile coordinates
+            // This makes the grass varied without flickering every frame
+            const grassVariationCount = SPRITES.GRASS.length;
+            const tileHash = (x * 19 + y * 71); // Simple hash for variety
+            sprite = SPRITES.GRASS[tileHash % grassVariationCount];
+            break;
         case TILES.PATH: sprite = SPRITES.PATH; break;
         case TILES.WALL: sprite = SPRITES.WALL; break;
         case TILES.DEEP_WATER: sprite = SPRITES.DEEP_WATER; break;
@@ -389,7 +487,7 @@ function drawTile(x, y, zoneX, zoneY) {
         case TILES.DEEP_FOREST: sprite = SPRITES.DEEP_FOREST; break;
         case TILES.GATEWAY: sprite = SPRITES.GATEWAY; break;
         case TILES.PEDESTAL: sprite = SPRITES.PEDESTAL; break;
-        default: sprite = SPRITES.GRASS; // Default to grass if unknown
+        default: sprite = SPRITES.GRASS[0]; // Default to grass if unknown
     }
     
     // For larger tiles like trees, we need to adjust the drawing position
@@ -459,68 +557,6 @@ function drawPlayer(character, isActive) {
         ui.ctx.lineWidth = 2;
         ui.ctx.strokeRect(screenX, screenY, w, h);
     }
-}
-
-// ... the rest of the file remains the same ...
-// (Omitting the rest for brevity as it's unchanged)
-// isObject, mergeDeep, getDefaultCharacterState, getDefaultGameState, getEffectiveMoveSpeeds
-// updateCharacterLogic, updateCharacterVisuals, checkForGateway, showDamagePopup, showStatPopup
-// getTileFromClick, getEnemyAt, getResourceNodeAt, handleKeydown, handleLeftClick, handleMonsterClick
-// handleResourceClick, handlePedestalClick, handleMovementClick, addMark, handleMarking
-// handleMapMarking, handleRightClick, addContextMenuButton, showNotification, renderAltarList
-// purchaseUpgrade, openModal, closeModal, openSoulAltar, closeSoulAltar, openLevels, closeLevels
-// openInventory, closeInventory, openMap, closeMap, renderMap, renderLevels, renderInventory
-// getTeamStats, updateCombat, startCombat, forceEndCombat, endCombat, recalculateTeamStats
-// xpForLevel, gainXp, xpForSkillLevel, gainSkillXp, updateAutomation, updateHuntingTask
-// updateSkillingTask, gatherResource, assignSkillTask, findEnemyById, isEnemyDead, findResourceById
-// findNearestResource, updateAllPlayerRegen, findPath, heuristic, getNeighbors, reconstructPath
-// findPathToZone, isWalkable, getWalkableNeighborsForEntity, findWalkableNeighborForEntity
-// startAutomation, stopAutomation, spawnEnemiesForZone, checkAllRespawns, isAdjacent
-// renderCharacterSwitcher, updateCombatPanelUI, updateAllUI, saveGameState, loadGameState
-
-function isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
-function mergeDeep(target, ...sources) { 
-    if (!sources.length) return target; 
-    const source = sources.shift(); 
-    if (isObject(target) && isObject(source)) { 
-        for (const key in source) { 
-            if (isObject(source[key])) { 
-                if (!target[key]) Object.assign(target, { [key]: {} }); 
-                mergeDeep(target[key], source[key]); 
-            } else { Object.assign(target, { [key]: source[key] }); } 
-        } 
-    } 
-    return mergeDeep(target, ...sources); 
-}
-
-function getDefaultCharacterState(id, name, color) {
-    // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
-    // Change the x and y values in the startPos object below.
-    const startPos = { x: 75, y: 75 };
-    return { 
-        id, name, zoneX: 1, zoneY: 1, 
-        player: { ...startPos },        
-        visual: { ...startPos },       
-        target: { ...startPos },       
-        path: [],                                        
-        movementCooldown: 0,                             
-        hp: { current: 5, max: 5 },
-        lastRegenTime: 0, isDead: false,
-        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
-        combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
-    };
-}
-
-function getDefaultGameState() {
-    return { 
-        characters: [], activeCharacterIndex: 0,
-        inventory: { soulFragment: 1000, ragingSoul: 0, wood: 0, copper_ore: 0, fish: 0 },
-        level: { current: 1, xp: 0 }, 
-        skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
-        upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
-        collectedItemDrops: [],
-        firstKills: [], 
-    };
 }
 
 function showDamagePopup(x, y, amount, isPlayerDamage) {
@@ -1704,7 +1740,7 @@ function renderCharacterSwitcher() {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
-            else if (char.automation.task === 'fishing') taskEmoji = '🎣';
+            else if (char.automation.task === 'fishing') taskEmoji = '?';
         }
         btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
         btn.className = 'char-button'; 
@@ -1761,7 +1797,6 @@ function updateAllUI() {
     ui.xpProgress.style.width = `${(level.xp / neededXp) * 100}%`;
     ui.xpProgress.textContent = `${Math.floor(level.xp)}/${neededXp}`;
 }
-
 async function saveGameState() { 
     if (!userId || !appId) return; 
     try { 

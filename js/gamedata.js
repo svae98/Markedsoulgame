@@ -49,7 +49,7 @@ export const ITEM_SPRITES = {
 // sx/sy are the source x/y coordinates on the spritesheet image.
 // All sprites are assumed to be 32x32 unless sw/sh are specified.
 export const SPRITES = {
-    PLAYER: { sx: 64, sy: 192 },
+    PLAYER: { sx: 33, sy: 1 },
     BLUE_SLIME: { sx: 96, sy: 160 },
     YELLOW_SLIME: { sx: 96, sy: 192 },
     RED_SLIME: { sx: 96, sy: 224 },
@@ -60,16 +60,19 @@ export const SPRITES = {
     HUMAN: { sx: 64, sy: 192 }, 
 
     // Tiles
-    GRASS: { sx: 32, sy: 32 },
-    PATH: { sx: 96, sy: 32 },
+    // GRASS is now an array for visual variety
+    GRASS: [
+        { sx: 1, sy: 1, }
+    ],
+    PATH: { sx: 32, sy: 32 },
     WALL: { sx: 224, sy: 64 },
     DEEP_WATER: { sx: 256, sy: 224 },
-    TREE: { sx: 0, sy: 0, sw: 64, sh: 64 }, // Larger sprite
-    ROCK: { sx: 320, sy: 0 },
+    TREE: { sx: 50, sy: 50, sw: 0, sh: 0 }, // Larger sprite
+    ROCK: { sx: 320, sy: 50 },
     POND: { sx: 256, sy: 224 }, // Using water for now
-    DEEP_FOREST: { sx: 0, sy: 128 }, // Using bush for now
-    GATEWAY: { sx: 2, sy: 2, sw: 2, sh: 2 }, // No sprite yet, tiny placeholder
-    PEDESTAL: { sx: 2, sy: 2, sw: 2, sh: 2 }, // No sprite yet
+    DEEP_FOREST: { sx: 50, sy: 128 }, // Using bush for now
+    GATEWAY: { sx: 50, sy: 50, sw: 0, sh: 0 }, // No sprite yet, tiny placeholder
+    PEDESTAL: { sx: 50, sy: 50, sw: 0, sh: 0 }, // No sprite yet
 };
 
 
@@ -97,6 +100,8 @@ export const ENEMIES_DATA = {
     HUMAN: { name: 'Human', sprite: SPRITES.HUMAN, hp: 30, attack: 7, loot: { soulFragment: 2 }, itemDrop: ['tattered_cloth'] },
     BOAR: { name: 'Boar', sprite: SPRITES.BOAR, hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: ['boar_tusk'] },
     WOLF: { name: 'Wolf', sprite: SPRITES.WOLF, hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: ['wolf_pelt'] },
+    SKELETON: { name: 'Skeleton', sprite: { sx: 0, sy: 64 }, hp: 25, attack: 6, loot: { soulFragment: 1 } },
+    GIANT_SPIDER: { name: 'Giant Spider', sprite: { sx: 32, sy: 64 }, hp: 35, attack: 8, loot: { soulFragment: 1 } }
 };
 
 // --- Resource Definitions ---
@@ -149,6 +154,8 @@ export const worldData = {
             { x: 102, y: 82, type: 'RED_SLIME' },
             { x: 48, y: 48, type: 'GOLEM' },
             { x: 95, y: 45, type: 'HUMAN' }, { x: 96, y: 46, type: 'BOAR' }, { x: 97, y: 45, type: 'WOLF' },
+            { x: 85, y: 55, type: 'SKELETON' }, { x: 86, y: 56, type: 'SKELETON' },
+            { x: 55, y: 70, type: 'GIANT_SPIDER' }, { x: 56, y: 71, type: 'GIANT_SPIDER' },
         ],
         // D = Deep Water, ' ' = Grass, . = Path, F = Forest
         mapLayout: Array(150).fill("D".repeat(150)) // Start with a full water map
@@ -282,6 +289,15 @@ const islandCarving = [
 "                                                           .                        ",
 "                                                           .                        ",
 "                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
+"                                                           .                        ",
 "                                                           .......................... ",
 "                                                                                      ",
 "                                                                                      ",
@@ -290,3 +306,61 @@ const islandCarving = [
 
 // Apply the carving to the specific zone's mapLayout
 applyMapCarving(worldData['1,1'].mapLayout, islandCarving, 20, 20);
+
+// --- Map Character to Tile Type Helper ---
+function charToTileType(char) {
+    switch (char) {
+        case ' ': return TILES.GRASS;
+        case '.': return TILES.PATH;
+        case 'F': return TILES.DEEP_FOREST;
+        case 'D': return TILES.DEEP_WATER;
+        case 'W': return TILES.WALL;
+        // Add more mappings as needed
+        default: return TILES.GRASS;
+    }
+}
+
+// --- Tile Drawing Helper ---
+// Place this in your rendering/UI code, not in gamedata.js if you have a separate file for rendering.
+function drawTile(x, y, zoneX, zoneY) {
+    const { x: drawX, y: drawY } = worldToScreen(x, y);
+    const ctx = ui.ctx;
+
+    // Map layout is stored as strings of characters, so get the character first
+    const mapRow = currentMapData[y];
+    if (!mapRow) return;
+    const mapChar = mapRow[x];
+    if (mapChar === undefined) return;
+
+    // Convert character to tile type
+    const tileType = charToTileType(mapChar);
+
+    let sprite;
+    switch(tileType) {
+        case TILES.GRASS:
+            // Use a pseudo-random but consistent index based on tile coordinates
+            // This makes the grass varied without flickering every frame
+            const grassVariationCount = SPRITES.GRASS.length;
+            const tileHash = (x * 19 + y * 71); // Simple hash for variety
+            sprite = SPRITES.GRASS[tileHash % grassVariationCount];
+            break;
+        case TILES.PATH: sprite = SPRITES.PATH; break;
+        case TILES.WALL: sprite = SPRITES.WALL; break;
+        case TILES.DEEP_WATER: sprite = SPRITES.DEEP_WATER; break;
+        case TILES.POND: sprite = SPRITES.POND; break;
+        case TILES.ROCK: sprite = SPRITES.ROCK; break;
+        case TILES.TREE: sprite = SPRITES.TREE; break;
+        case TILES.DEEP_FOREST: sprite = SPRITES.DEEP_FOREST; break;
+        case TILES.GATEWAY: sprite = SPRITES.GATEWAY; break;
+        case TILES.PEDESTAL: sprite = SPRITES.PEDESTAL; break;
+        default: sprite = SPRITES.GRASS[0]; // Default to the first grass sprite
+    }
+    
+    // For larger tiles like trees, we need to adjust the drawing position
+    const drawWidth = sprite.sw || TILE_SIZE;
+    const drawHeight = sprite.sh || TILE_SIZE;
+    const xOffset = (drawWidth - TILE_SIZE) / 2;
+    const yOffset = (drawHeight - TILE_SIZE); // Anchor to bottom
+
+    drawSprite(sprite, drawX - xOffset, drawY - yOffset, drawWidth, drawHeight);
+}
