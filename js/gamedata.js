@@ -55,8 +55,7 @@ export const SPRITES = {
     RED_SLIME: { sx: 96, sy: 224 },
     BOAR: { sx: 256, sy: 320 },
     WOLF: { sx: 320, sy: 288 },
-    // AI-NOTE: A dedicated Golem sprite is not on the sheet. Using a placeholder.
-    GOLEM: { sx: 64, sy: 192, sw: 64, sh: 64 }, // Using player sprite, scaled up
+    GOLEM: { sx: 224, sy: 64 }, // Using WALL sprite, scaled up for Stone Golem appearance
     HUMAN: { sx: 64, sy: 192 }, 
 
     // Tiles
@@ -67,15 +66,13 @@ export const SPRITES = {
     PATH: { sx: 32, sy: 32 },
     WALL: { sx: 224, sy: 64 },
     DEEP_WATER: { sx: 256, sy: 224 },
-    TREE: { sx: 50, sy: 50, sw: 0, sh: 0 }, // Larger sprite
+    TREE: { sx: 50, sy: 50 }, // Placeholder, actual tree sprite needed. Assumed 32x32 for now.
     ROCK: { sx: 320, sy: 50 },
     POND: { sx: 256, sy: 224 }, // Using water for now
     DEEP_FOREST: { sx: 50, sy: 128 }, // Using bush for now
-    GATEWAY: { sx: 50, sy: 50, sw: 0, sh: 0 }, // No sprite yet, tiny placeholder
-    PEDESTAL: { sx: 50, sy: 50, sw: 0, sh: 0 }, // No sprite yet
+    GATEWAY: { sx: 1, sy: 1 }, // Placeholder, using GRASS sprite. Actual sprite needed.
+    PEDESTAL: { sx: 1, sy: 1 }  // Placeholder, using GRASS sprite. Actual sprite needed.
 };
-
-
 // --- Item Drop Data ---
 export const ITEM_DROP_DATA = {
     'green_goo': { name: 'Green Goo', monster: 'BLUE_SLIME', dropChance: 0.10, effect: { type: 'ADD_MAX_HP', value: 4 }, pedestalId: 'gg_pedestal', visual: { color: '#86efac', char: 'G' }, description: "+4 Max HP" },
@@ -116,49 +113,49 @@ export const worldData = {
     '0,1': {
         name: "The Collector's Library", theme: 'library',
         width: 60, height: 60, // Smaller zone
-        gateways: [{ x: 58, y: 30, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 75 } }],
+        gateways: [{ x: 45, y: 30, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 75 } }], // Adjusted gateway
         pedestals: [
-            { x: 5, y: 5, id: 'gg_pedestal' }, { x: 7, y: 5, id: 'vi_pedestal' }, { x: 9, y: 5, id: 'pc_pedestal' },
-            { x: 5, y: 7, id: 'tc_pedestal' }, { x: 7, y: 7, id: 'bt_pedestal' }, { x: 9, y: 7, id: 'wp_pedestal' },
-            { x: 7, y: 9, id: 'gh_pedestal' },
+            { x: 15, y: 15, id: 'gg_pedestal' }, { x: 17, y: 15, id: 'vi_pedestal' }, { x: 19, y: 15, id: 'pc_pedestal' },
+            { x: 15, y: 17, id: 'tc_pedestal' }, { x: 17, y: 17, id: 'bt_pedestal' }, { x: 19, y: 17, id: 'wp_pedestal' },
+            { x: 17, y: 19, id: 'gh_pedestal' }, // Adjusted pedestals
         ],
-        mapLayout: Array(60).fill("W".repeat(60)) // Placeholder map
+        mapLayout: Array(60).fill("W".repeat(60)) // Base map, will be carved
     },
     '1,0': {
         name: "The Quiet Grove", theme: 'dark_forest',
         width: 60, height: 60,
-        gateways: [{ x: 30, y: 58, destZone: { x: 1, y: 1 }, entry: { x: 75, y: 1 } }],
+        gateways: [{ x: 30, y: 45, destZone: { x: 1, y: 1 }, entry: { x: 75, y: 1 } }], // Adjusted gateway
         spawns: [ 
             { x: 30, y: 30, type: 'GOLEM_KING' }, 
         ],
-        mapLayout: Array(60).fill("F".repeat(60)) // Placeholder map
+        mapLayout: Array(60).fill("F".repeat(60)) // Base map, will be carved
     },
     '1,1': {
         name: "Verdant Starting Island", theme: 'forest',
-        width: 150, height: 150, // Much larger zone!
+        width: 60, height: 60, // Resized to 60x60
         gateways: [
-            // AI-NOTE: These gateways are intentionally placed at the top-center and left-center of the map boundaries.
-            { x: 75, y: 14, destZone: { x: 1, y: 0 }, entry: { x: 30, y: 57 } }, 
-            { x: 14, y: 75, destZone: { x: 0, y: 1 }, entry: { x: 57, y: 30 } },
+            // Gateways adjusted for 60x60 map with 32x32 playable area (14-tile border)
+            { x: 30, y: 14, destZone: { x: 1, y: 0 }, entry: { x: 30, y: 45 } }, // To Quiet Grove (top edge of playable)
+            { x: 14, y: 30, destZone: { x: 0, y: 1 }, entry: { x: 45, y: 30 } }, // To Collector's Library (left edge of playable)
         ],
         resources: [
-            // AI-NOTE: Resources are placed logically within the new handcrafted map.
-            { x: 80, y: 80, type: 'TREE', id: 'tree_1' }, { x: 90, y: 110, type: 'TREE', id: 'tree_2' },
-            { x: 50, y: 50, type: 'ROCK', id: 'rock_1' }, { x: 48, y: 92, type: 'ROCK', id: 'rock_2' },
-            { x: 105, y: 66, type: 'POND', id: 'pond_1' }, { x: 106, y: 66, type: 'POND', id: 'pond_2' },
+            // Resources relocated to the new 32x32 playable area (world coords 14-45)
+            { x: 20, y: 20, type: 'TREE', id: 'tree_1' }, { x: 40, y: 40, type: 'TREE', id: 'tree_2' },
+            { x: 20, y: 40, type: 'ROCK', id: 'rock_1' }, { x: 40, y: 20, type: 'ROCK', id: 'rock_2' },
+            { x: 30, y: 25, type: 'POND', id: 'pond_1' }, { x: 31, y: 25, type: 'POND', id: 'pond_2' },
         ],
         spawns: [
-            // AI-NOTE: Monsters are now placed in specific clearings and paths on the new map.
-            { x: 70, y: 95, type: 'BLUE_SLIME' }, { x: 72, y: 96, type: 'BLUE_SLIME' },
-            { x: 62, y: 90, type: 'YELLOW_SLIME' },
-            { x: 102, y: 82, type: 'RED_SLIME' },
-            { x: 48, y: 48, type: 'GOLEM' },
-            { x: 95, y: 45, type: 'HUMAN' }, { x: 96, y: 46, type: 'BOAR' }, { x: 97, y: 45, type: 'WOLF' },
-            { x: 85, y: 55, type: 'SKELETON' }, { x: 86, y: 56, type: 'SKELETON' },
-            { x: 55, y: 70, type: 'GIANT_SPIDER' }, { x: 56, y: 71, type: 'GIANT_SPIDER' },
+            // Spawns relocated to the new 32x32 playable area
+            { x: 25, y: 25, type: 'BLUE_SLIME' }, { x: 26, y: 26, type: 'BLUE_SLIME' }, // Near center
+            { x: 35, y: 35, type: 'YELLOW_SLIME' }, // SE quadrant
+            { x: 25, y: 35, type: 'RED_SLIME' },    // SW quadrant
+            { x: 35, y: 25, type: 'GOLEM' },        // NE quadrant (miniboss)
+            { x: 20, y: 30, type: 'HUMAN' }, { x: 21, y: 31, type: 'BOAR' }, { x: 22, y: 30, type: 'WOLF' }, // West side
+            { x: 30, y: 20, type: 'SKELETON' }, { x: 31, y: 21, type: 'SKELETON' }, // North side
+            { x: 30, y: 40, type: 'GIANT_SPIDER' }, { x: 31, y: 39, type: 'GIANT_SPIDER' }, // South side
         ],
         // D = Deep Water, ' ' = Grass, . = Path, F = Forest
-        mapLayout: Array(150).fill("D".repeat(150)) // Start with a full water map
+        mapLayout: Array(60).fill("D".repeat(60)) // Start with a 60x60 water map
     },
 };
 
@@ -169,11 +166,12 @@ export const ALTAR_UPGRADES = {
     plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
     plusOneDefense: { name: "+1 Defense", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
     plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => ({ soulFragment: Math.floor(30 * Math.pow(3, level)) }) },
-    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) }
+    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) },
+    learningBoost: { name: "Learning Boost", maxLevel: 5, cost: (level) => ({ soulFragment: Math.floor(50 * Math.pow(2.5, level)) }) } // +2% XP per level
 };
 
 
-// --- Helper function to carve out the new map layout ---
+// --- Helper function to carve out map layouts ---
 function applyMapCarving(mapLayout, carving, startX, startY) {
     for (let y = 0; y < carving.length; y++) {
         for (let x = 0; x < carving[y].length; x++) {
@@ -188,124 +186,120 @@ function applyMapCarving(mapLayout, carving, startX, startY) {
     }
 }
 
-// --- Hand-crafted map carving for the starting island ---
-const islandCarving = [
-"                                 FFFFFFFFFFFFFFFFFFF                                  ",
-"                             FFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
-"                          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
-"                        FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
-"                     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
-"                  FFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
-"                FFFFFFFFF              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
-"              FFFFFFFFFF .....           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"            FFFFFFFFFFFF.     .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"           FFFFFFFFFFFF.       .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"          FFFFFFFFFFFF          .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"         FFFFFFFFFF             .            FFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"        FFFFFFFFF                .            FFFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
-"       FFFFFFFF                  ..            FFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
-"      FFFFFFF                     .             FFFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"     FFFFFFF                      .              FFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"    FFFFFFF                       .               FFFFFFFFFFFFFFFFFFFFFFFF            ",
-"   FFFFFFFF                       .                FFFFFFFFFFFFFFFFFFFFFFF            ",
-"  FFFFFFFFF                       ..                FFFFFFFFFFFFFFFFFFFFFF            ",
-" FFFFFFFFFF                        .                 FFFFFFFFFFFFFFFFFFFFFF           ",
-" FFFFFFFFFF                        .                  FFFFFFFFFFFFFFFFFFFFF           ",
-" FFFFFFFFFF                        .                   FFFFFFFFFFFFFFFFFFFF           ",
-"FFFFFFFFFF                         .                    FFFFFFFFFFFFFFFFFF            ",
-"FFFFFFFFFF                         .                     FFFFFFFFFFFFFFFFF            ",
-"FFFFFFFFFF                         .                      FFFFFFFFFFFFFFFF            ",
-"FFFFFFFFFF                         .                      FFFFFFFFFFFFFFFF            ",
-"FFFFFFFFFF                         .                     FFFFFFFFFFFFFFFFF            ",
-"FFFFFFFFFF                         .                    FFFFFFFFFFFFFFFFFF            ",
-" FFFFFFFFFF                        .                   FFFFFFFFFFFFFFFFFFFF           ",
-" FFFFFFFFFF                        .                  FFFFFFFFFFFFFFFFFFFFF           ",
-" FFFFFFFFFF                        .                 FFFFFFFFFFFFFFFFFFFFFF           ",
-"  FFFFFFFFF                       ..                FFFFFFFFFFFFFFFFFFFFFF            ",
-"   FFFFFFFF                       .                FFFFFFFFFFFFFFFFFFFFFFF            ",
-"    FFFFFFF                       .               FFFFFFFFFFFFFFFFFFFFFFFF            ",
-"     FFFFFFF                      .              FFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"      FFFFFFF                     .             FFFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"       FFFFFFFF                  ..            FFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
-"        FFFFFFFFF                .            FFFFFFFFFFFFFFFFFFFFFFFFFFFFF           ",
-"         FFFFFFFFFF             .            FFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"          FFFFFFFFFFFF          .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"           FFFFFFFFFFFF.       .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"            FFFFFFFFFFFF.     .           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF            ",
-"              FFFFFFFFFF .....           FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF             ",
-"                FFFFFFFFF              FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF               ",
-"                  FFFFFFFFFFFF     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                 ",
-"                     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                    ",
-"                        FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                       ",
-"                          FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF                           ",
-"                             FFFFFFFFFFFFFFFFFFFFFFFFFF                               ",
-"                                 FFFFFFFFFFFFFFFFFFF                                  ",
-"                                                                                      ",
-"                                                                                      ",
-"                             .......................                                  ",
-"                             .                     .                                  ",
-"                             .      FFFFFFF      .                                  ",
-"                             .      F     F      .                                  ",
-"                             .      F     F      .                                  ",
-"                             .      FFFFFFF      .                                  ",
-"                             .                     .                                  ",
-"                             .     ...........   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         .   .                                  ",
-"                             .     .         ....                                   ",
-"                             .     .                                                ",
-"             .......................                                                ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             .                                                                      ",
-"             ..................................................                     ",
-"                                                              .                     ",
-"                                                              .                     ",
-"                                                              .                     ",
-"                                                           ...                      ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .                        ",
-"                                                           .......................... ",
-"                                                                                      ",
-"                                                                                      ",
-"                                                                                      "
+// --- Hand-crafted map carving for the Verdant Starting Island ('1,1') - Playable Area ---
+const playableIslandCarving = [ // 32x32 playable area
+    "                                ", // y=0 of playable (world y=14)
+    "          ..........            ", // Path leading inwards
+    "        ..          ..          ",
+    "      ..    ####      ..        ",
+    "     .      ####        .       ",
+    "    .        ##          .      ", // y=5
+    "   .                      .     ",
+    "  .     Pond Area          .    ", // Placeholder for pond
+    " .                          .   ",
+    ".                            .  ",
+    ".       Main Clearing        .  ", // y=10
+    ".                            .  ",
+    ".     (Player Spawn Here)    .  ", // Player spawns around (30,30) world -> (16,16) of this
+    ".                            .  ",
+    ".                            .  ",
+    " .                          .   ", // y=15 (world y=29)
+    "  .                        .    ", // Gateway to Grove (1,0) at world (30,14) -> (16,0) of this
+    "   .                      .     ", // Gateway to Library (0,1) at world (14,30) -> (0,16) of this
+    "    .                    .      ",
+    "     .                  .       ",
+    "      ..   Rocky Area ..        ", // y=20
+    "        ..          ..          ",
+    "          ..........            ",
+    "                                ",
+    "                                ",
+    "                                ", // y=25
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ", // y=30
+    "                                "  // y=31 of playable (world y=45)
 ];
 
-// Apply the carving to the specific zone's mapLayout
-applyMapCarving(worldData['1,1'].mapLayout, islandCarving, 20, 20);
+
+// Replace placeholders in carving with actual grass/path characters
+for (let i = 0; i < playableIslandCarving.length; i++) {
+    playableIslandCarving[i] = playableIslandCarving[i].replace(/#/g, ' '); // '#' becomes grass
+    playableIslandCarving[i] = playableIslandCarving[i].replace(/Pond Area|Main Clearing|\(Player Spawn Here\)|Rocky Area/g, (match) => ' '.repeat(match.length)); // Text becomes grass
+}
+
+// Apply the new carving for Verdant Starting Island's playable area
+applyMapCarving(worldData['1,1'].mapLayout, playableIslandCarving, 14, 14);
+
+// --- Hand-crafted map carving for The Collector's Library ('0,1') ---
+const libraryPlayableCarving = [ // 32x32 playable area
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW", // Row 0 of playable (world y=14)
+    "W   W   W   W                W", // Pedestals will be on these ' '
+    "W W W W W W                  W",
+    "W   W   W   W                W", // Pedestals
+    "W W W W W W                  W",
+    "W   W   W                    W", // Pedestal
+    "W WWWWWWWWWWWWWWWWWWWWWWWWWW W",
+    "W W                        W W",
+    "W W    Study Alcoves       W W",
+    "W W                        W W",
+    "W WWWWWWWWWWWWWWWWWWWWWWWWWW W", // Row 10
+    "W                            W",
+    "W  WWWWWWWWWWWWWWWWWWWWWWWW  W",
+    "W  W                      W  W",
+    "W  W   Main Reading Hall  W  W",
+    "W  W                      W  W",
+    "W  WWWWWW.WWWWWWWWWWWWWWWW.W", // Row 16 (world y=30). Gateway is the 'W' at col 31. Path '.' at col 30.
+    "W      .                   W", // Path from central door
+    "W  WWWWWWWWWWWWWWWWWWWWWWWW  W",
+    "W  W                      W  W",
+    "W  W      Archives        W  W", // Row 20
+    "W  W                      W  W",
+    "W  WWWWWWWWWWWWWWWWWWWWWWWW  W",
+    "W                            W",
+    "W                            W",
+    "W                            W", // Row 25
+    "W                            W",
+    "W                            W",
+    "W                            W",
+    "W                            W",
+    "W                            W", // Row 30
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"  // Row 31 of playable (world y=45)
+];
+applyMapCarving(worldData['0,1'].mapLayout, libraryPlayableCarving, 14, 14);
+
+// --- Hand-crafted map carving for The Quiet Grove ('1,0') ---
+const grovePlayableCarving = [ // 32x32 playable area
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", // Row 0 of playable (world y=14)
+    "F...FFFFFFFFFFFFFFFFFFFFFFF...F",
+    "F.   .FFFFFFFFFFFFFFFFFFF.   .F",
+    "F. FFF.FFFFFFFFFFFFFFF.FFF .F",
+    "F. FFF  ....FFFFF....  FFF .F",
+    "F. FFF  .           .  FFF .F", // Row 5
+    "F. FFF  .           .  FFF .F", // Golem King clearing area
+    "F. FFF  .           .  FFF .F", // Golem King at (30,30) world -> (16,16) of this carving
+    "F. FFF  .           .  FFF .F", // Centered in this 5x5 clearing
+    "F. FFF  ....FFFFF....  FFF .F",
+    "F. FFF.FFFFFFFFFFFFFFF.FFF .F", // Row 10
+    "F.   .FFFFFFFFFFFFFFFFFFF.   .F",
+    "F...FFFFFFFFFFFFFFFFFFFFFFF...F", // Row 12
+    "FFFFFFFFFF.....FFFFFFFFFFFFFFFFF", // Row 13 - Clearing for Golem King
+    "FFFFFFFFFF     FFFFFFFFFFFFFFFFF", // Row 14 - Clearing for Golem King
+    "FFFFFFFFFF     FFFFFFFFFFFFFFFFF", // Row 15 - Clearing for Golem King
+    "FFFFFFFFFF     FFFFFFFFFFFFFFFFF", // Row 16 - Golem King spawn (30,30) is here
+    "FFFFFFFFFF     FFFFFFFFFFFFFFFFF", // Row 17 - Clearing for Golem King
+    "FFFFFFFFFF.....FFFFFFFFFFFFFFFFF", // Row 18 - Clearing for Golem King
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", // Row 19
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", // Row 20
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", // Row 28
+    "FFFFFFFFFFFFF...FFFFFFFFFFFFFFFF", // Row 29 - Path to gateway
+    "FFFFFFFFFFFFF.F.FFFFFFFFFFFFFFFF", // Row 30 - Path to gateway. Gateway at (30,45) world -> (16,31) of this carving
+    "FFFFFFFFFFFFF.FFFFFFFFFFFFFFFFFF"  // Row 31 of playable (world y=45). Gateway tile is 'F' at col 16. Path '.' at [30][16].
+];
+applyMapCarving(worldData['1,0'].mapLayout, grovePlayableCarving, 14, 14);
 
 // --- Map Character to Tile Type Helper ---
 function charToTileType(char) {

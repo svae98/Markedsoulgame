@@ -201,7 +201,7 @@ function buildMapData(zoneX, zoneY) {
 function getDefaultCharacterState(id, name, color) {
     // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
     // Change the x and y values in the startPos object below.
-    const startPos = { x: 75, y: 75 };
+    const startPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
     return { 
         id, name, zoneX: 1, zoneY: 1, 
         player: { ...startPos },        
@@ -333,7 +333,7 @@ function gameLoop(timestamp) {
 
 function getEffectiveMoveSpeeds() {
     const stats = getTeamStats();
-    const speedBonus = 1 + (stats.speed * 0.07);
+    const speedBonus = 1 + (stats.speed * 0.01); // Each point of speed now grants 1% bonus
     const effectiveTileSpeed = BASE_MOVEMENT_SPEED * speedBonus;
     return {
         stepInterval: 1000 / effectiveTileSpeed,
@@ -1203,7 +1203,7 @@ function endCombat(character, playerWon) {
             // It ensures the player always returns to a known, walkable tile.
             // HOW TO CHANGE THE RESPAWN POINT AFTER DEATH:
             // Change the x and y values in the respawnPos object below.
-            const respawnPos = { x: 75, y: 75 };
+            const respawnPos = { x: 20, y: 20 };
             character.player = { ...respawnPos };
             character.visual = { ...respawnPos };
             character.target = { ...respawnPos };
@@ -1246,8 +1246,13 @@ function recalculateTeamStats() {
 
 function xpForLevel(level) { return Math.floor(50 * Math.pow(1.23, level - 1)); }
 function gainXp(amount) { 
-    const { level } = gameState; 
-    level.xp += amount; 
+    const { level, upgrades } = gameState;
+    let finalAmount = amount;
+    if (upgrades.learningBoost && upgrades.learningBoost > 0) {
+        const boostPercentage = upgrades.learningBoost * 0.02; // 2% per level
+        finalAmount += amount * boostPercentage;
+    }
+    level.xp += finalAmount;
     let needed = xpForLevel(level.current); 
     while (level.xp >= needed) { 
         level.xp -= needed; 
@@ -1260,8 +1265,13 @@ function gainXp(amount) {
 
 function xpForSkillLevel(level) { return Math.floor(100 * Math.pow(1.15, level - 1)); }
 function gainSkillXp(skill, amount) {
-    if (!gameState.skills[skill]) return;
-    gameState.skills[skill].xp += amount;
+    if (!gameState.skills[skill] || !gameState.upgrades) return;
+    let finalAmount = amount;
+    if (gameState.upgrades.learningBoost && gameState.upgrades.learningBoost > 0) {
+        const boostPercentage = gameState.upgrades.learningBoost * 0.02; // 2% per level
+        finalAmount += amount * boostPercentage;
+    }
+    gameState.skills[skill].xp += finalAmount;
     let needed = xpForSkillLevel(gameState.skills[skill].level);
     while (gameState.skills[skill].xp >= needed) {
         gameState.skills[skill].xp -= needed;
@@ -1847,8 +1857,8 @@ async function loadGameState() {
         // from loading into an unwalkable tile (e.g., if the map changes).
         // It resets them to the default spawn point if they are stuck. Do not remove.
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
-            console.log(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
-            const respawnPos = { x: 75, y: 75 }; // Default island spawn
+                console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
+                const respawnPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
@@ -1859,10 +1869,10 @@ async function loadGameState() {
         }
 
         if (char.isDead) {
-            console.log(`Character ${char.name} was dead on load. Respawning.`);
+            console.warn(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            const respawnPos = { x: 75, y: 75 };
+            const respawnPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
@@ -1873,6 +1883,12 @@ async function loadGameState() {
         }
     };
     
+    // Apply speed cheat
+    if (gameState.upgrades) {
+        gameState.upgrades.plusOneSpeed = 100;
+        console.log("CHEAT APPLIED: Speed stat (plusOneSpeed upgrade) set to 100.");
+    }
+
     recalculateTeamStats();
 
     if (needsSave) {
