@@ -1,5 +1,5 @@
 // js/main.js
-// The Island Update - Axis-Priority Pathfinding
+// The Island Update - Hybrid Pathfinding
 
 // --- Game Data Import ---
 import {
