@@ -100,11 +100,16 @@ export const worldData = {
             { x: 105, y: 66, type: 'POND', id: 'pond_1' }, { x: 106, y: 66, type: 'POND', id: 'pond_2' },
         ],
         spawns: [
+            // Original spawns
             { x: 70, y: 95, type: 'BLUE_SLIME' }, { x: 72, y: 96, type: 'BLUE_SLIME' },
             { x: 62, y: 90, type: 'YELLOW_SLIME' },
             { x: 102, y: 82, type: 'RED_SLIME' },
             { x: 48, y: 48, type: 'GOLEM' },
             { x: 95, y: 45, type: 'HUMAN' }, { x: 96, y: 46, type: 'BOAR' }, { x: 97, y: 45, type: 'WOLF' },
+            // New reachable spawns for testing
+            { x: 80, y: 78, type: 'BLUE_SLIME' },
+            { x: 82, y: 79, type: 'BLUE_SLIME' },
+            { x: 85, y: 78, type: 'YELLOW_SLIME' }
         ],
         // D = Deep Water, ' ' = Grass, . = Path, F = Forest
         mapLayout: [
@@ -135,19 +140,19 @@ export const worldData = {
             "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                              DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                    DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                        DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                            DDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                DDDDDDDDDDDDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                    DDDDDDDDDDDDDDDDDDDDDDDD",
-            "D                                                                                                                               DDDDDDDDDDDDDDDDDDDDDD",
+            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                            DDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                DDDDDDDDDDDDDDDDDDDDDDDDDD",
+            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                    DDDDDDDDDDDDDDDDDDDDDDDD",
+            "DDDDDDDDDDDDDDDDDDDDDDDDDD                                                                                                         DDDDDDDDDDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDDDDDDDD                                                                                                           DDDDDDDDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDDDDDD                                                                                                               DDDDDDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDDDDD                                                                                                                   DDDDDDDDDDDDDDDD",
-            "DDDDDDDDDDDD                                                                                                                             DDDDDDDDDDDDDD",
+            "DDDDDDDDDDDDDDDDDDD                                                                                                                       DDDDDDDDDDDDDD",
             "DDDDDDDDDDDDDDDDDD                                                                                                                           DDDDDDDDDDD",
             "DDDDDDDDDDDDDDDD                                                                                                                               DDDDDDDDD",
             "DDDDDDDDDDDDDDD                                                                                                                                   DDDDDDDD",
             "DDDDDDDDDDDDDD                                                                                                                                     DDDDDDD",
-            "DDDDDDDDDDD                                                                                                                                         DDDDDD",
+            "DDDDDDDDDDDDD                                                                                                                                       DDDDDD",
             "DDDDDDDDDDDD                                                                                                                                         DDDDD",
             "DDDDDDDDDDD                                                                                                                                           DDDD",
             "DDDDDDDDDD                                                                                                                                             DDD",

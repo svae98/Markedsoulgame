@@ -1,5 +1,5 @@
 // js/main.js
-// The Island Update - Static Map & Spawn Point Info
+// The Island Update - A* Pathfinding
 
 // --- Game Data Import ---
 import {
@@ -177,7 +177,7 @@ function buildMapData(zoneX, zoneY) {
 function getDefaultCharacterState(id, name, color) {
     // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
     // Change the x and y values in the startPos object below.
-    const startPos = { x: 74, y: 74 };
+    const startPos = { x: 75, y: 75 };
     return { 
         id, name, zoneX: 1, zoneY: 1, 
         player: { ...startPos },        
@@ -693,7 +693,7 @@ function handlePedestalClick(x, y, zoneX, zoneY) {
 function handleMovementClick(x, y, activeChar) {
     activeChar.path = []; 
     let targetPos = null;
-    if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY)) {
+    if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY, true)) { // Ignore other characters for pathfinding destination
         targetPos = {x, y};
     }
     if (targetPos) {
@@ -1377,30 +1377,111 @@ function updateAllPlayerRegen(gameTime) {
     });
 }
 
-function findPath(start, end, zoneX, zoneY) { 
-    const zone = worldData[`${zoneX},${zoneY}`];
-    if (!zone || !end || (start.x === end.x && start.y === end.y)) return null; 
-
-    const queue = [[start]]; 
-    const visited = new Set([`${start.x},${start.y}`]); 
-    while (queue.length > 0) { 
-        const path = queue.shift(); 
-        const { x, y } = path[path.length - 1]; 
-        if (x === end.x && y === end.y) return path.slice(1); 
-        const neighbors = [{x:x,y:y-1},{x:x,y:y+1},{x:x-1,y:y},{x:x+1,y:y}]; 
-        for (const n of neighbors) { 
-            if (isWalkable(n.x, n.y, zoneX, zoneY) || (n.x === end.x && n.y === end.y)) { 
-                const vKey = `${n.x},${n.y}`; 
-                if(!visited.has(vKey)) { 
-                    visited.add(vKey); 
-                    const newPath = [...path, n]; 
-                    queue.push(newPath); 
-                } 
-            } 
-        } 
-    } 
-    return null; 
+// --- A* Pathfinding Implementation ---
+function heuristic(a, b) {
+    // Manhattan distance on a square grid
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
+
+function reconstructPath(cameFrom, current) {
+    const totalPath = [current];
+    let currentKey = `${current.x},${current.y}`;
+    while (cameFrom.has(currentKey)) {
+        current = cameFrom.get(currentKey);
+        currentKey = `${current.x},${current.y}`;
+        totalPath.unshift(current);
+    }
+    return totalPath.slice(1); // Remove the starting node
+}
+
+function findPath(start, end, zoneX, zoneY) {
+    if (!start || !end) return [];
+    
+    // Nodes that are already evaluated
+    const closedSet = new Set();
+    // The set of discovered nodes that are not evaluated yet.
+    const openSet = new Set([`${start.x},${start.y}`]);
+    const openSetNodes = [start];
+
+    // For node n, cameFrom[n] is the node immediately preceding it on the cheapest path from start to n currently known.
+    const cameFrom = new Map();
+
+    // For node n, gScore[n] is the cost of the cheapest path from start to n currently known.
+    const gScore = new Map();
+    gScore.set(`${start.x},${start.y}`, 0);
+
+    // For node n, fScore[n] := gScore[n] + heuristic(n, goal). fScore[n] represents our current best guess as to
+    // how short a path from start to finish can be if it goes through n.
+    const fScore = new Map();
+    fScore.set(`${start.x},${start.y}`, heuristic(start, end));
+
+    while (openSet.size > 0) {
+        let current;
+        let lowestFScore = Infinity;
+        
+        // Find node in openSet with lowest fScore
+        for(const node of openSetNodes) {
+            const nodeKey = `${node.x},${node.y}`;
+            const score = fScore.get(nodeKey) || Infinity;
+            if (score < lowestFScore) {
+                lowestFScore = score;
+                current = node;
+            }
+        }
+        
+        const currentKey = `${current.x},${current.y}`;
+
+        if (current.x === end.x && current.y === end.y) {
+            return reconstructPath(cameFrom, current);
+        }
+
+        // Move current from open to closed set
+        openSet.delete(currentKey);
+        const currentIndex = openSetNodes.findIndex(node => node.x === current.x && node.y === current.y);
+        if (currentIndex > -1) {
+            openSetNodes.splice(currentIndex, 1);
+        }
+        closedSet.add(currentKey);
+
+        const neighbors = [
+            {x:current.x,y:current.y-1}, // up
+            {x:current.x,y:current.y+1}, // down
+            {x:current.x-1,y:current.y}, // left
+            {x:current.x+1,y:current.y}  // right
+        ];
+        
+        for (const neighbor of neighbors) {
+            const neighborKey = `${neighbor.x},${neighbor.y}`;
+            if (closedSet.has(neighborKey)) {
+                continue; // Ignore the neighbor which is already evaluated.
+            }
+            
+            // The neighbor is not walkable, and it's not our final destination
+            if (!isWalkable(neighbor.x, neighbor.y, zoneX, zoneY, true) && (neighbor.x !== end.x || neighbor.y !== end.y)) {
+                continue;
+            }
+
+            // The distance from start to a neighbor
+            const tentativeGScore = gScore.get(currentKey) + 1;
+
+            if (!openSet.has(neighborKey)) { 
+                openSet.add(neighborKey);
+                openSetNodes.push(neighbor);
+            } else if (tentativeGScore >= (gScore.get(neighborKey) || Infinity)) {
+                continue; // This is not a better path.
+            }
+
+            // This path is the best until now. Record it!
+            cameFrom.set(neighborKey, current);
+            gScore.set(neighborKey, tentativeGScore);
+            fScore.set(neighborKey, gScore.get(neighborKey) + heuristic(neighbor, end));
+        }
+    }
+
+    // Open set is empty but goal was never reached
+    return [];
+}
+
 
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
@@ -1640,11 +1721,30 @@ async function loadGameState() {
     }
 
     let needsSave = false;
-    gameState.characters.forEach(char => {
+
+    // This loop ensures that all characters, upon loading, are in a valid state and position.
+    for (const char of gameState.characters) {
+        // Ensure essential properties exist on loaded characters
         if(!char.visual) { char.visual = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.target) { char.target = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.path) { char.path = []; needsSave = true; }
         if(char.movementCooldown === undefined) { char.movementCooldown = 0; needsSave = true; }
+        
+        // Temporarily build the map for the character being checked to ensure isWalkable works correctly.
+        currentMapData = buildMapData(char.zoneX, char.zoneY);
+
+        // Check if the character's loaded position is valid. The 'true' ignores other characters.
+        if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
+            console.log(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
+            const respawnPos = { x: 75, y: 75 }; // Default island spawn
+            char.player = { ...respawnPos };
+            char.visual = { ...respawnPos };
+            char.target = { ...respawnPos };
+            char.zoneX = 1; 
+            char.zoneY = 1;
+            char.path = [];
+            needsSave = true;
+        }
 
         if (char.isDead) {
             console.log(`Character ${char.name} was dead on load. Respawning.`);
@@ -1659,8 +1759,8 @@ async function loadGameState() {
             char.combat = { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 };
             needsSave = true;
         }
-    });
-
+    };
+    
     recalculateTeamStats();
 
     if (needsSave) {
