@@ -1,5 +1,5 @@
 // js/main.js
-// The Island Update - A* Pathfinding
+// The Island Update - Axis-Priority Pathfinding
 
 // --- Game Data Import ---
 import {
@@ -1377,111 +1377,55 @@ function updateAllPlayerRegen(gameTime) {
     });
 }
 
-// --- A* Pathfinding Implementation ---
-function heuristic(a, b) {
-    // Manhattan distance on a square grid
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-}
-
-function reconstructPath(cameFrom, current) {
-    const totalPath = [current];
-    let currentKey = `${current.x},${current.y}`;
-    while (cameFrom.has(currentKey)) {
-        current = cameFrom.get(currentKey);
-        currentKey = `${current.x},${current.y}`;
-        totalPath.unshift(current);
-    }
-    return totalPath.slice(1); // Remove the starting node
-}
-
 function findPath(start, end, zoneX, zoneY) {
     if (!start || !end) return [];
-    
-    // Nodes that are already evaluated
-    const closedSet = new Set();
-    // The set of discovered nodes that are not evaluated yet.
-    const openSet = new Set([`${start.x},${start.y}`]);
-    const openSetNodes = [start];
 
-    // For node n, cameFrom[n] is the node immediately preceding it on the cheapest path from start to n currently known.
-    const cameFrom = new Map();
+    const path = [];
+    let currentX = start.x;
+    let currentY = start.y;
 
-    // For node n, gScore[n] is the cost of the cheapest path from start to n currently known.
-    const gScore = new Map();
-    gScore.set(`${start.x},${start.y}`, 0);
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
 
-    // For node n, fScore[n] := gScore[n] + heuristic(n, goal). fScore[n] represents our current best guess as to
-    // how short a path from start to finish can be if it goes through n.
-    const fScore = new Map();
-    fScore.set(`${start.x},${start.y}`, heuristic(start, end));
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
 
-    while (openSet.size > 0) {
-        let current;
-        let lowestFScore = Infinity;
-        
-        // Find node in openSet with lowest fScore
-        for(const node of openSetNodes) {
-            const nodeKey = `${node.x},${node.y}`;
-            const score = fScore.get(nodeKey) || Infinity;
-            if (score < lowestFScore) {
-                lowestFScore = score;
-                current = node;
-            }
-        }
-        
-        const currentKey = `${current.x},${current.y}`;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
 
-        if (current.x === end.x && current.y === end.y) {
-            return reconstructPath(cameFrom, current);
-        }
-
-        // Move current from open to closed set
-        openSet.delete(currentKey);
-        const currentIndex = openSetNodes.findIndex(node => node.x === current.x && node.y === current.y);
-        if (currentIndex > -1) {
-            openSetNodes.splice(currentIndex, 1);
-        }
-        closedSet.add(currentKey);
-
-        const neighbors = [
-            {x:current.x,y:current.y-1}, // up
-            {x:current.x,y:current.y+1}, // down
-            {x:current.x-1,y:current.y}, // left
-            {x:current.x+1,y:current.y}  // right
-        ];
-        
-        for (const neighbor of neighbors) {
-            const neighborKey = `${neighbor.x},${neighbor.y}`;
-            if (closedSet.has(neighborKey)) {
-                continue; // Ignore the neighbor which is already evaluated.
-            }
+    const generateSteps = (axis1, count1, axis2, count2) => {
+        for (let i = 0; i < count1; i++) {
+            if (axis1 === 'x') currentX += sx;
+            else currentY += sy;
             
-            // The neighbor is not walkable, and it's not our final destination
-            if (!isWalkable(neighbor.x, neighbor.y, zoneX, zoneY, true) && (neighbor.x !== end.x || neighbor.y !== end.y)) {
-                continue;
+            if (isWalkable(currentX, currentY, zoneX, zoneY, true) || (currentX === end.x && currentY === end.y)) {
+                path.push({ x: currentX, y: currentY });
+            } else {
+                return; // Obstacle found, stop generating path
             }
-
-            // The distance from start to a neighbor
-            const tentativeGScore = gScore.get(currentKey) + 1;
-
-            if (!openSet.has(neighborKey)) { 
-                openSet.add(neighborKey);
-                openSetNodes.push(neighbor);
-            } else if (tentativeGScore >= (gScore.get(neighborKey) || Infinity)) {
-                continue; // This is not a better path.
-            }
-
-            // This path is the best until now. Record it!
-            cameFrom.set(neighborKey, current);
-            gScore.set(neighborKey, tentativeGScore);
-            fScore.set(neighborKey, gScore.get(neighborKey) + heuristic(neighbor, end));
         }
+        for (let i = 0; i < count2; i++) {
+            if (axis2 === 'x') currentX += sx;
+            else currentY += sy;
+
+            if (isWalkable(currentX, currentY, zoneX, zoneY, true) || (currentX === end.x && currentY === end.y)) {
+                path.push({ x: currentX, y: currentY });
+            } else {
+                return; // Obstacle found
+            }
+        }
+    };
+
+    if (absDx > absDy) {
+        // More horizontal movement, so do X first
+        generateSteps('x', absDx, 'y', absDy);
+    } else {
+        // More or equal vertical movement, so do Y first
+        generateSteps('y', absDy, 'x', absDx);
     }
 
-    // Open set is empty but goal was never reached
-    return [];
+    return path;
 }
-
 
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
