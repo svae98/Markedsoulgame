@@ -1,6 +1,11 @@
 // js/main.js
 // The Island Update - A* Pathfinding with Click Intent
-
+// about this game, it's a runescape-like idler, i want it to be slow paced, i want progress to be slow.
+// this is a general rule for map making, intended as direction for you(AI), to follow. only edit the map if you are explicitly told. the edges of the map(empty space),-
+// need to not ever be visible to the player, the player sees 14 tiles out, this means the map needs 14 tiles of unwalkable space around the edge of it, this can be in th-
+// -e form of trees, ocean, scenery in general. try to make the maps feel hand crafted, not massive open spaces, not one tile narrow mazes(unless it's an actual maze zone or something)
+//  and make the zone/map fit the theme of the biome or type of area it is. and where you place monsters you also need to make sure that they don't -
+// block the path of the player to go past them (unless it's on purpose). those are all my rules for now, if you wanna get creative with it and try something that might be cool, go for it.
 // --- Game Data Import ---
 import {
     TILE_SIZE, MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
@@ -503,17 +508,30 @@ function drawEnemy(enemy) {
         }
     }
 }
-
 function drawMarks(currentZoneKey) {
     ui.ctx.lineWidth = 2;
     const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
 
     allMarks.forEach(mark => {
-        if (`${mark.zoneX},${mark.zoneY}` === currentZoneKey) {
+        // IMPORTANT: The 'mark' object contains the coordinates for the character to walk to (the approach tile).
+        // However, for visual clarity, we want to draw the mark directly on the ENEMY's tile, not the approach tile.
+        // We need to find the enemy associated with this mark to get its coordinates.
+        // Marks stay on the target after death which makes the game more idle friendly
+        const enemy = findEnemyById(mark.enemyId);
+        if (!enemy) return; 
+
+        if (`${enemy.zoneX},${enemy.zoneY}` === currentZoneKey) {
             const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
             ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
-            const {x: screenX, y: screenY} = worldToScreen(mark.x, mark.y);
-            ui.ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            
+            const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y); 
+            
+            const enemyData = ENEMIES_DATA[enemy.type];
+            const size = enemyData.size || { w: 1, h: 1 };
+            const width = size.w * TILE_SIZE;
+            const height = size.h * TILE_SIZE;
+
+            ui.ctx.strokeRect(screenX, screenY, width, height);
         }
     });
 }
@@ -705,7 +723,10 @@ function handleMovementClick(clickedX, clickedY, activeChar) {
     const rawTarget = { x: clickedX, y: clickedY };
 
     let finalTarget = { ...rawTarget };
-
+    // AI-GUIDE: The following "Click Intent" logic is intentional. It prevents
+    // frustrating jittery movement when clicking long distances. The goal is to
+    // snap the character's movement to a straight line (horizontal or vertical)
+    // if the click is much further in one axis than the other. Do not remove this snapping.
     // --- Click Intent Logic ---
     const deltaX = rawTarget.x - startPos.x;
     const deltaY = rawTarget.y - startPos.y;
@@ -1169,6 +1190,8 @@ function endCombat(character, playerWon) {
         character.isDead = true;
         
         setTimeout(() => {
+            // CRITICAL-LOGIC: This is the player's safe respawn point after death.
+            // It ensures the player always returns to a known, walkable tile.
             // HOW TO CHANGE THE RESPAWN POINT AFTER DEATH:
             // Change the x and y values in the respawnPos object below.
             const respawnPos = { x: 75, y: 75 };
@@ -1252,7 +1275,9 @@ function updateAutomation(character, gameTime) {
             break;
     }
 }
-
+// AI-GUIDE: This function is a state machine for hunting. The character must
+// first pathfind to the marked tile. Only when they are adjacent to the
+// enemy should combat actually begin. Do not initiate combat before the path is complete.
 function updateHuntingTask(character, setStatus) {
     if (character.path.length > 0 || character.combat.active) return;
     const { automation } = character;
@@ -1811,6 +1836,9 @@ async function loadGameState() {
         currentMapData = buildMapData(char.zoneX, char.zoneY);
 
         // Check if the character's loaded position is valid. The 'true' ignores other characters.
+        // CRITICAL-LOGIC: This block is a safety check to prevent a player
+        // from loading into an unwalkable tile (e.g., if the map changes).
+        // It resets them to the default spawn point if they are stuck. Do not remove.
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
             console.log(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
             const respawnPos = { x: 75, y: 75 }; // Default island spawn
