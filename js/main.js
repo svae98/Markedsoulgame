@@ -1,5 +1,5 @@
 // js/main.js
-// The Island Update - Hybrid Pathfinding
+// The Island Update - A* Pathfinding with Click Intent
 
 // --- Game Data Import ---
 import {
@@ -28,6 +28,7 @@ async function initFirebase() {
         } else {
             console.log("Running in Live Environment");
             appId = 'Markedsoulgame';
+            // This is a placeholder config. In a real environment, use secure methods to load credentials.
             firebaseConfig = {
                 apiKey: "AIzaSyBmWMKKos89f8gbzi9K6PodKZkJ5s7-Xw8",
                 authDomain: "gridfall-2661e.firebaseapp.com",
@@ -690,19 +691,58 @@ function handlePedestalClick(x, y, zoneX, zoneY) {
     }
 }
 
-function handleMovementClick(x, y, activeChar) {
-    activeChar.path = []; 
-    let targetPos = null;
-    if (isWalkable(x, y, activeChar.zoneX, activeChar.zoneY, true)) { // Ignore other characters for pathfinding destination
-        targetPos = {x, y};
+/**
+ * Handles a movement click, interpreting the user's intent to provide
+ * more natural movement for long-distance clicks.
+ * @param {number} clickedX - The raw X coordinate of the click.
+ * @param {number} clickedY - The raw Y coordinate of the click.
+ * @param {object} activeChar - The currently active character object.
+ */
+function handleMovementClick(clickedX, clickedY, activeChar) {
+    activeChar.path = []; // Clear any existing path
+
+    const startPos = activeChar.player;
+    const rawTarget = { x: clickedX, y: clickedY };
+
+    let finalTarget = { ...rawTarget };
+
+    // --- Click Intent Logic ---
+    const deltaX = rawTarget.x - startPos.x;
+    const deltaY = rawTarget.y - startPos.y;
+
+    // If the horizontal distance is significantly greater than vertical,
+    // the user likely wants to move horizontally. Snap the Y coordinate.
+    // The multiplier (e.g., * 2) creates a "cone" of intent.
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 2) {
+        finalTarget.y = startPos.y; 
     }
-    if (targetPos) {
-        const path = findPath(activeChar.player, targetPos, activeChar.zoneX, activeChar.zoneY);
+    // If the vertical distance is much greater, snap the X coordinate.
+    else if (Math.abs(deltaY) > Math.abs(deltaX) * 2) {
+        finalTarget.x = startPos.x; 
+    }
+    // Otherwise, the click is diagonal enough, so we use the raw target.
+
+    // First, try to pathfind to the 'intended' (snapped) target.
+    if (isWalkable(finalTarget.x, finalTarget.y, activeChar.zoneX, activeChar.zoneY, true)) {
+        const path = findPath(startPos, finalTarget, activeChar.zoneX, activeChar.zoneY);
         if (path && path.length > 0) {
             activeChar.path = path;
+            return; // Path found, we're done.
+        }
+    }
+    
+    // FALLBACK: If the snapped target is unwalkable or no path is found,
+    // try the raw click location as a backup. This allows for precise clicks near obstacles.
+    if (finalTarget.x !== rawTarget.x || finalTarget.y !== rawTarget.y) {
+       if (isWalkable(rawTarget.x, rawTarget.y, activeChar.zoneX, activeChar.zoneY, true)) {
+            const fallbackPath = findPath(startPos, rawTarget, activeChar.zoneX, activeChar.zoneY);
+            if (fallbackPath && fallbackPath.length > 0) {
+                activeChar.path = fallbackPath;
+            }
         }
     }
 }
+
 
 function addMark(activeChar, enemy, approachSpot) {
     const stats = getTeamStats();
@@ -1377,55 +1417,148 @@ function updateAllPlayerRegen(gameTime) {
     });
 }
 
+// --- A* Pathfinding Implementation ---
+
+/**
+ * Finds the shortest path between two points on the grid using the A* algorithm.
+ * @param {{x: number, y: number}} start - The starting position.
+ * @param {{x: number, y: number}} end - The target position.
+ * @param {number} zoneX - The current zone's X coordinate.
+ * @param {number} zoneY - The current zone's Y coordinate.
+ * @returns {Array<{x: number, y: number}>|null} The path as an array of coordinates, or null if no path is found.
+ */
 function findPath(start, end, zoneX, zoneY) {
-    if (!start || !end) return [];
+    const openSet = [];
+    const closedSet = new Set();
+    const grid = new Map();
 
-    const path = [];
-    let currentX = start.x;
-    let currentY = start.y;
-
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-
-    const sx = Math.sign(dx);
-    const sy = Math.sign(dy);
-
-    const absDx = Math.abs(dx);
-    const absDy = Math.abs(dy);
-
-    const generateSteps = (axis1, count1, axis2, count2) => {
-        for (let i = 0; i < count1; i++) {
-            if (axis1 === 'x') currentX += sx;
-            else currentY += sy;
-            
-            if (isWalkable(currentX, currentY, zoneX, zoneY, true) || (currentX === end.x && currentY === end.y)) {
-                path.push({ x: currentX, y: currentY });
-            } else {
-                return; // Obstacle found, stop generating path
-            }
-        }
-        for (let i = 0; i < count2; i++) {
-            if (axis2 === 'x') currentX += sx;
-            else currentY += sy;
-
-            if (isWalkable(currentX, currentY, zoneX, zoneY, true) || (currentX === end.x && currentY === end.y)) {
-                path.push({ x: currentX, y: currentY });
-            } else {
-                return; // Obstacle found
-            }
-        }
+    const startNode = {
+        x: start.x,
+        y: start.y,
+        g: 0,
+        h: heuristic(start, end),
+        f: heuristic(start, end),
+        parent: null,
     };
+    const startKey = `${start.x},${start.y}`;
+    grid.set(startKey, startNode);
+    openSet.push(startNode);
 
-    if (absDx > absDy) {
-        // More horizontal movement, so do X first
-        generateSteps('x', absDx, 'y', absDy);
-    } else {
-        // More or equal vertical movement, so do Y first
-        generateSteps('y', absDy, 'x', absDx);
+    while (openSet.length > 0) {
+        // Find the node with the lowest 'f' score in the open set
+        let lowestIndex = 0;
+        for (let i = 1; i < openSet.length; i++) {
+            if (openSet[i].f < openSet[lowestIndex].f) {
+                lowestIndex = i;
+            }
+        }
+        const currentNode = openSet.splice(lowestIndex, 1)[0];
+        const currentKey = `${currentNode.x},${currentNode.y}`;
+
+        // If we reached the end, reconstruct the path
+        if (currentNode.x === end.x && currentNode.y === end.y) {
+            return reconstructPath(currentNode);
+        }
+
+        closedSet.add(currentKey);
+
+        const neighbors = getNeighbors(currentNode, zoneX, zoneY);
+
+        for (const neighborPos of neighbors) {
+            const neighborKey = `${neighborPos.x},${neighborPos.y}`;
+
+            if (closedSet.has(neighborKey)) {
+                continue;
+            }
+
+            const gScore = currentNode.g + 1; // Cost is always 1 for cardinal movement
+
+            let neighborNode = grid.get(neighborKey);
+            let isNewPath = false;
+
+            if (!neighborNode) {
+                neighborNode = {
+                    x: neighborPos.x,
+                    y: neighborPos.y,
+                    g: gScore,
+                    h: heuristic(neighborPos, end),
+                    f: gScore + heuristic(neighborPos, end),
+                    parent: currentNode,
+                };
+                grid.set(neighborKey, neighborNode);
+                openSet.push(neighborNode);
+            } else if (gScore < neighborNode.g) {
+                // Found a better path to this neighbor
+                neighborNode.g = gScore;
+                neighborNode.f = gScore + neighborNode.h;
+                neighborNode.parent = currentNode;
+            }
+        }
     }
 
-    return path;
+    // No path found
+    return null;
 }
+
+/**
+ * Calculates the heuristic (estimated distance) between two points.
+ * Uses Manhattan distance, which is performant and suitable for grid movement.
+ * @param {{x: number, y: number}} a - The first point.
+ * @param {{x: number, y: number}} b - The second point.
+ * @returns {number} The estimated distance.
+ */
+function heuristic(a, b) {
+    const dx = Math.abs(a.x - b.x);
+    const dy = Math.abs(a.y - b.y);
+    return dx + dy;
+}
+
+
+/**
+ * Gets the walkable neighbors of a given node.
+ * @param {{x: number, y: number}} node - The node to get neighbors for.
+ * @param {number} zoneX - The zone X coordinate.
+ * @param {number} zoneY - The zone Y coordinate.
+ * @returns {Array<{x: number, y: number}>} An array of walkable neighbor coordinates.
+ */
+function getNeighbors(node, zoneX, zoneY) {
+    const neighbors = [];
+    const { x, y } = node;
+    // Cardinal directions only
+    const directions = [
+        { x: 0, y: -1 }, // North
+        { x: 1, y: 0 },  // East
+        { x: 0, y: 1 },  // South
+        { x: -1, y: 0 }, // West
+    ];
+
+    for (const dir of directions) {
+        const newX = x + dir.x;
+        const newY = y + dir.y;
+        if (isWalkable(newX, newY, zoneX, zoneY, true)) {
+            neighbors.push({ x: newX, y: newY });
+        }
+    }
+
+    return neighbors;
+}
+
+/**
+ * Reconstructs the path from the end node back to the start.
+ * @param {object} endNode - The final node in the path.
+ * @returns {Array<{x: number, y: number}>} The complete path.
+ */
+function reconstructPath(endNode) {
+    const path = [];
+    let currentNode = endNode;
+    while (currentNode !== null) {
+        path.push({ x: currentNode.x, y: currentNode.y });
+        currentNode = currentNode.parent;
+    }
+    // The path is from end to start, so we reverse it and remove the starting tile (character's current position)
+    return path.reverse().slice(1);
+}
+
 
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
