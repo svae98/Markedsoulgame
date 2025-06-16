@@ -64,7 +64,7 @@ let gameState = {};
 let enemies = {};
 let deadEnemies = {};
 let statPopupTimeout = null;
-let currentMapData = [];
+let currentMapData = []; // This will store the tile-type grid, not the character-based layout
 let notificationTimeout = null;
 let camera = { x: 30, y: 30, target: null, lerp: 0.1 };
 
@@ -201,8 +201,8 @@ function buildMapData(zoneX, zoneY) {
 function getDefaultCharacterState(id, name, color) {
     // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
     // Change the x and y values in the startPos object below.
-    const startPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
-    return { 
+    const startPos = { x: 31, y: 31 }; // Centered for 63x63 map (playable 35x35)
+    return {
         id, name, zoneX: 1, zoneY: 1, 
         player: { ...startPos },        
         visual: { ...startPos },       
@@ -233,12 +233,20 @@ async function initGame() {
     function resizeCanvasAndCenterCamera() {
         ui.canvas.width = ui.canvasContainer.offsetWidth;
         ui.canvas.height = ui.canvasContainer.offsetHeight;
-        // Center camera on active character if possible
-        const activeChar = getActiveCharacter && getActiveCharacter();
+        // Center camera on the middle of the current zone
+        const activeChar = getActiveCharacter();
         if (activeChar) {
-            camera.x = activeChar.player.x;
-            camera.y = activeChar.player.y;
+            const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+            const zone = worldData[zoneKey];
+            if (zone) {
+                camera.x = zone.width / 2;
+                camera.y = zone.height / 2;
+            }
+        } else { // Fallback if no active char or zone somehow
+            camera.x = (worldData['1,1']?.width || MAP_WIDTH_TILES) / 2;
+            camera.y = (worldData['1,1']?.height || MAP_HEIGHT_TILES) / 2;
         }
+        // No need to redraw here, gameLoop will handle it
     }
     resizeCanvasAndCenterCamera();
     window.addEventListener('resize', resizeCanvasAndCenterCamera);
@@ -275,14 +283,20 @@ async function initGame() {
     
     currentGameTime = performance.now(); 
     await loadGameState();
+    
     const activeChar = getActiveCharacter();
     if (activeChar) {
-        camera.x = activeChar.visual.x;
-        camera.y = activeChar.visual.y;
+        // Set initial camera to center of character's zone
+        const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+        const zone = worldData[zoneKey];
+        if (zone) {
+            camera.x = zone.width / 2;
+            camera.y = zone.height / 2;
+        }
         currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
     }
-    Object.keys(worldData).forEach(zoneKey => {
-        const [zoneX, zoneY] = zoneKey.split(',').map(Number);
+    Object.keys(worldData).forEach(zoneKey => { // Spawn enemies for all zones
+        const [zoneX, zoneY] = zoneKey.split(',').map(Number); // Ensure correct parsing
         spawnEnemiesForZone(zoneX, zoneY);
     });
     updateAllUI();
@@ -294,13 +308,13 @@ async function initGame() {
 function gameLoop(timestamp) {
     if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
 
-    const activeChar = getActiveCharacter();
-    if (activeChar) {
-        camera.target = activeChar.visual;
-        camera.x += (camera.target.x - camera.x) * camera.lerp;
-        camera.y += (camera.target.y - camera.y) * camera.lerp;
-    }
-
+    // Camera is now static, no longer follows player.
+    // const activeChar = getActiveCharacter();
+    // if (activeChar) {
+    //     camera.target = activeChar.visual;
+    //     camera.x += (camera.target.x - camera.x) * camera.lerp;
+    //     camera.y += (camera.target.y - camera.y) * camera.lerp;
+    // }
     const deltaTime = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
     accumulator += deltaTime;
@@ -397,6 +411,13 @@ function checkForGateway(character) {
             character.player = { ...entryPos };
             character.target = { ...entryPos };
             character.visual = { ...entryPos };
+            // Set camera to center of new zone
+            const newZoneKey = `${character.zoneX},${character.zoneY}`;
+            const newZone = worldData[newZoneKey];
+            if (newZone) {
+                camera.x = newZone.width / 2;
+                camera.y = newZone.height / 2;
+            }
             currentMapData = buildMapData(character.zoneX, character.zoneY);
             saveGameState();
             updateAllUI();
@@ -408,6 +429,11 @@ function draw() {
     const ctx = ui.ctx;
     ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
     const activeChar = getActiveCharacter();
+    // --- DEBUG LOG ---
+    if (activeChar) {
+        console.log(`Camera: (${camera.x.toFixed(2)}, ${camera.y.toFixed(2)}), Canvas: ${ui.canvas.width}x${ui.canvas.height}, Zone: ${activeChar.zoneX},${activeChar.zoneY}`);
+    }
+    // --- END DEBUG LOG ---
     if(!activeChar || !spriteSheet) return;
     
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
@@ -1858,7 +1884,7 @@ async function loadGameState() {
         // It resets them to the default spawn point if they are stuck. Do not remove.
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
                 console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
-                const respawnPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
+                const respawnPos = { x: 31, y: 31 }; // Centered for 63x63 map
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
@@ -1872,7 +1898,7 @@ async function loadGameState() {
             console.warn(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            const respawnPos = { x: 30, y: 30 }; // Adjusted for smaller starting island
+            const respawnPos = { x: 31, y: 31 }; // Centered for 63x63 map
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
