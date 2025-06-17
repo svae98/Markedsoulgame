@@ -25,7 +25,8 @@
 // just happen to be on monster 2 right then, he defeats it and goes immediately to the boss, but another character might be on monster 4, if monster 3 wasn't
 //  prioritised, he will have to kill monster 4, 1 and 2 before he goes to the boss. that is all to say, it's for the purpose of grouping characters if needed.
 // the mark should show up on the target itself, not adjacent to it.
-//
+// when you mark a object of another type that you have marked already (for example, you have marks on monsters and then you mark a tree), 
+// the first object type gets removed in favor of this new object, meaning you can only do one individual skill or activity at a time on each character.
 // --- Core Game Mechanics ---
 // js/gameData.js
 // The Island Update - Spritesheet Integration
@@ -82,7 +83,8 @@ export const SPRITES = {
     PATH: { sx: 128, sy: 0 },
     WALL: { sx: 0, sy: 0 },
     DEEP_WATER: { sx: 256, sy: 224 }, // Reverted to actual DEEP_WATER sprite
-    TREE: { sx: 64, sy:0 }, // Using a common tree top sprite
+    TREE: { sx: 64, sy: 0 }, // Using a common tree top sprite
+    CHOPPED_TREE: { sx: 96, sy: 32 }, // Placeholder: Using a rock sprite as a stump for now
     ROCK: { sx: 96, sy: 0 }, // Using a common rock sprite    
     FISHING_SPOT: { sx: 256, sy: 0 }, // Using water for now, was POND
     DEEP_FOREST: { sx: 0, sy: 160 }, // Using a common bush sprite
@@ -235,11 +237,13 @@ libraryPlayableCarving[17] = libraryPlayableCarving[17].substring(0,34) + "."; /
 applyMapCarving(worldData['0,1'].mapLayout, libraryPlayableCarving, 14, 14);
 
 // --- Hand-crafted map carving for The Quiet Grove ('1,0') ---
-const grovePlayableCarving = Array(35).fill("F".repeat(35)).map((row, y) => { // 35x35
-    if (y > 14 && y < 20 && row.length > 14 && row.length > 20) { // Central clearing
-        return "F".repeat(15) + " ".repeat(5) + "F".repeat(15);
-    }
-    return row;
-});
-grovePlayableCarving[34] = grovePlayableCarving[34].substring(0,17) + "." + grovePlayableCarving[34].substring(18); // Gateway path
+// New carving for The Quiet Grove: 35x35 grass area
+const grovePlayableCarving = Array(35).fill(" ".repeat(35)); // Initialize 35x35 area with grass (' ')
+
+// Ensure the gateway tile at world (31,48) is a path tile for clarity.
+// Carving coordinates: x = 31-14=17, y = 48-14=34.
+let gatewayRowGrove = grovePlayableCarving[34].split('');
+gatewayRowGrove[17] = '.'; // Make the gateway tile a path tile ('.')
+grovePlayableCarving[34] = gatewayRowGrove.join('');
+
 applyMapCarving(worldData['1,0'].mapLayout, grovePlayableCarving, 14, 14);

@@ -1,6 +1,6 @@
 // js/main.js
-// The Island Update - Spritesheet Integration
-
+// The Island Update - Resource Automation Fix
+// text file 1 begin
 // --- Game Data Import ---
 import {
     TILE_SIZE, MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
@@ -75,7 +75,6 @@ let currentGameTime = 0;
 // --- Movement and Logic Constants ---
 const LOGIC_TICK_RATE = 20; // Run logic updates 50 times per second
 const BASE_MOVEMENT_SPEED = 2.5; // Base tiles per second
-const VIEW_SCALE_FACTOR = 1.0; // Reverted to no zoom
 
 function getActiveCharacter() {
     if (!gameState.characters || gameState.activeCharacterIndex === undefined) return null;
@@ -122,15 +121,9 @@ const ui = {
     altarSoulsDisplay: document.getElementById('altar-souls-display'),
 };
 
-/**
- * Loads the spritesheet image from the assets folder.
- * Returns a promise that resolves when the image is loaded.
- * @returns {Promise<void>}
- */
 function loadSpriteSheet() {
     return new Promise((resolve, reject) => {
         spriteSheet = new Image();
-        // IMPORTANT: Make sure you have an 'images' folder with your spritesheet inside it.
         spriteSheet.src = 'images/spritesheet.png'; 
         spriteSheet.onload = () => {
             console.log("Spritesheet loaded successfully.");
@@ -169,11 +162,6 @@ function buildMapData(zoneX, zoneY) {
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         '.': TILES.PATH,
-        // Ensure any characters previously representing objects now map to a base tile
-        'T': TILES.GRASS, // Tree was on Grass
-        'R': TILES.GRASS, // Rock was on Grass
-        'P': TILES.GRASS, // Pond resource was on Grass (or will be drawn over water)
-        // Gateways and Pedestals are objects, their base tile is defined by mapLayout char at their pos.
     };
 
     const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
@@ -190,9 +178,7 @@ function buildMapData(zoneX, zoneY) {
 
 
 function getDefaultCharacterState(id, name, color) {
-    // HOW TO CHANGE THE SPAWN POINT FOR A NEW CHARACTER:
-    // Change the x and y values in the startPos object below.
-    const startPos = { x: 31, y: 31 }; // Centered for 63x63 map (playable 35x35)
+    const startPos = { x: 31, y: 31 };
     return {
         id, name, zoneX: 1, zoneY: 1, 
         player: { ...startPos },        
@@ -202,7 +188,7 @@ function getDefaultCharacterState(id, name, color) {
         movementCooldown: 0,                             
         hp: { current: 5, max: 5 },
         lastRegenTime: 0, isDead: false,
-        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastHitTime: 0 } }, 
+        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastGatherAttemptTime: 0 } }, 
         combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 } 
     };
 }
@@ -224,7 +210,8 @@ async function initGame() {
     function resizeCanvasAndCenterCamera() {
         ui.canvas.width = ui.canvasContainer.offsetWidth;
         ui.canvas.height = ui.canvasContainer.offsetHeight;
-        // Center camera on the middle of the current zone
+        ui.ctx.imageSmoothingEnabled = false;
+        
         const activeChar = getActiveCharacter();
         if (activeChar) {
             const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
@@ -233,20 +220,16 @@ async function initGame() {
                 camera.x = zone.width / 2;
                 camera.y = zone.height / 2;
             }
-        } else { // Fallback if no active char or zone somehow
-            camera.x = (worldData['1,1']?.width || MAP_WIDTH_TILES) / 2;
-            camera.y = (worldData['1,1']?.height || MAP_HEIGHT_TILES) / 2;
         }
-        // No need to redraw here, gameLoop will handle it
     }
     resizeCanvasAndCenterCamera();
     window.addEventListener('resize', resizeCanvasAndCenterCamera);
     
     try {
-        await loadSpriteSheet(); // Wait for spritesheet to load
+        await loadSpriteSheet();
     } catch {
         ui.actionStatus.textContent = "Error: Could not load assets!";
-        return; // Stop game initialization if assets fail
+        return;
     }
 
 
@@ -277,7 +260,6 @@ async function initGame() {
     
     const activeChar = getActiveCharacter();
     if (activeChar) {
-        // Set initial camera to center of character's zone
         const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
         const zone = worldData[zoneKey];
         if (zone) {
@@ -286,8 +268,8 @@ async function initGame() {
         }
         currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
     }
-    Object.keys(worldData).forEach(zoneKey => { // Spawn enemies for all zones
-        const [zoneX, zoneY] = zoneKey.split(',').map(Number); // Ensure correct parsing
+    Object.keys(worldData).forEach(zoneKey => {
+        const [zoneX, zoneY] = zoneKey.split(',').map(Number);
         spawnEnemiesForZone(zoneX, zoneY);
     });
     updateAllUI();
@@ -299,13 +281,6 @@ async function initGame() {
 function gameLoop(timestamp) {
     if (!gameState.characters) { requestAnimationFrame(gameLoop); return; }
 
-    // Camera is now static, no longer follows player.
-    // const activeChar = getActiveCharacter();
-    // if (activeChar) {
-    //     camera.target = activeChar.visual;
-    //     camera.x += (camera.target.x - camera.x) * camera.lerp;
-    //     camera.y += (camera.target.y - camera.y) * camera.lerp;
-    // }
     const deltaTime = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
     accumulator += deltaTime;
@@ -338,7 +313,7 @@ function gameLoop(timestamp) {
 
 function getEffectiveMoveSpeeds() {
     const stats = getTeamStats();
-    const speedBonus = 1 + (stats.speed * 0.01); // Each point of speed now grants 1% bonus
+    const speedBonus = 1 + (stats.speed * 0.01); 
     const effectiveTileSpeed = BASE_MOVEMENT_SPEED * speedBonus;
     return {
         stepInterval: 1000 / effectiveTileSpeed,
@@ -351,59 +326,18 @@ function updateCharacterLogic(character, logicDelta) {
         character.movementCooldown -= logicDelta;
     }
 
-    // Part 1: Handle starting a path if idle and a pending path exists.
-    // This ensures an idle character with a pending path starts moving in the same tick cooldown allows.
-    if (character.movementCooldown <= 0 && (!character.path || character.path.length === 0) && character.pendingPath && character.pendingPath.length > 0) {
-        console.log(`[${character.name}] Idle, starting pending path. Length: ${character.pendingPath.length}`);
-        character.path = character.pendingPath;
-        character.pendingPath = null;
-        // Visual target for the first step of this new path.
-        // The actual move will happen in the block below if path.length > 0.
-        if (character.path.length > 0) {
-            character.target.x = character.path[0].x;
-            character.target.y = character.path[0].y;
-        } else { // Pending path was empty
-            character.target.x = character.player.x;
-            character.target.y = character.player.y;
-            checkForGateway(character); // Check if landed on gateway
-        }
-    }
-
-    // Part 2: Handle taking a step if ready and a path exists.
     if (character.movementCooldown <= 0 && character.path && character.path.length > 0) {
         const nextStep = character.path.shift();
         character.player.x = nextStep.x;
         character.player.y = nextStep.y;
-        character.target.x = nextStep.x; // Visual target is this current step's destination
+        character.target.x = nextStep.x;
         character.target.y = nextStep.y;
-
+        
         const speeds = getEffectiveMoveSpeeds();
-        character.movementCooldown = speeds.stepInterval; // Set cooldown for THIS step
+        character.movementCooldown = speeds.stepInterval;
 
-        // Part 3: AFTER taking the step, check if a pending path needs to be activated.
-        if (character.pendingPath && character.pendingPath.length > 0) {
-            console.log(`[${character.name}] Step completed to (${character.player.x},${character.player.y}). Switching to pending path. Length: ${character.pendingPath.length}`);
-            character.path = character.pendingPath;
-            character.pendingPath = null;
-
-            if (character.path.length > 0) {
-                // The character has just arrived at nextStep (now character.player).
-                // The new visual target is the first step of the newly activated path.
-                character.target.x = character.path[0].x;
-                character.target.y = character.path[0].y;
-
-                // CRITICAL FIX for the pause:
-                // Reset movementCooldown to allow the new path's first step to be processed
-                // in the next logic tick (or very soon), rather than waiting for the full
-                // cooldown of the step just taken.
-                character.movementCooldown = 0; 
-            } else {
-                // New (pending) path was empty. Target remains current player position.
-                // (character.target was already set to character.player by the step logic above)
-                checkForGateway(character); // Check if landed on gateway
-            }
-        } else if (character.path.length === 0) { // Current path just became empty (and no pending path took over)
-            checkForGateway(character);
+        if (character.path.length === 0) {
+             checkForGateway(character);
         }
     }
 }
@@ -443,7 +377,6 @@ function checkForGateway(character) {
             character.player = { ...entryPos };
             character.target = { ...entryPos };
             character.visual = { ...entryPos };
-            // Set camera to center of new zone
             const newZoneKey = `${character.zoneX},${character.zoneY}`;
             const newZone = worldData[newZoneKey];
             if (newZone) {
@@ -467,11 +400,11 @@ function draw() {
     const zone = worldData[zoneKey];
     if (!zone) return;
 
-    const zoneWidth = zone.width || MAP_WIDTH_TILES;
-    const zoneHeight = zone.height || MAP_HEIGHT_TILES;
+    const zoneWidth = zone.width;
+    const zoneHeight = zone.height;
     
-    const halfWidth = (ui.canvas.width / 2 / TILE_SIZE); // Removed VIEW_SCALE_FACTOR
-    const halfHeight = (ui.canvas.height / 2 / TILE_SIZE); // Removed VIEW_SCALE_FACTOR
+    const halfWidth = (ui.canvas.width / 2 / TILE_SIZE);
+    const halfHeight = (ui.canvas.height / 2 / TILE_SIZE);
     const startCol = Math.floor(camera.x - halfWidth);
     const endCol = Math.ceil(camera.x + halfWidth);
     const startRow = Math.floor(camera.y - halfHeight);
@@ -485,24 +418,13 @@ function draw() {
         }
     }
 
-    // Draw objects on top of base tiles
     if (zone.resources) {
         zone.resources.forEach(resource => {
-            // Only draw if within the current viewable area for minor optimization
             if (resource.x >= startCol && resource.x <= endCol && resource.y >= startRow && resource.y <= endRow) {
                 drawResourceObject(resource);
             }
         });
     }
-    if (zone.pedestals) {
-        zone.pedestals.forEach(pedestal => {
-            if (pedestal.x >= startCol && pedestal.x <= endCol && pedestal.y >= startRow && pedestal.y <= endRow) {
-                drawStaticObject(pedestal, SPRITES.PEDESTAL);
-            }
-        });
-    }
-    // Gateways are typically interactive points on walkable tiles; they might not need a separate sprite
-    // unless you want a visual marker. If so, draw them similarly to pedestals.
     
     if(enemies[zoneKey]) {
         for(const enemyId in enemies[zoneKey]) {
@@ -518,9 +440,8 @@ function draw() {
 }
 
 function worldToScreen(worldX, worldY) {
-    // Ensure integer pixel positions to avoid seams
-    const screenX = Math.round((worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2); // Use TILE_SIZE directly
-    const screenY = Math.round((worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2); // Use TILE_SIZE directly
+    const screenX = Math.round((worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2);
+    const screenY = Math.round((worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2);
     return { x: screenX, y: screenY };
 }
 
@@ -531,48 +452,56 @@ function drawSprite(sprite, destX, destY, destW = TILE_SIZE, destH = TILE_SIZE) 
     const sy = sprite.sy;
     const sw = sprite.sw || TILE_SIZE;
     const sh = sprite.sh || TILE_SIZE;
-    // Draw at integer positions to prevent seams
-    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), Math.round(destW), Math.round(destH)); // Use destW, destH directly
+    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), Math.round(destW), Math.round(destH));
 }
 
 function drawTile(x, y, zoneX, zoneY) {
     const { x: drawX, y: drawY } = worldToScreen(x, y);
-    const ctx = ui.ctx;
-
     const tileType = currentMapData[y]?.[x];
     if (tileType === undefined) return;
     
     let sprite;
     switch(tileType) {
         case TILES.GRASS:
-            // Use a pseudo-random but consistent index based on tile coordinates
-            // This makes the grass varied without flickering every frame
             const grassVariationCount = SPRITES.GRASS.length;
-            const tileHash = (x * 19 + y * 71); // Simple hash for variety
+            const tileHash = (x * 19 + y * 71);
             sprite = SPRITES.GRASS[tileHash % grassVariationCount];
             break;
         case TILES.WALL: sprite = SPRITES.WALL; break;
         case TILES.DEEP_WATER: sprite = SPRITES.DEEP_WATER; break;
         case TILES.DEEP_FOREST: sprite = SPRITES.DEEP_FOREST; break;
         case TILES.PATH: sprite = SPRITES.PATH; break;
-        default: sprite = SPRITES.GRASS[0]; // Default to grass if unknown
+        default: sprite = SPRITES.GRASS[0];
     }
     
-    // For larger tiles like trees, we need to adjust the drawing position
-    const baseDrawWidth = sprite.sw || TILE_SIZE; // Use sprite's own width if defined
-    const baseDrawHeight = sprite.sh || TILE_SIZE; // Use sprite's own height if defined
-    const xOffset = (baseDrawWidth - TILE_SIZE) / 2; // Centering offset based on TILE_SIZE
-    const yOffset = (baseDrawHeight - TILE_SIZE);   // Anchor to bottom based on TILE_SIZE
-
-    drawSprite(sprite, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight); // Removed VIEW_SCALE_FACTOR from offset application
+    const drawWidth = sprite.sw || TILE_SIZE;
+    const drawHeight = sprite.sh || TILE_SIZE;
+    drawSprite(sprite, drawX, drawY, drawWidth, drawHeight);
 }
+
 
 function drawResourceObject(resource) {
     const resourceDef = RESOURCE_DATA[resource.type];
     if (!resourceDef) return;
 
-    let spriteToDraw = SPRITES[resource.type.toUpperCase()]; // e.g., SPRITES.TREE, SPRITES.ROCK
-    if (resource.type === 'FISHING_SPOT') spriteToDraw = SPRITES.FISHING_SPOT; 
+    let spriteToDraw;
+    const isDepleted = resource.nextAvailableTime && currentGameTime < resource.nextAvailableTime;
+
+    if (isDepleted) {
+        const depletedSpriteKey = `DEPLETED_${resource.type.toUpperCase()}`;
+        if (SPRITES[depletedSpriteKey]) {
+            spriteToDraw = SPRITES[depletedSpriteKey];
+        } else if (resource.type === 'TREE' && SPRITES.CHOPPED_TREE) {
+            spriteToDraw = SPRITES.CHOPPED_TREE;
+        } else {
+            spriteToDraw = SPRITES[resource.type.toUpperCase()];
+            if (spriteToDraw) ui.ctx.globalAlpha = 0.5;
+        }
+    } else {
+        spriteToDraw = SPRITES[resource.type.toUpperCase()];
+    }
+    
+    if (resource.type === 'FISHING_SPOT' && SPRITES.FISHING_SPOT) spriteToDraw = SPRITES.FISHING_SPOT;
 
     if (!spriteToDraw) return;
 
@@ -580,20 +509,12 @@ function drawResourceObject(resource) {
     const baseDrawWidth = spriteToDraw.sw || TILE_SIZE;
     const baseDrawHeight = spriteToDraw.sh || TILE_SIZE;
     const xOffset = (baseDrawWidth - TILE_SIZE) / 2;
-    const yOffset = (baseDrawHeight - TILE_SIZE); // Anchor to bottom
-
-    drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight); // Removed VIEW_SCALE_FACTOR
-}
-
-function drawStaticObject(object, spriteToDraw) {
-    if (!spriteToDraw) return;
-    const { x: drawX, y: drawY } = worldToScreen(object.x, object.y);
-    const baseDrawWidth = spriteToDraw.sw || TILE_SIZE;
-    const baseDrawHeight = spriteToDraw.sh || TILE_SIZE;
-    const xOffset = (baseDrawWidth - TILE_SIZE) / 2;
     const yOffset = (baseDrawHeight - TILE_SIZE);
-    drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight); // Removed VIEW_SCALE_FACTOR
+
+    drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
+    if (isDepleted && spriteToDraw && ui.ctx.globalAlpha !== 1.0) ui.ctx.globalAlpha = 1.0;
 }
+
 
 function drawEnemy(enemy) {
     const enemyData = ENEMIES_DATA[enemy.type];
@@ -613,10 +534,7 @@ function drawMarks(currentZoneKey) {
     const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
 
     allMarks.forEach(mark => {
-        // IMPORTANT: The 'mark' object contains the coordinates for the character to walk to (the approach tile).
-        // However, for visual clarity, we want to draw the mark directly on the ENEMY's tile, not the approach tile.
-        // We need to find the enemy associated with this mark to get its coordinates.
-        const enemy = findEnemyById(mark.enemyId);
+        const enemy = findEnemyById(mark.entityId);
         if (!enemy) return; 
 
         if (`${enemy.zoneX},${enemy.zoneY}` === currentZoneKey) {
@@ -694,9 +612,6 @@ function getTileFromClick(e) {
     const rect = ui.canvas.getBoundingClientRect(); 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    // With VIEW_SCALE_FACTOR = 1.0, this calculation is direct.
-    // camera.x and camera.y represent the center of the view in world coordinates.
-    // (ui.canvas.width / 2) is the screen center in pixels.
     const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / TILE_SIZE) + (screenX / TILE_SIZE) );
     const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / TILE_SIZE) + (screenY / TILE_SIZE) );
     return {x: worldX, y: worldY};
@@ -712,7 +627,8 @@ function getEnemyAt(x, y, zoneKey) {
     } 
     return null; 
 }
-
+// text file 1 end
+// text file 2 begin
 function getResourceNodeAt(x, y, zoneX, zoneY) {
     const zone = worldData[`${zoneX},${zoneY}`];
     if (!zone || !zone.resources) return null;
@@ -735,35 +651,25 @@ function handleKeydown(e) {
 }
 
 function initiateMoveToEntity(character, entity) {
-    console.log(`[${character.name}] initiateMoveToEntity for ${entity.type} ID: ${entity.id} at (${entity.x},${entity.y}) in zone (${character.zoneX},${character.zoneY})`);
-    character.path = []; // Clear existing path
+    character.path = []; 
     const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
-    if (!entityData) {
-        console.log(`[${character.name}] Unknown entity type for ID: ${entity.id}`);
-        if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = "Unknown entity type.";
-        return;
-    }
+    if (!entityData) return;
 
     let targetPos;
-    // For monsters, findWalkableNeighborForEntity considers reserved spots if any.
-    // For resources, we just need any adjacent walkable tile.
-    if (ENEMIES_DATA[entity.type]) { // It's a monster
-        console.log(`[${character.name}] Finding walkable neighbor for MONSTER ${entity.id}`);
+    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : character.zoneX;
+    const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : character.zoneY;
+
+    if (ENEMIES_DATA[entity.type]) {
         targetPos = findWalkableNeighborForEntity(entity, character.player);
-    } else { // It's a resource
-        // Pass character's current zone as context for the resource
-        const neighbors = getWalkableNeighborsForEntity(entity, false, character.zoneX, character.zoneY);
+    } else { 
+        const neighbors = getWalkableNeighborsForEntity(entity, false, entityZoneX, entityZoneY);
         if (neighbors.length > 0) {
-            // Sort by distance to character to pick the closest one
             neighbors.sort((a, b) => {
-                // console.log(`[${character.name}] Sorting neighbors for RESOURCE ${entity.id}. Neighbor A: (${a.x},${a.y}), Neighbor B: (${b.x},${b.y})`); // Can be verbose
-                // Ensure player object is valid for heuristic calculation
                 if (!character || !character.player) return 0;
                 const distA = heuristic(character.player, a);
                 const distB = heuristic(character.player, b);
                 return distA - distB;
             });
-
             targetPos = neighbors[0];
         }
     }
@@ -772,12 +678,7 @@ function initiateMoveToEntity(character, entity) {
         const path = findPath(character.player, targetPos, character.zoneX, character.zoneY);
         if (path && path.length > 0) {
             character.path = path;
-            if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Walking to ${entityData.name}...`;
-        } else {
-            if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Can't find path to ${entityData.name}.`;
         }
-    } else {
-        if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `No approach spot for ${entityData.name}.`;
     }
 }
 
@@ -789,45 +690,24 @@ function handleLeftClick(e) {
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
     const enemy = getEnemyAt(x, y, zoneKey);
     const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
-    const tileType = currentMapData[y]?.[x];
-
-    if (enemy) {
-        handleMonsterClick(enemy); // Show tooltip regardless of click type
-        if (e.shiftKey) {
-            // AI-NOTE: Shift-Left-clicking an enemy uses the marking system.
-            handleMarking(enemy);
-        } else {
-            initiateMoveToEntity(activeChar, enemy); // Normal left-click moves to attack
-        }
-        return; // Click handled
-    } else if (resource) {
-        handleResourceClick(resource); // Show tooltip
-        // AI-NOTE: Queued Path Interruption: initiateMoveToEntity will handle setting pendingPath if already moving.
-        if (e.shiftKey) {
-            // AI-NOTE: Shift-Left-clicking a resource now uses the marking system.
-            handleMarking(resource);
-        } else {
-            initiateMoveToEntity(activeChar, resource); // Normal left-click moves to gather
-        }
-        return; // Click handled
-    } else if (tileType === TILES.PEDESTAL) {
-        handlePedestalClick(x, y, activeChar.zoneX, activeChar.zoneY);
-        return; // Click handled
+    
+    if (e.shiftKey) { 
+        handleMarking(enemy || resource);
+        return;
     }
     
-    // If we reach here, it means an empty/non-interactive tile was clicked.
-    // Handle stopping automation if active.
-    if (activeChar.automation.active) {
-        // Stop any type of automation if clicking on empty ground
-        if (!enemy && !resource) {
-            stopAutomation(activeChar);
-            // After stopping, allow movement to the clicked empty tile.
-            // The handleMovementClick below will now correctly queue if the stopAutomation itself
-            // didn't immediately clear the path (e.g., if it was mid-step).
-        }
-        // If hunting, it's already handled by the block at the top of the function.
+    if (enemy) {
+        initiateMoveToEntity(activeChar, enemy);
+        return;
     }
-    // AI-NOTE: Queued Path Interruption: handleMovementClick will handle setting pendingPath if already moving.
+    if (resource) {
+        initiateMoveToEntity(activeChar, resource);
+        return;
+    }
+    
+    if (activeChar.automation.active) {
+        stopAutomation(activeChar);
+    }
     handleMovementClick(x, y, activeChar);
 }
 
@@ -850,182 +730,83 @@ function handleResourceClick(resource) {
      showStatPopup(resource.x, resource.y, resourceData.name, `Level ${resourceData.levelReq} ${resourceData.skill}`);
 }
 
-function handlePedestalClick(x, y, zoneX, zoneY) {
-    const zone = worldData[`${zoneX},${zoneY}`];
-    if (!zone || !zone.pedestals) return;
-    const pedestalData = zone.pedestals.find(p => p.x === x && p.y === y);
-    if (!pedestalData) return;
-    const itemDropId = Object.keys(ITEM_DROP_DATA).find(id => ITEM_DROP_DATA[id].pedestalId === pedestalData.id);
-    if (itemDropId && gameState.collectedItemDrops.includes(itemDropId)) {
-        const itemData = ITEM_DROP_DATA[itemDropId];
-        showStatPopup(x, y, itemData.name, itemData.description);
-    }
-}
-
-/**
- * Handles a movement click, interpreting the user's intent and finding the
- * best possible destination even if the clicked tile is unwalkable.
- * @param {number} clickedX - The raw X coordinate of the click.
- * @param {number} clickedY - The raw Y coordinate of the click.
- * @param {object} activeChar - The currently active character object.
- */
 function handleMovementClick(clickedX, clickedY, activeChar) {
-    // AI-NOTE: Path is cleared/set to pendingPath only if a new valid path is found, to support queued movement and prevent interruption on invalid clicks.
-
-    const startPos = activeChar.player;
-    const rawTarget = { x: clickedX, y: clickedY };
-
-    let finalTarget = { ...rawTarget };
-
-    // AI-GUIDE: The following "Click Intent" logic is intentional. It prevents
-    // frustrating jittery movement when clicking long distances. The goal is to
-    // snap the character's movement to a straight line (horizontal or vertical)
-    // if the click is much further in one axis than the other. Do not remove this snapping.
-    const deltaX = rawTarget.x - startPos.x;
-    const deltaY = rawTarget.y - startPos.y;
-
-    if (Math.abs(deltaX) > Math.abs(deltaY) * 2) {
-        finalTarget.y = startPos.y; 
-    } else if (Math.abs(deltaY) > Math.abs(deltaX) * 2) {
-        finalTarget.x = startPos.x; 
-    }
-    
     let destination = null;
-
-    // First, check if the intended (snapped) target is walkable.
-    if (isWalkable(finalTarget.x, finalTarget.y, activeChar.zoneX, activeChar.zoneY, true)) {
-        destination = finalTarget;
-    } 
-    // If not, fall back to the raw clicked position.
-    else if (isWalkable(rawTarget.x, rawTarget.y, activeChar.zoneX, activeChar.zoneY, true)) {
-        destination = rawTarget;
-    }
-    // If both are unwalkable, find the closest walkable neighbor to the intended target.
-    else {
-        const neighbors = getNeighbors(finalTarget, activeChar.zoneX, activeChar.zoneY);
-
+    if (isWalkable(clickedX, clickedY, activeChar.zoneX, activeChar.zoneY, true)) {
+        destination = {x: clickedX, y: clickedY};
+    } else {
+        const neighbors = getNeighbors({x: clickedX, y: clickedY}, activeChar.zoneX, activeChar.zoneY);
         if (neighbors.length > 0) {
-            // Find the neighbor closest to the character's start position to path to.
-            neighbors.sort((a, b) => {
-                const distA = heuristic(startPos, a);
-                const distB = heuristic(startPos, b);
-                return distA - distB;
-            });
+            neighbors.sort((a, b) => heuristic(activeChar.player, a) - heuristic(activeChar.player, b));
             destination = neighbors[0];
         }
     }
 
-    // If we found a valid destination, find and set the path.
     if (destination) {
-        const path = findPath(startPos, destination, activeChar.zoneX, activeChar.zoneY);
+        const path = findPath(activeChar.player, destination, activeChar.zoneX, activeChar.zoneY);
         if (path && path.length > 0) {
-            // AI-NOTE: Path Interruption Logic - Queued Movement
-            // If already moving along a path, set this as the pending path. Otherwise, start immediately.
-            if (activeChar.path && activeChar.path.length > 0) {
-                activeChar.pendingPath = path;
-                console.log(`[${activeChar.name}] Queued new path to (${destination.x},${destination.y}). Length: ${path.length}`);
-            } else {
-                activeChar.path = path; // Start this new path immediately
-                console.log(`[${activeChar.name}] Starting new path to (${destination.x},${destination.y}). Length: ${path.length}`);
-            }
+            activeChar.path = path;
         }
-    } else {
-        // AI-NOTE: No valid destination for click, current path is NOT interrupted, pendingPath is not set.
     }
 }
 
-/**
- * Adds a mark to the character's automation list.
- * Manages task switching if the new mark is of a different type.
- * @param {object} activeChar - The character to add the mark to.
- * @param {object} entity - The monster or resource object to mark.
- * @param {object} approachSpot - The {x, y} coordinates to approach the entity.
- * @param {string} taskForMark - The task associated with this mark (e.g., 'hunting', 'woodcutting').
- */
+
 function addMark(activeChar, entity, approachSpot, taskForMark) {
     const stats = getTeamStats();
 
-    // If the new mark's task is different from the current active task, clear old marks and switch task.
-    if (activeChar.automation.task !== taskForMark) {
-        if (activeChar.automation.active) { // If actively doing something else
-            stopAutomation(activeChar); // Stop current task first
-        }
-        activeChar.automation.markedTiles = []; // Clear all previous marks
-        activeChar.automation.task = taskForMark;
-        console.log(`[${activeChar.name}] Switched task to ${taskForMark}. Cleared previous marks.`);
+    if (activeChar.automation.task !== null && activeChar.automation.task !== taskForMark) {
+        stopAutomation(activeChar);
     }
 
     if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
-        const removedMark = activeChar.automation.markedTiles.shift();
-        // If the removed mark was the one being actively pursued for combat, end combat.
-        if(activeChar.combat.active && activeChar.combat.targetId === removedMark.entityId && removedMark.task === 'hunting') {
-             forceEndCombat(activeChar);
-        }
-        console.log(`[${activeChar.name}] Mark limit reached. Removed oldest mark for entity ${removedMark.entityId}.`);
+        activeChar.automation.markedTiles.shift();
     }
-
-    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : activeChar.zoneX; // Resources don't have zoneX/Y on their object
+    
+    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : activeChar.zoneX;
     const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : activeChar.zoneY;
 
     activeChar.automation.markedTiles.push({ 
         ...approachSpot, 
         entityId: entity.id, 
-        task: taskForMark, // Store the task type with the mark
+        task: taskForMark,
         zoneX: entityZoneX, 
         zoneY: entityZoneY 
     });
 
-    startAutomation(activeChar, taskForMark); // This will set active=true and state=IDLE
-    const entityName = ENEMIES_DATA[entity.type]?.name || RESOURCE_DATA[entity.type]?.name || "Unknown Entity";
-    showNotification(`Marked ${entityName} for ${activeChar.name}. (${taskForMark})`);
+    startAutomation(activeChar, taskForMark);
+    const entityName = ENEMIES_DATA[entity.type]?.name || RESOURCE_DATA[entity.type]?.name;
+    showNotification(`Marked ${entityName} for ${activeChar.name}.`);
 }
 
-/**
- * Handles marking an entity (monster or resource).
- * Toggles the mark, manages task switching, and updates UI.
- * @param {object} entity - The monster or resource object that was shift-clicked.
- */
 function handleMarking(entity) {
     const activeChar = getActiveCharacter();
     if (!entity || !activeChar) return;
-    activeChar.path = []; // Stop current movement
+    activeChar.path = [];
 
     let taskForMark;
-    let entityName = "Unknown Entity";
+    let entityName;
     if (ENEMIES_DATA[entity.type]) {
         taskForMark = 'hunting';
         entityName = ENEMIES_DATA[entity.type].name;
     } else if (RESOURCE_DATA[entity.type]) {
-        taskForMark = RESOURCE_DATA[entity.type].skill; // e.g., 'woodcutting', 'mining'
+        taskForMark = RESOURCE_DATA[entity.type].skill;
         entityName = RESOURCE_DATA[entity.type].name;
-    } else {
-        showNotification("Cannot mark this type of entity.");
-        return;
-    }
+    } else return;
 
-    const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.entityId === entity.id && m.task === taskForMark);
+    const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.entityId === entity.id);
 
     if (existingMarkForChar) {
-         // Unmark: Remove the specific mark
-         const markIndex = activeChar.automation.markedTiles.findIndex(m => m.entityId === entity.id && m.task === taskForMark);
+         const markIndex = activeChar.automation.markedTiles.findIndex(m => m.entityId === entity.id);
          if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
-         if (taskForMark === 'hunting' && activeChar.combat.active && activeChar.combat.targetId === entity.id) forceEndCombat(activeChar);
-         if (activeChar.automation.markedTiles.length === 0 || activeChar.automation.markedTiles.every(m => m.task !== taskForMark)) {
-            // If all marks are gone, or all remaining marks are for a different task type
-            stopAutomation(activeChar); // This will also clear the task if no marks of that type remain.
-         }
-         showNotification(`Unmarked ${entityName} for ${activeChar.name}.`);
+         if (activeChar.combat.active && activeChar.combat.targetId === entity.id) forceEndCombat(activeChar);
+         if (activeChar.automation.markedTiles.length === 0) stopAutomation(activeChar);
+         showNotification(`Unmarked ${entityName}.`);
     } else {
-        // Mark: Add new mark
-        // For resources, pass activeChar's zone as they don't have their own zoneX/Y
-        const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : activeChar.zoneX;
-        const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : activeChar.zoneY;
-        const closestSpot = findWalkableNeighborForEntity(entity, activeChar.player, [], entityZoneX, entityZoneY);
-
+        const closestSpot = findWalkableNeighborForEntity(entity, activeChar.player);
         if(closestSpot) {
             addMark(activeChar, entity, closestSpot, taskForMark);
         } else {
-            showNotification(`No valid approach for ${entityName}.`);
+            showNotification(`No approach spot for ${entityName}.`);
         }
     }
     saveGameState();
@@ -1033,17 +814,11 @@ function handleMarking(entity) {
 }
 
 function handleMapMarking(enemy, activeChar) {
-    // Map marking is typically for bosses/enemies. Resources are usually marked in-world.
-    const availableSpots = getWalkableNeighborsForEntity(enemy, true, enemy.zoneX, enemy.zoneY);
-    if (availableSpots.length > 0) {
-        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player, [], enemy.zoneX, enemy.zoneY);
-        if (closestSpot) {
-            addMark(activeChar, enemy, closestSpot, 'hunting'); // Explicitly 'hunting' for map marks
-            saveGameState();
-            updateAllUI();
-        } else {
-            showNotification(`${enemy.name} has no open attack spots!`);
-        }
+    const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player, [], enemy.zoneX, enemy.zoneY);
+    if (closestSpot) {
+        addMark(activeChar, enemy, closestSpot, 'hunting');
+        saveGameState();
+        updateAllUI();
     } else {
         showNotification(`${enemy.name} has no open attack spots!`);
     }
@@ -1054,50 +829,16 @@ function handleRightClick(e) {
     const activeChar = getActiveCharacter();
     if (!activeChar || activeChar.isDead) return;
     ui.contextMenu.innerHTML = '';
-    const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
-    const anyCharHasHuntingTask = gameState.characters.some(c => c.automation.task === 'hunting');
-
-    if (activeChar.automation.active) { // Generic stop button if any task is active
+    
+    if (activeChar.automation.active) {
         addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
     }
-    if (activeChar.automation.markedTiles.length > 0) { // Clear this character's marks, regardless of type
+    if (activeChar.automation.markedTiles.length > 0) {
         addContextMenuButton('Clear My Marks', () => {
             stopAutomation(activeChar); 
-            activeChar.automation.markedTiles = [];
-            saveGameState();
         });
     }
-    const anyCharHasAnyMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
-    if (anyCharHasAnyMarks) {
-        addContextMenuButton('Clear All Marks', () => {
-            gameState.characters.forEach(char => {
-                stopAutomation(char); 
-                char.automation.markedTiles = [];
-            });
-            saveGameState();
-        });
-    }
-    // Specific "Stop All X" buttons can be added if desired, e.g.:
-    // if (anyCharHasHuntingTask) {
-    //     addContextMenuButton('Stop All Hunting', () => {
-    //         gameState.characters.forEach(char => {
-    //             if (char.automation.task === 'hunting') {
-    //                 stopAutomation(char); // stopAutomation also clears marks if task becomes null
-    //             }
-    //         });
-    //     });
-    // }
-    if (anyCharHasSkillingTask) {
-        addContextMenuButton('Stop All Skilling', () => {
-            gameState.characters.forEach(char => {
-                if (['woodcutting', 'mining', 'fishing'].includes(char.automation.task)) {
-                    stopAutomation(char);
-                }
-            });
-            saveGameState();
-        });
-    }
-
+    
     if (ui.contextMenu.children.length > 0) {
         const rect = ui.canvas.getBoundingClientRect();
         ui.contextMenu.style.left = `${e.clientX - rect.left}px`;
@@ -1436,7 +1177,7 @@ function endCombat(character, playerWon) {
             // It ensures the player always returns to a known, walkable tile.
             // HOW TO CHANGE THE RESPAWN POINT AFTER DEATH:
             // Change the x and y values in the respawnPos object below.
-            const respawnPos = { x: 20, y: 20 };
+            const respawnPos = { x: 31, y: 31 };
             character.player = { ...respawnPos };
             character.visual = { ...respawnPos };
             character.target = { ...respawnPos };
@@ -1453,7 +1194,8 @@ function endCombat(character, playerWon) {
     updateAllUI();
     saveGameState();
 }
-
+// text file 2 end
+// text file 3 begin
 function recalculateTeamStats() {
     let allBonuses = { ADD_MAX_HP: 0 };
     if(gameState.collectedItemDrops) {
@@ -1522,10 +1264,10 @@ function gainSkillXp(skill, amount) {
  * Determines which specific update function to call based on the character's current task.
  */
 function updateAutomation(character, gameTime) { 
-    if (!character.automation.active || character.combat.active || character.isDead || character.path.length > 0) return;
+    if (!character.automation.active || character.combat.active || (character.path && character.path.length > 0)) return;
     const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
     
-    // Unified automation logic based on marks
+    // This is the unified function for both hunting and skilling
     updateMarkedEntityAutomation(character, gameTime, setStatus);
 }
 
@@ -1537,131 +1279,110 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const { automation, player, zoneX, zoneY } = character;
 
     if (automation.markedTiles.length === 0) {
-        stopAutomation(character); // This will clear task if no marks left for it
-        setStatus("No targets marked.");
+        stopAutomation(character);
+        setStatus("Idle");
         return;
     }
 
-    const currentMark = automation.markedTiles[0]; // Always process the first mark
+    const currentMark = automation.markedTiles[0];
     let targetEntity;
     let entityData;
-    let entityDisplayName;
+    let entityName;
+    const isHunting = currentMark.task === 'hunting';
 
-    // Resolve the target entity based on the mark's task
-    if (currentMark.task === 'hunting') {
+    if (isHunting) {
         targetEntity = findEnemyById(currentMark.entityId);
-        if (targetEntity) {
-            entityData = ENEMIES_DATA[targetEntity.type];
-            entityDisplayName = entityData.name;
-        }
-    } else { // Skilling tasks ('woodcutting', 'mining', 'fishing')
+        entityData = targetEntity ? ENEMIES_DATA[targetEntity.type] : null;
+    } else {
         targetEntity = findResourceById(currentMark.entityId);
-        if (targetEntity) {
-            entityData = RESOURCE_DATA[targetEntity.type];
-            entityDisplayName = entityData.name;
-        }
+        entityData = targetEntity ? RESOURCE_DATA[targetEntity.type] : null;
     }
-
-    // Handle if the target entity doesn't exist (e.g., dead monster, depleted resource)
+    
     if (!targetEntity) {
-        if (currentMark.task === 'hunting' && isEnemyDead(currentMark.entityId)) {
-            setStatus(`Waiting for ${currentMark.entityId.split('_')[0]} to respawn...`);
-            // AI-NOTE: For hunting, we keep the mark and wait for respawn if it's the only/current one.
-        } else {
-            setStatus(`Target ${currentMark.entityId} (task: ${currentMark.task}) not found. Removing mark.`);
-            automation.markedTiles.shift(); // Remove invalid/completed mark
-            if (automation.markedTiles.length === 0) stopAutomation(character);
-            else if (automation.markedTiles.every(m => m.task !== currentMark.task)) stopAutomation(character, false); // Stop old task, new one will pick up
-            else automation.state = 'IDLE';
-        }
+        setStatus(`Target not found. Removing mark.`);
+        automation.markedTiles.shift();
         return;
     }
 
-    // Handle zone transitions if necessary
-    if (character.zoneX !== currentMark.zoneX || character.zoneY !== currentMark.zoneY) {
-        setStatus(`Traveling to ${entityDisplayName}'s zone...`);
-        character.path = findPathToZone(character, currentMark.zoneX, currentMark.zoneY) || [];
-        return; // Movement will be handled by game loop
+    entityName = entityData.name;
+    const entityZoneX = targetEntity.zoneX !== undefined ? targetEntity.zoneX : zoneX;
+    const entityZoneY = targetEntity.zoneY !== undefined ? targetEntity.zoneY : zoneY;
+
+    if (zoneX !== entityZoneX || zoneY !== entityZoneY) {
+        setStatus(`Traveling to ${entityName}'s zone...`);
+        character.path = findPathToZone(character, entityZoneX, entityZoneY) || [];
+        return;
     }
 
-    // Character is in the correct zone. Now check adjacency to the approach spot.
-    // currentMark.x, currentMark.y is the approach spot.
-    if (player.x === currentMark.x && player.y === currentMark.y) {
-        // Character is at the approach spot, time to interact
-        setStatus(`Interacting with ${entityDisplayName}...`);
-        if (currentMark.task === 'hunting') {
+    if (isAdjacent(player, targetEntity, entityZoneX, entityZoneY)) {
+        if (isHunting) {
+             if (isEnemyDead(targetEntity.id)) {
+                setStatus(`Waiting for ${entityName} to respawn...`);
+                // Cycle the mark so we can check other targets
+                automation.markedTiles.push(automation.markedTiles.shift());
+                return;
+            }
             if (!character.combat.active) {
                 character.combat.active = true;
                 character.combat.targetId = targetEntity.id;
                 character.combat.isPlayerTurn = true;
                 character.combat.lastUpdateTime = gameTime;
             }
-        } else { // Skilling task
-            // AI-NOTE: Resource Gathering Logic
+        } else { // Skilling logic
             const resourceDef = RESOURCE_DATA[targetEntity.type];
-            if (resourceDef) { // Ensure resourceDef is found
-                if (gameTime - (automation.gatheringState.lastHitTime || 0) >= resourceDef.time) {
-                    automation.gatheringState.lastHitTime = gameTime;
-                    gainSkillXp(resourceDef.skill, resourceDef.xp);
-                    if (resourceDef.item) {
-                        gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
-                        showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
-                        if (!ui.inventoryModal.classList.contains('hidden')) renderInventory();
-                    }
-                    saveGameState();
-                    showNotification(`${character.name} gathered from ${entityDisplayName}.`);
-                    automation.markedTiles.shift(); // Resource mark is consumed upon successful gather
-                    if (automation.markedTiles.length === 0) stopAutomation(character);
-                    else automation.state = 'IDLE'; // Process next mark
-                } else {
-                    setStatus(`Gathering ${entityDisplayName}...`);
+            if (targetEntity.nextAvailableTime && gameTime < targetEntity.nextAvailableTime) {
+                setStatus(`Waiting for ${entityName} to replenish...`);
+                automation.markedTiles.push(automation.markedTiles.shift());
+                return;
+            }
+
+            if (automation.targetId !== targetEntity.id) {
+                automation.targetId = targetEntity.id;
+                automation.gatheringState.lastGatherAttemptTime = 0;
+            }
+            
+            setStatus(`Gathering ${entityName}...`);
+
+            if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
+                automation.gatheringState.lastGatherAttemptTime = gameTime;
+                targetEntity.nextAvailableTime = gameTime + resourceDef.time;
+                
+                gainSkillXp(resourceDef.skill, resourceDef.xp);
+                if (resourceDef.item) {
+                    gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
+                    showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
                 }
-            } else {
-                setStatus(`Error: Could not find data for resource ${targetEntity.type}. Removing mark.`);
-                automation.markedTiles.shift();
-                if (automation.markedTiles.length === 0) stopAutomation(character); else automation.state = 'IDLE';
+                saveGameState();
+                
+                automation.markedTiles.push(automation.markedTiles.shift());
+                automation.targetId = null;
             }
         }
     } else {
-        // Not at the approach spot, need to move
-        setStatus(`Walking to ${entityDisplayName}...`);
-        character.path = findPath(player, { x: currentMark.x, y: currentMark.y }, zoneX, zoneY) || [];
-        if (!character.path || character.path.length === 0) { // Pathfinding failed
-            setStatus(`Cannot find path to ${entityDisplayName}. Removing mark.`);
+        setStatus(`Walking to ${entityName}...`);
+        const path = findPath(player, currentMark, zoneX, zoneY);
+        if (path && path.length > 0) {
+            character.path = path;
+        } else {
+            setStatus(`Cannot path to ${entityName}. Skipping.`);
             automation.markedTiles.shift();
-            if (automation.markedTiles.length === 0) stopAutomation(character);
-            else automation.state = 'IDLE';
         }
     }
 }
 
-/* AI-REMOVED: updateHuntingTask - Replaced by updateMarkedEntityAutomation
-function updateHuntingTask(character, setStatus) { // ... original function ... }
-*/
 
-/* AI-REMOVED: updateSkillingTask - Replaced by updateMarkedEntityAutomation
-function updateSkillingTask(character, gameTime, setStatus) { // ... original function ... }
-*/
-
-/* AI-REMOVED: gatherResource - Logic integrated into updateMarkedEntityAutomation
-function gatherResource(character, gameTime, setStatus) { // ... original function ... }
-*/
-
-function assignSkillTask(skillKey) { // This function's role changes slightly
+function assignSkillTask(skillKey) { 
     const activeChar = getActiveCharacter();
     if (!activeChar || activeChar.isDead) return;
     if (activeChar.automation.task === skillKey && activeChar.automation.active) {
         stopAutomation(activeChar);
     } else {
-        startAutomation(activeChar, skillKey);
-    }
-    // New behavior: If a skill task is assigned this way, try to find and mark the nearest resource of that type.
-    if (activeChar.automation.task === skillKey && activeChar.automation.active) {
+        stopAutomation(activeChar); // Always stop previous task
         const resourceType = Object.keys(RESOURCE_DATA).find(rt => RESOURCE_DATA[rt].skill === skillKey);
         if (resourceType) {
             const nearestNode = findNearestResource(activeChar, resourceType);
             if (nearestNode) {
-                const approachSpot = findWalkableNeighborForEntity(nearestNode, activeChar.player, [], activeChar.zoneX, activeChar.zoneY);
+                const approachSpot = findWalkableNeighborForEntity(nearestNode, activeChar.player);
                 if (approachSpot) {
                     addMark(activeChar, nearestNode, approachSpot, skillKey);
                 } else { showNotification(`No approach spot for nearest ${resourceType}.`); }
@@ -1700,33 +1421,10 @@ function findNearestResource(character, type) {
     const zoneKey = `${zoneX},${zoneY}`;
     const zone = worldData[zoneKey];
 
-    // --- DEBUG LOGGING ---
-    console.log(`findNearestResource: Char: ${character.name}, Zone: ${zoneKey}, Looking for type: "${type}"`);
-    if (!zone) {
-        console.log(`findNearestResource: Zone ${zoneKey} not found in worldData.`);
-        return null;
-    }
-    if (!zone.resources) {
-        console.log(`findNearestResource: Zone ${zoneKey} has no resources array.`);
-        return null;
-    }
-    console.log(`findNearestResource: Resources in zone ${zoneKey}:`, JSON.stringify(zone.resources.map(r => ({type: r.type, id: r.id}))));
-    // --- END DEBUG LOGGING ---
-
-    const availableNodes = zone.resources.filter(r => {
-        // --- DETAILED FILTER LOGGING ---
-        const isMatch = r.type === type;
-        console.log(`findNearestResource Filter: Comparing r.type="${r.type}" (len ${r.type?.length}) with type="${type}" (len ${type?.length}). Match: ${isMatch}`);
-        return isMatch;
-        // --- END DETAILED FILTER LOGGING ---
-    });
+    if (!zone || !zone.resources) return null;
     
-    // --- DEBUG LOGGING ---
-    console.log(`findNearestResource: Found ${availableNodes.length} nodes of type "${type}".`);
-    if (availableNodes.length > 0) {
-        console.log(`findNearestResource: Filtered nodes:`, JSON.stringify(availableNodes.map(r => ({type: r.type, id: r.id}))));
-    } // This closing brace was part of the original debug block, keeping it aligned.
-
+    const availableNodes = zone.resources.filter(r => r.type === type);
+    
     if (availableNodes.length === 0) return null;
     let nearest = null;
     let minDistance = Infinity;
@@ -1737,14 +1435,6 @@ function findNearestResource(character, type) {
             nearest = node;
         }
     }
-    // --- DEBUG LOGGING ---
-    if (nearest) {
-        console.log(`findNearestResource: Nearest node found: id=${nearest.id}, type=${nearest.type} at (${nearest.x},${nearest.y})`);
-    } else {
-        // This case should ideally not be reached if availableNodes.length > 0
-        console.log(`findNearestResource: No nearest node found despite availableNodes.length > 0. This is unexpected.`);
-    }
-    // --- END DEBUG LOGGING ---
     return nearest;
 }
 
@@ -1765,14 +1455,6 @@ function updateAllPlayerRegen(gameTime) {
 
 // --- A* Pathfinding Implementation ---
 
-/**
- * Finds the shortest path between two points on the grid using the A* algorithm.
- * @param {{x: number, y: number}} start - The starting position.
- * @param {{x: number, y: number}} end - The target position.
- * @param {number} zoneX - The current zone's X coordinate.
- * @param {number} zoneY - The current zone's Y coordinate.
- * @returns {Array<{x: number, y: number}>|null} The path as an array of coordinates, or null if no path is found.
- */
 function findPath(start, end, zoneX, zoneY) {
     const openSet = [];
     const closedSet = new Set();
@@ -1791,7 +1473,6 @@ function findPath(start, end, zoneX, zoneY) {
     openSet.push(startNode);
 
     while (openSet.length > 0) {
-        // Find the node with the lowest 'f' score in the open set
         let lowestIndex = 0;
         for (let i = 1; i < openSet.length; i++) {
             if (openSet[i].f < openSet[lowestIndex].f) {
@@ -1801,7 +1482,6 @@ function findPath(start, end, zoneX, zoneY) {
         const currentNode = openSet.splice(lowestIndex, 1)[0];
         const currentKey = `${currentNode.x},${currentNode.y}`;
 
-        // If we reached the end, reconstruct the path
         if (currentNode.x === end.x && currentNode.y === end.y) {
             return reconstructPath(currentNode);
         }
@@ -1817,10 +1497,9 @@ function findPath(start, end, zoneX, zoneY) {
                 continue;
             }
 
-            const gScore = currentNode.g + 1; // Cost is always 1 for cardinal movement
+            const gScore = currentNode.g + 1;
 
             let neighborNode = grid.get(neighborKey);
-            let isNewPath = false;
 
             if (!neighborNode) {
                 neighborNode = {
@@ -1834,25 +1513,15 @@ function findPath(start, end, zoneX, zoneY) {
                 grid.set(neighborKey, neighborNode);
                 openSet.push(neighborNode);
             } else if (gScore < neighborNode.g) {
-                // Found a better path to this neighbor
                 neighborNode.g = gScore;
                 neighborNode.f = gScore + neighborNode.h;
                 neighborNode.parent = currentNode;
             }
         }
     }
-
-    // No path found
     return null;
 }
 
-/**
- * Calculates the heuristic (estimated distance) between two points.
- * Uses Manhattan distance, which is performant and suitable for grid movement.
- * @param {{x: number, y: number}} a - The first point.
- * @param {{x: number, y: number}} b - The second point.
- * @returns {number} The estimated distance.
- */
 function heuristic(a, b) {
     const dx = Math.abs(a.x - b.x);
     const dy = Math.abs(a.y - b.y);
@@ -1860,17 +1529,9 @@ function heuristic(a, b) {
 }
 
 
-/**
- * Gets the walkable neighbors of a given node.
- * @param {{x: number, y: number}} node - The node to get neighbors for.
- * @param {number} zoneX - The zone X coordinate.
- * @param {number} zoneY - The zone Y coordinate.
- * @returns {Array<{x: number, y: number}>} An array of walkable neighbor coordinates.
- */
 function getNeighbors(node, zoneX, zoneY) {
     const neighbors = [];
     const { x, y } = node;
-    // Cardinal directions only
     const directions = [
         { x: 0, y: -1 }, // North
         { x: 1, y: 0 },  // East
@@ -1889,11 +1550,6 @@ function getNeighbors(node, zoneX, zoneY) {
     return neighbors;
 }
 
-/**
- * Reconstructs the path from the end node back to the start.
- * @param {object} endNode - The final node in the path.
- * @returns {Array<{x: number, y: number}>} The complete path.
- */
 function reconstructPath(endNode) {
     const path = [];
     let currentNode = endNode;
@@ -1901,15 +1557,14 @@ function reconstructPath(endNode) {
         path.push({ x: currentNode.x, y: currentNode.y });
         currentNode = currentNode.parent;
     }
-    // The path is from end to start, so we reverse it and remove the starting tile (character's current position)
     return path.reverse().slice(1);
 }
+
 
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
     const currentZoneData = worldData[currentZoneKey];
     if (!currentZoneData || !currentZoneData.gateways) return null;
-
     for (const gateway of currentZoneData.gateways) {
         if (gateway.destZone.x === targetZoneX && gateway.destZone.y === targetZoneY) {
             return findPath(character.player, gateway, character.zoneX, character.zoneY);
@@ -1927,21 +1582,18 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
     if (!currentMapData[y] || currentMapData[y][x] === undefined) return false;
     
     const tileType = currentMapData[y][x];
-    // Check base terrain walkability
     if (tileType === TILES.WALL || tileType === TILES.DEEP_WATER || tileType === TILES.DEEP_FOREST) {
         return false;
     }
     
-    // Check for non-walkable resource objects
     if (zone.resources) {
         for (const resource of zone.resources) {
             if (resource.x === x && resource.y === y && 
-                (resource.type === 'TREE' || resource.type === 'ROCK' || resource.type === 'FISHING_SPOT')) {
+                (resource.type === 'TREE' || resource.type === 'ROCK')) { // FISHING_SPOT is on water, so it's not a blocking object
                 return false;
             }
         }
     }
-    // Pedestals and Gateways are on walkable tiles; interaction is separate.
 
     if (getEnemyAt(x, y, `${zoneX},${zoneY}`)) return false;
     if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
@@ -1955,20 +1607,14 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
     
     const size = entityData.size || { w: 1, h: 1 };
     const perimeter = new Set();
-    
-    // entity.x and entity.y should be directly available for both monsters and resources
     const entityPosX = entity.x;
     const entityPosY = entity.y;
 
-    // Determine the correct zone coordinates
-    // Prioritize explicit, then entity's own (for monsters), then error.
-    // Resources don't have zoneX/Y on their object, so explicitZoneX/Y is critical for them.
     const currentEntityZoneX = explicitZoneX !== undefined ? explicitZoneX : entity.zoneX;
     const currentEntityZoneY = explicitZoneY !== undefined ? explicitZoneY : entity.zoneY;
 
     if (currentEntityZoneX === undefined || currentEntityZoneY === undefined) {
-        console.error(`getWalkableNeighborsForEntity: Zone coordinates are undefined for entity type ${entity.type}, id ${entity.id}. Explicit: (${explicitZoneX},${explicitZoneY}), Entity Own: (${entity.zoneX},${entity.zoneY})`);
-        return []; // Cannot determine neighbors without zone context
+        return [];
     }
 
     for(let i=0; i<size.w; i++){
@@ -1984,9 +1630,9 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
         .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: currentEntityZoneX, zoneY: currentEntityZoneY }))
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
 }
+
 function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
-    // Determine zone for the entity (critical for resources)
-    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : getActiveCharacter().zoneX; // Fallback to active char's zone if entity doesn't have one
+    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : getActiveCharacter().zoneX;
     const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : getActiveCharacter().zoneY;
 
     const walkableNeighbors = getWalkableNeighborsForEntity(entity, true, entityZoneX, entityZoneY);
@@ -2004,31 +1650,20 @@ function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
 
 function startAutomation(character, task) {
     if (character.isDead) return;
-    if (character.automation.active && character.automation.task === task) return;
-    if (character.combat.active) forceEndCombat(character);
+    if (character.automation.active && character.automation.task === task) {
+        if (character.automation.markedTiles.filter(m => m.task === task).length > 0) return;
+    }
     
-    // If the new task is different, existing marks are cleared by addMark or if no marks for new task exist.
-    // If task is the same, we just ensure automation is active.
-    if (character.automation.task !== task) {
-        // This implies a task switch. Marks will be handled by addMark or if no marks exist for this task.
-        // If we are starting a task like 'woodcutting' without a specific mark yet,
-        // we might not want to clear 'hunting' marks immediately unless a woodcutting mark is added.
-        // The `addMark` function now handles clearing marks if the task type of the *new mark* differs.
-        // If `startAutomation` is called directly (e.g. from `assignSkillTask` before a mark is made),
-        // we might need to ensure old marks of a *different* type are cleared.
-        // For now, let `handleMarking` and `addMark` drive the clearing of differently-typed marks.
+    if (character.automation.task !== task && character.automation.task !== null) {
+        stopAutomation(character); // Clear old task and marks
     }
 
     character.automation.task = task;
-    character.automation.active = true; // Always activate
-    character.automation.state = 'IDLE'; // Reset state machine for the task
+    character.automation.active = true;
+    character.automation.state = 'IDLE';
 
-    // If starting a task but no marks of that type exist, show a message.
     if (character.automation.markedTiles.filter(m => m.task === task).length === 0) {
         if (character.id === getActiveCharacter().id) showNotification(`Mark a ${task === 'hunting' ? 'monster' : 'resource'} to start ${task}.`);
-        // We might even stop automation if no initial marks for this task type.
-        // For now, let it be active, waiting for a mark.
-        return;
     }
 
     saveGameState();
@@ -2036,21 +1671,21 @@ function startAutomation(character, task) {
     updateAllUI();
 }
 
-function stopAutomation(character, clearAllMarksOfChar = true) {
-     if(!character.automation.active) return; 
+function stopAutomation(character) {
+     if(!character.automation.active && !character.automation.task) return; 
      if (character.combat.active) forceEndCombat(character);
-    const oldTask = character.automation.task;
+
     character.automation.active = false;
     character.automation.task = null; 
     character.automation.targetId = null; 
     character.automation.state = 'IDLE'; 
     character.path = [];
-    if (clearAllMarksOfChar) {
-        character.automation.markedTiles = [];
-    }
-     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
-     if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
-     updateAllUI(); 
+    character.automation.markedTiles = []; // Clear all marks when stopping
+    
+    if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
+    if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
+    updateAllUI(); 
+    saveGameState();
 }
 
 function spawnEnemiesForZone(zoneX, zoneY) { 
@@ -2087,7 +1722,6 @@ function checkAllRespawns(gameTime) {
 
 function isAdjacent(charPos, entity, entityActualZoneX, entityActualZoneY) {
     if(!entity) return false;
-    // Pass the entity's actual zone coordinates (which might be the character's zone if it's a resource)
     const neighbors = getWalkableNeighborsForEntity(entity, true, entityActualZoneX, entityActualZoneY);
     return neighbors.some(n => n.x === charPos.x && n.y === charPos.y);
 }
@@ -2100,7 +1734,7 @@ function renderCharacterSwitcher() {
         if(char.isDead) { taskEmoji = '💀'; } 
         else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
-            else if (char.automation.task === 'woodcutting') taskEmoji = '🌳'; // Changed emoji for woodcutting
+            else if (char.automation.task === 'woodcutting') taskEmoji = '🌳';
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
             else if (char.automation.task === 'fishing') taskEmoji = '?';
         }
