@@ -66,8 +66,8 @@ export const SPRITES = {
     WALL: { sx: 0, sy: 0 },
     DEEP_WATER: { sx: 256, sy: 224 }, // Reverted to actual DEEP_WATER sprite
     TREE: { sx: 64, sy:0 }, // Using a common tree top sprite
-    ROCK: { sx: 96, sy: 0 }, // Using a common rock sprite
-    POND: { sx: 256, sy: 0 }, // Using water for now
+    ROCK: { sx: 96, sy: 0 }, // Using a common rock sprite    
+    FISHING_SPOT: { sx: 256, sy: 0 }, // Using water for now, was POND
     DEEP_FOREST: { sx: 0, sy: 160 }, // Using a common bush sprite
     GATEWAY: { sx: 224, sy: 32 }, // Using a wall archway piece
     PEDESTAL: { sx: 288, sy: 64 }  // Using a column base sprite
@@ -104,7 +104,7 @@ export const ENEMIES_DATA = {
 export const RESOURCE_DATA = {
     TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting' },
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining' },
-    POND: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing' }
+    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing' }
 };
 
 // --- World Layout ---
@@ -142,7 +142,7 @@ export const worldData = {
             // Resources relocated to the new 35x35 playable area (world coords 14-48)
             { x: 20, y: 20, type: 'TREE', id: 'tree_1' }, { x: 42, y: 42, type: 'TREE', id: 'tree_2' },
             { x: 20, y: 42, type: 'ROCK', id: 'rock_1' }, { x: 42, y: 20, type: 'ROCK', id: 'rock_2' },
-            { x: 31, y: 25, type: 'POND', id: 'pond_1' }, { x: 32, y: 25, type: 'POND', id: 'pond_2' }, // Near center
+            { x: 31, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_1' }, { x: 32, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_2' }, // Near center
         ],
         spawns: [
             // Spawns relocated to the new 35x35 playable area
