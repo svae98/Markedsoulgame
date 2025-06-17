@@ -1,4 +1,5 @@
 // To AI, do not delete comments please.
+// this is a test, do you see this very new comment, only for you? are you sure that you can only see the initial content i uploaded, if so, i'm very sad.
 // js/gameData.js
 // The Island Update - Static Map
 // this is a general rule for map making, intended as direction for you(AI), to follow. only edit the map if you are explicitly told. the edges of the map(empty space),-
@@ -27,6 +28,11 @@
 // the mark should show up on the target itself, not adjacent to it.
 // when you mark a object of another type that you have marked already (for example, you have marks on monsters and then you mark a tree), 
 // the first object type gets removed in favor of this new object, meaning you can only do one individual skill or activity at a time on each character.
+// explanation about what "adjacent" means below:
+// 010
+// 1O1
+// 010
+// 0 = diagonal, 1 = adjacent!, O = object
 // --- Core Game Mechanics ---
 // js/gameData.js
 // The Island Update - Spritesheet Integration
@@ -121,9 +127,9 @@ export const ENEMIES_DATA = {
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
-    TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting' },
-    ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining' },
-    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing' }
+    TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4 },
+    ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
+    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 }
 };
 
 // --- World Layout ---
@@ -158,14 +164,14 @@ export const worldData = {
             { x: 14, y: 31, destZone: { x: 0, y: 1 }, entry: { x: 48, y: 31 } }, // Left-edge of playable to Library
         ],
         resources: [
-            // Resources relocated to the new 35x35 playable area (world coords 14-48)
-            { x: 20, y: 20, type: 'TREE', id: 'tree_1' }, { x: 42, y: 42, type: 'TREE', id: 'tree_2' },
-            { x: 20, y: 42, type: 'ROCK', id: 'rock_1' }, { x: 42, y: 20, type: 'ROCK', id: 'rock_2' },
-            { x: 31, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_1' }, { x: 32, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_2' }, // Near center
-        ],
+        // Add currentDurability to each resource
+        { x: 20, y: 20, type: 'TREE', id: 'tree_1', currentDurability: 4 }, { x: 42, y: 42, type: 'TREE', id: 'tree_2', currentDurability: 4 },
+        { x: 20, y: 42, type: 'ROCK', id: 'rock_1', currentDurability: 4 }, { x: 42, y: 20, type: 'ROCK', id: 'rock_2', currentDurability: 4 },
+        { x: 31, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_1', currentDurability: 4 }, { x: 32, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_2', currentDurability: 4 },
+    ],
         spawns: [
             // Spawns relocated to the new 35x35 playable area
-            { x: 25, y: 25, type: 'BLUE_SLIME' }, { x: 26, y: 26, type: 'BLUE_SLIME' },
+            { x: 25, y: 25, type: 'BLUE_SLIME' }, { x: 26, y: 26, type: 'BLUE_SLIME' }, { x: 26, y: 23, type: 'BLUE_SLIME' }, 
             { x: 38, y: 38, type: 'YELLOW_SLIME' },
             { x: 25, y: 38, type: 'RED_SLIME' },
             { x: 38, y: 25, type: 'GOLEM' },

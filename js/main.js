@@ -1275,6 +1275,10 @@ function updateAutomation(character, gameTime) {
  * Unified state machine for handling marked entities (monsters or resources).
  * Manages pathfinding, interaction (combat/gathering), and mark cycling.
  */
+/**
+ * Unified state machine for handling marked entities (monsters or resources).
+ * Manages pathfinding, interaction (combat/gathering), and mark cycling.
+ */
 function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const { automation, player, zoneX, zoneY } = character;
 
@@ -1284,6 +1288,26 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         return;
     }
 
+    // --- Boss Priority Check ---
+    let priorityIndex = -1;
+    for (let i = 0; i < automation.markedTiles.length; i++) {
+        const mark = automation.markedTiles[i];
+        const entity = findEntityDataForMark(mark.entityId);
+        
+        if (entity && !isEnemyDead(entity.id)) { 
+            const enemyData = ENEMIES_DATA[entity.type];
+            if (enemyData && enemyData.isBoss) {
+                priorityIndex = i;
+                break;
+            }
+        }
+    }
+    if (priorityIndex > 0) {
+        const [priorityMark] = automation.markedTiles.splice(priorityIndex, 1);
+        automation.markedTiles.unshift(priorityMark);
+    }
+    // --- End of Boss Priority Check ---
+
     const currentMark = automation.markedTiles[0];
     let targetEntity;
     let entityData;
@@ -1291,7 +1315,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const isHunting = currentMark.task === 'hunting';
 
     if (isHunting) {
-        targetEntity = findEnemyById(currentMark.entityId);
+        targetEntity = findEntityDataForMark(currentMark.entityId); 
         entityData = targetEntity ? ENEMIES_DATA[targetEntity.type] : null;
     } else {
         targetEntity = findResourceById(currentMark.entityId);
@@ -1317,9 +1341,13 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     if (isAdjacent(player, targetEntity, entityZoneX, entityZoneY)) {
         if (isHunting) {
              if (isEnemyDead(targetEntity.id)) {
-                setStatus(`Waiting for ${entityName} to respawn...`);
-                // Cycle the mark so we can check other targets
-                automation.markedTiles.push(automation.markedTiles.shift());
+                const allEnemiesAreDead = automation.markedTiles.every(mark => isEnemyDead(mark.entityId));
+                if (allEnemiesAreDead) {
+                    setStatus(`All targets defeated. Waiting for ${entityName} to respawn...`);
+                } else {
+                    setStatus(`Target down. Moving to next mark...`);
+                    automation.markedTiles.push(automation.markedTiles.shift());
+                }
                 return;
             }
             if (!character.combat.active) {
@@ -1330,9 +1358,25 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             }
         } else { // Skilling logic
             const resourceDef = RESOURCE_DATA[targetEntity.type];
+
+            // If the node is depleted, check if it's time to respawn durability
+            if (targetEntity.nextAvailableTime && gameTime >= targetEntity.nextAvailableTime) {
+                targetEntity.currentDurability = resourceDef.maxDurability;
+                targetEntity.nextAvailableTime = null; // It's available again
+            }
+            
+            // If the node is still waiting to respawn, handle it
             if (targetEntity.nextAvailableTime && gameTime < targetEntity.nextAvailableTime) {
-                setStatus(`Waiting for ${entityName} to replenish...`);
-                automation.markedTiles.push(automation.markedTiles.shift());
+                const allResourcesDepleted = automation.markedTiles.every(mark => {
+                    const resource = findResourceById(mark.entityId);
+                    return resource && resource.nextAvailableTime && gameTime < resource.nextAvailableTime;
+                });
+                if (allResourcesDepleted) {
+                    setStatus(`All marked resources are depleted. Waiting...`);
+                } else {
+                    setStatus(`Waiting for ${entityName} to replenish...`);
+                    automation.markedTiles.push(automation.markedTiles.shift());
+                }
                 return;
             }
 
@@ -1341,11 +1385,12 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 automation.gatheringState.lastGatherAttemptTime = 0;
             }
             
-            setStatus(`Gathering ${entityName}...`);
+            setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
 
             if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
                 automation.gatheringState.lastGatherAttemptTime = gameTime;
-                targetEntity.nextAvailableTime = gameTime + resourceDef.time;
+                
+                targetEntity.currentDurability--; // Decrement durability
                 
                 gainSkillXp(resourceDef.skill, resourceDef.xp);
                 if (resourceDef.item) {
@@ -1354,8 +1399,13 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 }
                 saveGameState();
                 
-                automation.markedTiles.push(automation.markedTiles.shift());
-                automation.targetId = null;
+                // If durability is out, deplete the node and cycle the mark
+                if (targetEntity.currentDurability <= 0) {
+                    targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2); // Resources take longer to respawn
+                    automation.markedTiles.push(automation.markedTiles.shift());
+                    automation.targetId = null;
+                }
+                // If durability remains, the character will stay and gather again after the cooldown.
             }
         }
     } else {
@@ -1369,8 +1419,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         }
     }
 }
-
-
 function assignSkillTask(skillKey) { 
     const activeChar = getActiveCharacter();
     if (!activeChar || activeChar.isDead) return;
@@ -1404,7 +1452,23 @@ function isEnemyDead(enemyId) {
     }
     return false;
 }
+function findEntityDataForMark(id) {
+    // First, check live enemies
+    let entity = findEnemyById(id);
+    if (entity) {
+        return entity;
+    }
 
+    // If not found, check the dead enemies list
+    for (const zoneKey in deadEnemies) {
+        const deadEnemyRecord = deadEnemies[zoneKey].find(dead => dead.id === id);
+        if (deadEnemyRecord) {
+            return deadEnemyRecord.data; // The 'data' property holds the original enemy info
+        }
+    }
+
+    return null; // Return null if not found in either list
+}
 function findResourceById(id) {
     for (const zoneKey in worldData) {
         const zone = worldData[zoneKey];
@@ -1588,8 +1652,9 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
     
     if (zone.resources) {
         for (const resource of zone.resources) {
+            // This condition is now updated to include FISHING_SPOT
             if (resource.x === x && resource.y === y && 
-                (resource.type === 'TREE' || resource.type === 'ROCK')) { // FISHING_SPOT is on water, so it's not a blocking object
+                (resource.type === 'TREE' || resource.type === 'ROCK' || resource.type === 'FISHING_SPOT')) {
                 return false;
             }
         }
@@ -1607,30 +1672,40 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
     
     const size = entityData.size || { w: 1, h: 1 };
     const perimeter = new Set();
-    const entityPosX = entity.x;
-    const entityPosY = entity.y;
 
+    // This logic explicitly gets all tiles the entity occupies
+    const entityTiles = [];
+    for (let i = 0; i < size.w; i++) {
+        for (let j = 0; j < size.h; j++) {
+            entityTiles.push({ x: entity.x + i, y: entity.y + j });
+        }
+    }
+
+    // It then finds only the N, S, E, W neighbors for those tiles
+    const directions = [{x:0,y:-1}, {x:0,y:1}, {x:-1,y:0}, {x:1,y:0}]; // Cardinal directions only
+
+    for (const tile of entityTiles) {
+        for (const dir of directions) {
+            const neighborPos = { x: tile.x + dir.x, y: tile.y + dir.y };
+            // This ensures the neighbor spot isn't part of the entity itself
+            if (!entityTiles.some(et => et.x === neighborPos.x && et.y === neighborPos.y)) {
+                perimeter.add(`${neighborPos.x},${neighborPos.y}`);
+            }
+        }
+    }
+    
     const currentEntityZoneX = explicitZoneX !== undefined ? explicitZoneX : entity.zoneX;
     const currentEntityZoneY = explicitZoneY !== undefined ? explicitZoneY : entity.zoneY;
 
     if (currentEntityZoneX === undefined || currentEntityZoneY === undefined) {
         return [];
     }
-
-    for(let i=0; i<size.w; i++){
-        perimeter.add(`${entityPosX+i},${entityPosY - 1}`);
-        perimeter.add(`${entityPosX+i},${entityPosY + size.h}`);
-    }
-    for(let j=0; j<size.h; j++){
-        perimeter.add(`${entityPosX - 1},${entityPosY+j}`);
-        perimeter.add(`${entityPosX + size.w},${entityPosY+j}`);
-    }
     
+    // Finally, it filters for only walkable tiles
     return [...perimeter]
         .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: currentEntityZoneX, zoneY: currentEntityZoneY }))
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
 }
-
 function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
     const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : getActiveCharacter().zoneX;
     const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : getActiveCharacter().zoneY;
