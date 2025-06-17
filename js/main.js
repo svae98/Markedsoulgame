@@ -351,18 +351,59 @@ function updateCharacterLogic(character, logicDelta) {
         character.movementCooldown -= logicDelta;
     }
 
+    // Part 1: Handle starting a path if idle and a pending path exists.
+    // This ensures an idle character with a pending path starts moving in the same tick cooldown allows.
+    if (character.movementCooldown <= 0 && (!character.path || character.path.length === 0) && character.pendingPath && character.pendingPath.length > 0) {
+        console.log(`[${character.name}] Idle, starting pending path. Length: ${character.pendingPath.length}`);
+        character.path = character.pendingPath;
+        character.pendingPath = null;
+        // Visual target for the first step of this new path.
+        // The actual move will happen in the block below if path.length > 0.
+        if (character.path.length > 0) {
+            character.target.x = character.path[0].x;
+            character.target.y = character.path[0].y;
+        } else { // Pending path was empty
+            character.target.x = character.player.x;
+            character.target.y = character.player.y;
+            checkForGateway(character); // Check if landed on gateway
+        }
+    }
+
+    // Part 2: Handle taking a step if ready and a path exists.
     if (character.movementCooldown <= 0 && character.path && character.path.length > 0) {
         const nextStep = character.path.shift();
         character.player.x = nextStep.x;
         character.player.y = nextStep.y;
-        character.target.x = nextStep.x;
+        character.target.x = nextStep.x; // Visual target is this current step's destination
         character.target.y = nextStep.y;
-        
-        const speeds = getEffectiveMoveSpeeds();
-        character.movementCooldown = speeds.stepInterval;
 
-        if (character.path.length === 0) {
-             checkForGateway(character);
+        const speeds = getEffectiveMoveSpeeds();
+        character.movementCooldown = speeds.stepInterval; // Set cooldown for THIS step
+
+        // Part 3: AFTER taking the step, check if a pending path needs to be activated.
+        if (character.pendingPath && character.pendingPath.length > 0) {
+            console.log(`[${character.name}] Step completed to (${character.player.x},${character.player.y}). Switching to pending path. Length: ${character.pendingPath.length}`);
+            character.path = character.pendingPath;
+            character.pendingPath = null;
+
+            if (character.path.length > 0) {
+                // The character has just arrived at nextStep (now character.player).
+                // The new visual target is the first step of the newly activated path.
+                character.target.x = character.path[0].x;
+                character.target.y = character.path[0].y;
+
+                // CRITICAL FIX for the pause:
+                // Reset movementCooldown to allow the new path's first step to be processed
+                // in the next logic tick (or very soon), rather than waiting for the full
+                // cooldown of the step just taken.
+                character.movementCooldown = 0; 
+            } else {
+                // New (pending) path was empty. Target remains current player position.
+                // (character.target was already set to character.player by the step logic above)
+                checkForGateway(character); // Check if landed on gateway
+            }
+        } else if (character.path.length === 0) { // Current path just became empty (and no pending path took over)
+            checkForGateway(character);
         }
     }
 }
@@ -749,17 +790,24 @@ function handleLeftClick(e) {
     const enemy = getEnemyAt(x, y, zoneKey);
     const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
     const tileType = currentMapData[y]?.[x];
-    
+
     if (enemy) {
-        handleMonsterClick(enemy); // Show tooltip
-        if (activeChar.path.length === 0) { // Only initiate new movement if not already pathing
-            initiateMoveToEntity(activeChar, enemy);
+        handleMonsterClick(enemy); // Show tooltip regardless of click type
+        if (e.shiftKey) {
+            // AI-NOTE: Shift-Left-clicking an enemy uses the marking system.
+            handleMarking(enemy);
+        } else {
+            initiateMoveToEntity(activeChar, enemy); // Normal left-click moves to attack
         }
         return; // Click handled
     } else if (resource) {
         handleResourceClick(resource); // Show tooltip
-        if (activeChar.path.length === 0) { // Only initiate new movement if not already pathing
-            initiateMoveToEntity(activeChar, resource);
+        // AI-NOTE: Queued Path Interruption: initiateMoveToEntity will handle setting pendingPath if already moving.
+        if (e.shiftKey) {
+            // AI-NOTE: Shift-Left-clicking a resource now uses the marking system.
+            handleMarking(resource);
+        } else {
+            initiateMoveToEntity(activeChar, resource); // Normal left-click moves to gather
         }
         return; // Click handled
     } else if (tileType === TILES.PEDESTAL) {
@@ -770,17 +818,17 @@ function handleLeftClick(e) {
     // If we reach here, it means an empty/non-interactive tile was clicked.
     // Handle stopping automation if active.
     if (activeChar.automation.active) {
-        if (['woodcutting', 'mining', 'fishing'].includes(activeChar.automation.task) && !enemy && !resource) {
+        // Stop any type of automation if clicking on empty ground
+        if (!enemy && !resource) {
             stopAutomation(activeChar);
             // After stopping, allow movement to the clicked empty tile.
+            // The handleMovementClick below will now correctly queue if the stopAutomation itself
+            // didn't immediately clear the path (e.g., if it was mid-step).
         }
         // If hunting, it's already handled by the block at the top of the function.
     }
-    
-    // General movement to the clicked tile if no entity was interacted with and not already pathing.
-    if (activeChar.path.length === 0) {
-        handleMovementClick(x, y, activeChar);
-    }
+    // AI-NOTE: Queued Path Interruption: handleMovementClick will handle setting pendingPath if already moving.
+    handleMovementClick(x, y, activeChar);
 }
 
 function handleMonsterClick(enemy) {
@@ -822,7 +870,7 @@ function handlePedestalClick(x, y, zoneX, zoneY) {
  * @param {object} activeChar - The currently active character object.
  */
 function handleMovementClick(clickedX, clickedY, activeChar) {
-    activeChar.path = []; // Clear any existing path
+    // AI-NOTE: Path is cleared/set to pendingPath only if a new valid path is found, to support queued movement and prevent interruption on invalid clicks.
 
     const startPos = activeChar.player;
     const rawTarget = { x: clickedX, y: clickedY };
@@ -871,42 +919,113 @@ function handleMovementClick(clickedX, clickedY, activeChar) {
     if (destination) {
         const path = findPath(startPos, destination, activeChar.zoneX, activeChar.zoneY);
         if (path && path.length > 0) {
-            activeChar.path = path;
+            // AI-NOTE: Path Interruption Logic - Queued Movement
+            // If already moving along a path, set this as the pending path. Otherwise, start immediately.
+            if (activeChar.path && activeChar.path.length > 0) {
+                activeChar.pendingPath = path;
+                console.log(`[${activeChar.name}] Queued new path to (${destination.x},${destination.y}). Length: ${path.length}`);
+            } else {
+                activeChar.path = path; // Start this new path immediately
+                console.log(`[${activeChar.name}] Starting new path to (${destination.x},${destination.y}). Length: ${path.length}`);
+            }
         }
+    } else {
+        // AI-NOTE: No valid destination for click, current path is NOT interrupted, pendingPath is not set.
     }
 }
 
-
-function addMark(activeChar, enemy, approachSpot) {
+/**
+ * Adds a mark to the character's automation list.
+ * Manages task switching if the new mark is of a different type.
+ * @param {object} activeChar - The character to add the mark to.
+ * @param {object} entity - The monster or resource object to mark.
+ * @param {object} approachSpot - The {x, y} coordinates to approach the entity.
+ * @param {string} taskForMark - The task associated with this mark (e.g., 'hunting', 'woodcutting').
+ */
+function addMark(activeChar, entity, approachSpot, taskForMark) {
     const stats = getTeamStats();
+
+    // If the new mark's task is different from the current active task, clear old marks and switch task.
+    if (activeChar.automation.task !== taskForMark) {
+        if (activeChar.automation.active) { // If actively doing something else
+            stopAutomation(activeChar); // Stop current task first
+        }
+        activeChar.automation.markedTiles = []; // Clear all previous marks
+        activeChar.automation.task = taskForMark;
+        console.log(`[${activeChar.name}] Switched task to ${taskForMark}. Cleared previous marks.`);
+    }
+
     if (activeChar.automation.markedTiles.length >= stats.maxMarks) {
         const removedMark = activeChar.automation.markedTiles.shift();
-        if(activeChar.combat.active && activeChar.combat.targetId === removedMark.enemyId) {
+        // If the removed mark was the one being actively pursued for combat, end combat.
+        if(activeChar.combat.active && activeChar.combat.targetId === removedMark.entityId && removedMark.task === 'hunting') {
              forceEndCombat(activeChar);
         }
+        console.log(`[${activeChar.name}] Mark limit reached. Removed oldest mark for entity ${removedMark.entityId}.`);
     }
-    activeChar.automation.markedTiles.push({ ...approachSpot, enemyId: enemy.id, zoneX: enemy.zoneX, zoneY: enemy.zoneY });
-    startAutomation(activeChar, 'hunting');
-    showNotification(`Marked ${enemy.name} for ${activeChar.name}.`);
+
+    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : activeChar.zoneX; // Resources don't have zoneX/Y on their object
+    const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : activeChar.zoneY;
+
+    activeChar.automation.markedTiles.push({ 
+        ...approachSpot, 
+        entityId: entity.id, 
+        task: taskForMark, // Store the task type with the mark
+        zoneX: entityZoneX, 
+        zoneY: entityZoneY 
+    });
+
+    startAutomation(activeChar, taskForMark); // This will set active=true and state=IDLE
+    const entityName = ENEMIES_DATA[entity.type]?.name || RESOURCE_DATA[entity.type]?.name || "Unknown Entity";
+    showNotification(`Marked ${entityName} for ${activeChar.name}. (${taskForMark})`);
 }
 
-function handleMarking(enemy) {
+/**
+ * Handles marking an entity (monster or resource).
+ * Toggles the mark, manages task switching, and updates UI.
+ * @param {object} entity - The monster or resource object that was shift-clicked.
+ */
+function handleMarking(entity) {
     const activeChar = getActiveCharacter();
-    if (!enemy || !activeChar) return;
-    activeChar.path = [];
+    if (!entity || !activeChar) return;
+    activeChar.path = []; // Stop current movement
 
-    const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.enemyId === enemy.id);
-    if (existingMarkForChar) {
-         const markIndex = activeChar.automation.markedTiles.findIndex(m => m.enemyId === enemy.id);
-         if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
-         if (activeChar.combat.active && activeChar.combat.targetId === enemy.id) forceEndCombat(activeChar);
-         if (activeChar.automation.markedTiles.length === 0) stopAutomation(activeChar);
+    let taskForMark;
+    let entityName = "Unknown Entity";
+    if (ENEMIES_DATA[entity.type]) {
+        taskForMark = 'hunting';
+        entityName = ENEMIES_DATA[entity.type].name;
+    } else if (RESOURCE_DATA[entity.type]) {
+        taskForMark = RESOURCE_DATA[entity.type].skill; // e.g., 'woodcutting', 'mining'
+        entityName = RESOURCE_DATA[entity.type].name;
     } else {
-        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
+        showNotification("Cannot mark this type of entity.");
+        return;
+    }
+
+    const existingMarkForChar = activeChar.automation.markedTiles.find(m => m.entityId === entity.id && m.task === taskForMark);
+
+    if (existingMarkForChar) {
+         // Unmark: Remove the specific mark
+         const markIndex = activeChar.automation.markedTiles.findIndex(m => m.entityId === entity.id && m.task === taskForMark);
+         if(markIndex !== -1) activeChar.automation.markedTiles.splice(markIndex, 1);
+         if (taskForMark === 'hunting' && activeChar.combat.active && activeChar.combat.targetId === entity.id) forceEndCombat(activeChar);
+         if (activeChar.automation.markedTiles.length === 0 || activeChar.automation.markedTiles.every(m => m.task !== taskForMark)) {
+            // If all marks are gone, or all remaining marks are for a different task type
+            stopAutomation(activeChar); // This will also clear the task if no marks of that type remain.
+         }
+         showNotification(`Unmarked ${entityName} for ${activeChar.name}.`);
+    } else {
+        // Mark: Add new mark
+        // For resources, pass activeChar's zone as they don't have their own zoneX/Y
+        const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : activeChar.zoneX;
+        const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : activeChar.zoneY;
+        const closestSpot = findWalkableNeighborForEntity(entity, activeChar.player, [], entityZoneX, entityZoneY);
+
         if(closestSpot) {
-            addMark(activeChar, enemy, closestSpot);
+            addMark(activeChar, entity, closestSpot, taskForMark);
         } else {
-            showNotification("No valid approach for that tile.");
+            showNotification(`No valid approach for ${entityName}.`);
         }
     }
     saveGameState();
@@ -914,11 +1033,12 @@ function handleMarking(enemy) {
 }
 
 function handleMapMarking(enemy, activeChar) {
-    const availableSpots = getWalkableNeighborsForEntity(enemy, true);
+    // Map marking is typically for bosses/enemies. Resources are usually marked in-world.
+    const availableSpots = getWalkableNeighborsForEntity(enemy, true, enemy.zoneX, enemy.zoneY);
     if (availableSpots.length > 0) {
-        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player);
+        const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player, [], enemy.zoneX, enemy.zoneY);
         if (closestSpot) {
-            addMark(activeChar, enemy, closestSpot);
+            addMark(activeChar, enemy, closestSpot, 'hunting'); // Explicitly 'hunting' for map marks
             saveGameState();
             updateAllUI();
         } else {
@@ -935,19 +1055,20 @@ function handleRightClick(e) {
     if (!activeChar || activeChar.isDead) return;
     ui.contextMenu.innerHTML = '';
     const anyCharHasSkillingTask = gameState.characters.some(c => ['woodcutting', 'mining', 'fishing'].includes(c.automation.task));
+    const anyCharHasHuntingTask = gameState.characters.some(c => c.automation.task === 'hunting');
 
-    if (activeChar.automation.active && activeChar.automation.task !== 'hunting') {
+    if (activeChar.automation.active) { // Generic stop button if any task is active
         addContextMenuButton(`Stop: ${activeChar.automation.task}`, () => stopAutomation(activeChar));
     }
-    if (activeChar.automation.markedTiles.length > 0) {
+    if (activeChar.automation.markedTiles.length > 0) { // Clear this character's marks, regardless of type
         addContextMenuButton('Clear My Marks', () => {
             stopAutomation(activeChar); 
             activeChar.automation.markedTiles = [];
             saveGameState();
         });
     }
-    const anyCharHasMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
-    if (anyCharHasMarks) {
+    const anyCharHasAnyMarks = gameState.characters.some(c => c.automation.markedTiles.length > 0);
+    if (anyCharHasAnyMarks) {
         addContextMenuButton('Clear All Marks', () => {
             gameState.characters.forEach(char => {
                 stopAutomation(char); 
@@ -956,6 +1077,16 @@ function handleRightClick(e) {
             saveGameState();
         });
     }
+    // Specific "Stop All X" buttons can be added if desired, e.g.:
+    // if (anyCharHasHuntingTask) {
+    //     addContextMenuButton('Stop All Hunting', () => {
+    //         gameState.characters.forEach(char => {
+    //             if (char.automation.task === 'hunting') {
+    //                 stopAutomation(char); // stopAutomation also clears marks if task becomes null
+    //             }
+    //         });
+    //     });
+    // }
     if (anyCharHasSkillingTask) {
         addContextMenuButton('Stop All Skilling', () => {
             gameState.characters.forEach(char => {
@@ -1116,10 +1247,9 @@ function renderLevels() {
     ui.levelsListContainer.innerHTML = '';
     const activeChar = getActiveCharacter();
     const createLevelBar = (name, skillKey, level, xp, neededXp, color) => {
-        const xpPercent = (neededXp > 0) ? (xp / neededXp) * 100 : 100;
-        const isAssigned = activeChar.automation.active && activeChar.automation.task === skillKey;
+        const xpPercent = (neededXp > 0 && xp > 0) ? (xp / neededXp) * 100 : (xp >= neededXp ? 100 : 0); // Adjusted for xp=0 case
         const container = document.createElement('div');
-        container.className = `w-full p-2 border rounded-lg modal-item clickable ${isAssigned ? 'assigned' : ''}`;
+        container.className = `w-full p-2 border rounded-lg modal-item`; // Removed 'clickable' and 'assigned' classes
         container.innerHTML = `
             <div>
                 <div class="flex justify-between items-center mb-1 text-sm">
@@ -1131,7 +1261,7 @@ function renderLevels() {
                 </div>
             </div>
         `;
-        container.addEventListener('click', () => assignSkillTask(skillKey));
+        // AI-NOTE: Removed event listener for assignSkillTask from skill UI elements
         return container;
     };
     
@@ -1387,193 +1517,156 @@ function gainSkillXp(skill, amount) {
     saveGameState();
 }
 
+/**
+ * Main automation logic controller.
+ * Determines which specific update function to call based on the character's current task.
+ */
 function updateAutomation(character, gameTime) { 
     if (!character.automation.active || character.combat.active || character.isDead || character.path.length > 0) return;
     const setStatus = (msg) => { if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = msg; }; 
-    switch(character.automation.task) {
-        case 'hunting': updateHuntingTask(character, setStatus); break;
-        case 'woodcutting': case 'mining': case 'fishing':
-            updateSkillingTask(character, gameTime, setStatus);
-            break;
-    }
+    
+    // Unified automation logic based on marks
+    updateMarkedEntityAutomation(character, gameTime, setStatus);
 }
-// AI-GUIDE: This function is a state machine for hunting. The character must
-// first pathfind to the marked tile. Only when they are adjacent to the
-// enemy should combat actually begin. Do not initiate combat before the path is complete.
-function updateHuntingTask(character, setStatus) {
-    if (character.path.length > 0 || character.combat.active) return;
-    const { automation } = character;
+
+/**
+ * Unified state machine for handling marked entities (monsters or resources).
+ * Manages pathfinding, interaction (combat/gathering), and mark cycling.
+ */
+function updateMarkedEntityAutomation(character, gameTime, setStatus) {
+    const { automation, player, zoneX, zoneY } = character;
+
     if (automation.markedTiles.length === 0) {
-        stopAutomation(character);
+        stopAutomation(character); // This will clear task if no marks left for it
+        setStatus("No targets marked.");
         return;
     }
 
-    const mark = automation.markedTiles[0];
-    const desiredTarget = findEnemyById(mark.enemyId);
+    const currentMark = automation.markedTiles[0]; // Always process the first mark
+    let targetEntity;
+    let entityData;
+    let entityDisplayName;
 
-    if (desiredTarget) {
-        if (character.zoneX !== desiredTarget.zoneX || character.zoneY !== desiredTarget.zoneY) {
-            setStatus(`Traveling to ${desiredTarget.name}'s zone...`);
-            character.path = findPathToZone(character, desiredTarget.zoneX, desiredTarget.zoneY) || [];
-            return;
+    // Resolve the target entity based on the mark's task
+    if (currentMark.task === 'hunting') {
+        targetEntity = findEnemyById(currentMark.entityId);
+        if (targetEntity) {
+            entityData = ENEMIES_DATA[targetEntity.type];
+            entityDisplayName = entityData.name;
         }
-        
-        if (isAdjacent(character.player, desiredTarget)) {
-            setStatus("Initiating combat...");
-            character.combat.active = true;
-            character.combat.targetId = desiredTarget.id;
-            character.combat.isPlayerTurn = true;
-            character.combat.lastUpdateTime = currentGameTime;
+    } else { // Skilling tasks ('woodcutting', 'mining', 'fishing')
+        targetEntity = findResourceById(currentMark.entityId);
+        if (targetEntity) {
+            entityData = RESOURCE_DATA[targetEntity.type];
+            entityDisplayName = entityData.name;
+        }
+    }
+
+    // Handle if the target entity doesn't exist (e.g., dead monster, depleted resource)
+    if (!targetEntity) {
+        if (currentMark.task === 'hunting' && isEnemyDead(currentMark.entityId)) {
+            setStatus(`Waiting for ${currentMark.entityId.split('_')[0]} to respawn...`);
+            // AI-NOTE: For hunting, we keep the mark and wait for respawn if it's the only/current one.
         } else {
-            setStatus(`Walking to ${desiredTarget.name}...`);
-            character.path = findPath(character.player, mark, character.zoneX, character.zoneY) || [];
+            setStatus(`Target ${currentMark.entityId} (task: ${currentMark.task}) not found. Removing mark.`);
+            automation.markedTiles.shift(); // Remove invalid/completed mark
+            if (automation.markedTiles.length === 0) stopAutomation(character);
+            else if (automation.markedTiles.every(m => m.task !== currentMark.task)) stopAutomation(character, false); // Stop old task, new one will pick up
+            else automation.state = 'IDLE';
+        }
+        return;
+    }
+
+    // Handle zone transitions if necessary
+    if (character.zoneX !== currentMark.zoneX || character.zoneY !== currentMark.zoneY) {
+        setStatus(`Traveling to ${entityDisplayName}'s zone...`);
+        character.path = findPathToZone(character, currentMark.zoneX, currentMark.zoneY) || [];
+        return; // Movement will be handled by game loop
+    }
+
+    // Character is in the correct zone. Now check adjacency to the approach spot.
+    // currentMark.x, currentMark.y is the approach spot.
+    if (player.x === currentMark.x && player.y === currentMark.y) {
+        // Character is at the approach spot, time to interact
+        setStatus(`Interacting with ${entityDisplayName}...`);
+        if (currentMark.task === 'hunting') {
+            if (!character.combat.active) {
+                character.combat.active = true;
+                character.combat.targetId = targetEntity.id;
+                character.combat.isPlayerTurn = true;
+                character.combat.lastUpdateTime = gameTime;
+            }
+        } else { // Skilling task
+            // AI-NOTE: Resource Gathering Logic
+            const resourceDef = RESOURCE_DATA[targetEntity.type];
+            if (resourceDef) { // Ensure resourceDef is found
+                if (gameTime - (automation.gatheringState.lastHitTime || 0) >= resourceDef.time) {
+                    automation.gatheringState.lastHitTime = gameTime;
+                    gainSkillXp(resourceDef.skill, resourceDef.xp);
+                    if (resourceDef.item) {
+                        gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
+                        showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
+                        if (!ui.inventoryModal.classList.contains('hidden')) renderInventory();
+                    }
+                    saveGameState();
+                    showNotification(`${character.name} gathered from ${entityDisplayName}.`);
+                    automation.markedTiles.shift(); // Resource mark is consumed upon successful gather
+                    if (automation.markedTiles.length === 0) stopAutomation(character);
+                    else automation.state = 'IDLE'; // Process next mark
+                } else {
+                    setStatus(`Gathering ${entityDisplayName}...`);
+                }
+            } else {
+                setStatus(`Error: Could not find data for resource ${targetEntity.type}. Removing mark.`);
+                automation.markedTiles.shift();
+                if (automation.markedTiles.length === 0) stopAutomation(character); else automation.state = 'IDLE';
+            }
         }
     } else {
-        if (isEnemyDead(mark.enemyId)) {
-            setStatus("Waiting for respawn...");
-        } else {
-            setStatus(`Invalid mark, removing.`);
+        // Not at the approach spot, need to move
+        setStatus(`Walking to ${entityDisplayName}...`);
+        character.path = findPath(player, { x: currentMark.x, y: currentMark.y }, zoneX, zoneY) || [];
+        if (!character.path || character.path.length === 0) { // Pathfinding failed
+            setStatus(`Cannot find path to ${entityDisplayName}. Removing mark.`);
             automation.markedTiles.shift();
             if (automation.markedTiles.length === 0) stopAutomation(character);
+            else automation.state = 'IDLE';
         }
     }
 }
 
-function updateSkillingTask(character, gameTime, setStatus) {
-    const { automation, player, zoneX, zoneY } = character;
-    const currentState = automation.state || 'IDLE';
+/* AI-REMOVED: updateHuntingTask - Replaced by updateMarkedEntityAutomation
+function updateHuntingTask(character, setStatus) { // ... original function ... }
+*/
 
-    let resourceTypeToFind;
-    let resourceDisplayName;
+/* AI-REMOVED: updateSkillingTask - Replaced by updateMarkedEntityAutomation
+function updateSkillingTask(character, gameTime, setStatus) { // ... original function ... }
+*/
 
-    // === NEW LOGGING START ===
-    // console.log(`updateSkillingTask START: Char: ${character.name}, Task: ${automation.task}, Current State: ${currentState}`); // Reduced verbosity
-    // === NEW LOGGING END ===
+/* AI-REMOVED: gatherResource - Logic integrated into updateMarkedEntityAutomation
+function gatherResource(character, gameTime, setStatus) { // ... original function ... }
+*/
 
-    switch (automation.task) {
-        case 'woodcutting':
-            resourceTypeToFind = 'TREE';
-            resourceDisplayName = 'tree';
-            break;
-        case 'mining':
-            resourceTypeToFind = 'ROCK';
-            resourceDisplayName = 'rock';
-            break;
-        case 'fishing':
-            resourceTypeToFind = 'FISHING_SPOT';
-            resourceDisplayName = 'fishing spot';
-            break;
-        default:
-            // console.error(`updateSkillingTask: Unknown skilling task: "${automation.task}" for character ${character.name}. Derived resourceTypeToFind would be undefined.`); // Reduced verbosity
-            stopAutomation(character);
-            return;
-    }
-    // === NEW LOGGING START ===
-    // console.log(`updateSkillingTask DERIVED: Char: ${character.name}, resourceTypeToFind: "${resourceTypeToFind}", resourceDisplayName: "${resourceDisplayName}"`); // Reduced verbosity
-    // === NEW LOGGING END ===
-
-    switch(currentState) {
-        case 'IDLE':
-            // === NEW LOGGING START ===
-            console.log(`%c[${character.name}] Task: ${automation.task} | State: IDLE -> FINDING_RESOURCE`, "color: yellow");
-            // === NEW LOGGING END ===
-            automation.state = 'FINDING_RESOURCE';
-            break; 
-        case 'FINDING_RESOURCE':
-             // === NEW LOGGING START ===
-             // console.log(`updateSkillingTask FINDING_RESOURCE: Char: ${character.name}, About to call findNearestResource with type: "${resourceTypeToFind}"`); // Reduced verbosity
-             // === NEW LOGGING END ===
-             setStatus(`Finding ${resourceDisplayName}...`);
-             const node = findNearestResource(character, resourceTypeToFind);
-             // === NEW LOGGING START ===
-             // console.log(`updateSkillingTask FINDING_RESOURCE: Char: ${character.name}, findNearestResource returned: ${node ? `Node ID: ${node.id}, Type: ${node.type}` : 'null'}`); // Reduced verbosity
-             // === NEW LOGGING END ===
-             if (node) {
-                console.log(`%c[${character.name}] Task: ${automation.task} | State: FINDING_RESOURCE -> WALKING_TO_RESOURCE (Target: ${node.id})`, "color: green");
-                automation.targetId = node.id;
-                automation.state = 'WALKING_TO_RESOURCE';
-             } else {
-                console.log(`%c[${character.name}] Task: ${automation.task} | State: FINDING_RESOURCE -> WAITING_FOR_RESPAWN (No ${resourceDisplayName}s found)`, "color: orange");
-                setStatus(`No ${resourceDisplayName}s available...`);
-                automation.state = 'WAITING_FOR_RESPAWN';
-             }
-            break;
-        case 'WALKING_TO_RESOURCE':
-            const targetNode = findResourceById(automation.targetId);
-            if (!targetNode) {
-                console.log(`%c[${character.name}] Task: ${automation.task} | State: WALKING_TO_RESOURCE -> FINDING_RESOURCE (Target node ID: ${automation.targetId} no longer found)`, "color: red");
-                automation.state = 'FINDING_RESOURCE';
-                break;
-            }
-            // === NEW LOGGING START ===
-            console.log(`%c[${character.name}] Task: ${automation.task} | State: WALKING_TO_RESOURCE (Target: ${targetNode.id} at ${targetNode.x},${targetNode.y})`, "color: blue");
-            // === NEW LOGGING END ===
-            
-            // --- ADD THIS LOG ---
-            console.log(`%c[${character.name}] updateSkillingTask: About to call isAdjacent. Character's current zoneX: ${zoneX}, zoneY: ${zoneY}. Target node: ${targetNode.type} id: ${targetNode.id}`, "color: magenta");
-            // --- END ADD THIS LOG ---
-
-            // Pass the character's current zone (zoneX, zoneY) as the zone context for the targetNode (resource)
-            if (isAdjacent(player, targetNode, zoneX, zoneY)) {
-                console.log(`%c[${character.name}] Task: ${automation.task} | State: WALKING_TO_RESOURCE -> GATHERING (Adjacent to ${targetNode.id})`, "color: green");
-                automation.state = 'GATHERING';
-            } else {
-                setStatus(`Walking to ${resourceDisplayName}...`);
-                // Pass character's current zone (zoneX, zoneY) as context for the resource targetNode
-                const targetPos = getWalkableNeighborsForEntity(targetNode, false, zoneX, zoneY)[0];
-                // === NEW LOGGING START ===
-                console.log(`%c[${character.name}] Task: ${automation.task} | WALKING_TO_RESOURCE: targetPos (adjacent walkable): ${targetPos ? `(${targetPos.x},${targetPos.y})` : 'null'}`, "color: blue");
-                // === NEW LOGGING END ===
-                if (!targetPos) {
-                    console.log(`%c[${character.name}] Task: ${automation.task} | State: WALKING_TO_RESOURCE -> FINDING_RESOURCE (No walkable adjacent tile for ${targetNode.id})`, "color: red");
-                    setStatus(`Can't reach ${resourceDisplayName}!`); automation.state = 'FINDING_RESOURCE'; break;
-                }
-                character.path = findPath(player, targetPos, zoneX, zoneY) || [];
-                // === NEW LOGGING START ===
-                console.log(`%c[${character.name}] Task: ${automation.task} | WALKING_TO_RESOURCE: Path found? ${character.path.length > 0 ? 'Yes' : 'No (or empty)'}. Path: ${JSON.stringify(character.path)}`, "color: blue");
-                // === NEW LOGGING END ===
-            }
-            break;
-        case 'GATHERING':
-            gatherResource(character, gameTime, setStatus);
-            // No explicit state change here, gatherResource handles its own timing.
-            // If the node disappears (e.g., gathered by another char), gatherResource will push it back to FINDING_RESOURCE.
-            break;
-        case 'WAITING_FOR_RESPAWN':
-            const hasRespawned = worldData[`${zoneX},${zoneY}`]?.resources?.some(r => r.type === resourceTypeToFind);
-            if (hasRespawned) {
-                console.log(`%c[${character.name}] Task: ${automation.task} | State: WAITING_FOR_RESPAWN -> FINDING_RESOURCE (Resource respawned)`, "color: cyan");
-                automation.state = 'FINDING_RESOURCE';
-            }
-            // else, stay in WAITING_FOR_RESPAWN
-            break;
-    }
-}
-
-function gatherResource(character, gameTime, setStatus) {
-    const { automation } = character;
-    const node = findResourceById(automation.targetId);
-    if (!node) { automation.state = 'FINDING_RESOURCE'; return; }
-    const resourceData = RESOURCE_DATA[node.type];
-    if (gameTime - (automation.gatheringState.lastHitTime || 0) < resourceData.time) return;
-    automation.gatheringState.lastHitTime = gameTime;
-    setStatus(`Gathering...`);
-    gainSkillXp(resourceData.skill, resourceData.xp);
-    if(resourceData.item) {
-        gameState.inventory[resourceData.item]++;
-        showNotification(`+1 ${resourceData.item.replace(/_/g, ' ')}`);
-        if(ui.inventoryModal.classList.contains('hidden') === false) renderInventory();
-    }
-    saveGameState();
-}
-
-function assignSkillTask(skillKey) {
+function assignSkillTask(skillKey) { // This function's role changes slightly
     const activeChar = getActiveCharacter();
     if (!activeChar || activeChar.isDead) return;
     if (activeChar.automation.task === skillKey && activeChar.automation.active) {
         stopAutomation(activeChar);
     } else {
         startAutomation(activeChar, skillKey);
+    }
+    // New behavior: If a skill task is assigned this way, try to find and mark the nearest resource of that type.
+    if (activeChar.automation.task === skillKey && activeChar.automation.active) {
+        const resourceType = Object.keys(RESOURCE_DATA).find(rt => RESOURCE_DATA[rt].skill === skillKey);
+        if (resourceType) {
+            const nearestNode = findNearestResource(activeChar, resourceType);
+            if (nearestNode) {
+                const approachSpot = findWalkableNeighborForEntity(nearestNode, activeChar.player, [], activeChar.zoneX, activeChar.zoneY);
+                if (approachSpot) {
+                    addMark(activeChar, nearestNode, approachSpot, skillKey);
+                } else { showNotification(`No approach spot for nearest ${resourceType}.`); }
+            } else { showNotification(`No ${resourceType}s found to mark.`); }
+        }
     }
 }
 
@@ -1812,11 +1905,11 @@ function reconstructPath(endNode) {
     return path.reverse().slice(1);
 }
 
-
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
     const currentZoneData = worldData[currentZoneKey];
     if (!currentZoneData || !currentZoneData.gateways) return null;
+
     for (const gateway of currentZoneData.gateways) {
         if (gateway.destZone.x === targetZoneX && gateway.destZone.y === targetZoneY) {
             return findPath(character.player, gateway, character.zoneX, character.zoneY);
@@ -1892,17 +1985,20 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
 }
 function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
-    const walkableNeighbors = getWalkableNeighborsForEntity(entity, true);
+    // Determine zone for the entity (critical for resources)
+    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : getActiveCharacter().zoneX; // Fallback to active char's zone if entity doesn't have one
+    const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : getActiveCharacter().zoneY;
+
+    const walkableNeighbors = getWalkableNeighborsForEntity(entity, true, entityZoneX, entityZoneY);
     const reservedSet = new Set(reservedSpots.map(s => `${s.x},${s.y}`));
     const availableNeighbors = walkableNeighbors.filter(p => !reservedSet.has(`${p.x},${p.y}`));
-    if (availableNeighbors.length === 0) return null; 
-    
+    if (availableNeighbors.length === 0) return null;
+
     availableNeighbors.sort((a, b) => {
         const distA = Math.abs(a.x - charPos.x) + Math.abs(a.y - charPos.y);
         const distB = Math.abs(b.x - charPos.x) + Math.abs(b.y - charPos.y);
         return distA - distB;
     });
-
     return availableNeighbors[0];
 }
 
@@ -1910,28 +2006,48 @@ function startAutomation(character, task) {
     if (character.isDead) return;
     if (character.automation.active && character.automation.task === task) return;
     if (character.combat.active) forceEndCombat(character);
-    stopAutomation(character);
-    if (task !== 'hunting') character.automation.markedTiles = [];
+    
+    // If the new task is different, existing marks are cleared by addMark or if no marks for new task exist.
+    // If task is the same, we just ensure automation is active.
+    if (character.automation.task !== task) {
+        // This implies a task switch. Marks will be handled by addMark or if no marks exist for this task.
+        // If we are starting a task like 'woodcutting' without a specific mark yet,
+        // we might not want to clear 'hunting' marks immediately unless a woodcutting mark is added.
+        // The `addMark` function now handles clearing marks if the task type of the *new mark* differs.
+        // If `startAutomation` is called directly (e.g. from `assignSkillTask` before a mark is made),
+        // we might need to ensure old marks of a *different* type are cleared.
+        // For now, let `handleMarking` and `addMark` drive the clearing of differently-typed marks.
+    }
+
     character.automation.task = task;
-    if (task === 'hunting' && character.automation.markedTiles.length === 0) {
-        if (character.id === getActiveCharacter().id) showNotification('Mark a monster to start hunting.');
+    character.automation.active = true; // Always activate
+    character.automation.state = 'IDLE'; // Reset state machine for the task
+
+    // If starting a task but no marks of that type exist, show a message.
+    if (character.automation.markedTiles.filter(m => m.task === task).length === 0) {
+        if (character.id === getActiveCharacter().id) showNotification(`Mark a ${task === 'hunting' ? 'monster' : 'resource'} to start ${task}.`);
+        // We might even stop automation if no initial marks for this task type.
+        // For now, let it be active, waiting for a mark.
         return;
     }
-    character.automation.active = true;
-    character.automation.state = 'IDLE';
+
     saveGameState();
     if (ui.levelsModal.classList.contains('hidden') === false) renderLevels();
     updateAllUI();
 }
 
-function stopAutomation(character) {
+function stopAutomation(character, clearAllMarksOfChar = true) {
      if(!character.automation.active) return; 
      if (character.combat.active) forceEndCombat(character);
-     character.automation.active = false;
-     character.automation.task = null; 
-     character.automation.targetId = null; 
-     character.automation.state = 'IDLE'; 
-     character.path = [];
+    const oldTask = character.automation.task;
+    character.automation.active = false;
+    character.automation.task = null; 
+    character.automation.targetId = null; 
+    character.automation.state = 'IDLE'; 
+    character.path = [];
+    if (clearAllMarksOfChar) {
+        character.automation.markedTiles = [];
+    }
      if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
      if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
      updateAllUI(); 
@@ -1984,7 +2100,7 @@ function renderCharacterSwitcher() {
         if(char.isDead) { taskEmoji = '💀'; } 
         else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
-            else if (char.automation.task === 'woodcutting') taskEmoji = '🌲';
+            else if (char.automation.task === 'woodcutting') taskEmoji = '🌳'; // Changed emoji for woodcutting
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
             else if (char.automation.task === 'fishing') taskEmoji = '?';
         }

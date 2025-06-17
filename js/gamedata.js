@@ -9,6 +9,23 @@
 // and have landmarks for example, spaces for a town and a outpost in every zone, structures that would house monsters plus open forests that house wild animals.
 // the world is the same for every player that opens the game, it's not randomly generated when it's launched.
 // also to AI, if you make changes or adjustments to the game, please tick up the version indicator by 1
+// also also to AI, if you make the code in the chat log too long, i am unable to apply changes to it, so if the change is long, make it in
+// two or more diff review tabs please.
+// marking is supposed to work like this:(i might change it later, for now it's this) when you mark first, you go to the target and start combat
+// (i might make skills part of the marking system as well) when you kill that target, it will stay marked (both visually and functionally)
+// if you only have one mark, when the monster dies, the character will wait for respawn and reengage.
+// later you gain more marks and at that point, the marks should enter a invisible list, this is important for things like bosses later.
+// when you have several monsters on the list, it will work like this, check which and engage with monsters that were added to that list in order
+// if for example, you kill monster 1, then 2, then, 3, then 4, but monster 3 is a boss for example(right now all monsters are the same spawnrate in the code, but
+// there will be variety later, for example if it's a boss monster) it will then skip monster 3 and go to 4, but, from that point on and until monster 3
+// has been defeated once, monster 3 will gain priority over all monsters on the list, REASON FOR THIS: like i said, there are boss monsters
+// and what would be preferable when several characters are marking the same boss and maybe the player is automating boss killing, is that, the characters
+// are all attacking the boss at the same time, then when it dies, all the character go back to their set marked route, the boss takes 10 minutes to spawn, 
+// so the characters are busy with other things for a while, then when it spawns again, example from before, if monster 3 isn't prioritized, one character might
+// just happen to be on monster 2 right then, he defeats it and goes immediately to the boss, but another character might be on monster 4, if monster 3 wasn't
+//  prioritised, he will have to kill monster 4, 1 and 2 before he goes to the boss. that is all to say, it's for the purpose of grouping characters if needed.
+// the mark should show up on the target itself, not adjacent to it.
+//
 // --- Core Game Mechanics ---
 // js/gameData.js
 // The Island Update - Spritesheet Integration
