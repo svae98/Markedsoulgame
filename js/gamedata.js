@@ -72,6 +72,7 @@ export const ITEM_SPRITES = {
 // All sprites are assumed to be 32x32 unless sw/sh are specified.
 // do NOT adjust sprites without user permission
 export const SPRITES = {
+
     PLAYER: { sx: 32, sy: 0 },
     BLUE_SLIME: { sx: 0, sy: 32 },
     YELLOW_SLIME: { sx: 96, sy: 192 },
@@ -80,6 +81,7 @@ export const SPRITES = {
     WOLF: { sx: 128, sy: 32 },
     GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 }, // Using WALL sprite, scaled up for Stone Golem appearance
     HUMAN: { sx: 64, sy: 192 }, 
+    FORGE: { sx: 192, sy:0 },
 
     // Tiles
     // GRASS is now an array for visual variety
@@ -87,7 +89,7 @@ export const SPRITES = {
         { sx: 0, sy: 0 } // Standard top-left grass
     ],
     PATH: { sx: 128, sy: 0 },
-    WALL: { sx: 0, sy: 0 },
+    WALL: { sx: 224, sy: 0 },
     DEEP_WATER: { sx: 256, sy: 224 }, // Reverted to actual DEEP_WATER sprite
     TREE: { sx: 64, sy: 0 }, // Using a common tree top sprite
     CHOPPED_TREE: { sx: 96, sy: 32 }, // Placeholder: Using a rock sprite as a stump for now
@@ -127,6 +129,7 @@ export const ENEMIES_DATA = {
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
+    FORGE: { name: 'Forge', time: 5000, levelReq: 1, xp: 0, item: null, skill: 'crafting', maxDurability: 1 },
     TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4 },
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
     FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 }
@@ -156,32 +159,61 @@ export const worldData = {
         mapLayout: Array(63).fill("F".repeat(63)) // Base map, will be carved
     },
     '1,1': {
-        name: "Verdant Starting Island", theme: 'forest',
-        width: 63, height: 63, // New fixed size
-        gateways: [
-            // Gateways adjusted for 35x35 playable area (world coords 14-48)
-            { x: 31, y: 14, destZone: { x: 1, y: 0 }, entry: { x: 31, y: 48 } }, // Top-edge of playable to Grove
-            { x: 14, y: 31, destZone: { x: 0, y: 1 }, entry: { x: 48, y: 31 } }, // Left-edge of playable to Library
-        ],
-        resources: [
-        // Add currentDurability to each resource
-        { x: 20, y: 20, type: 'TREE', id: 'tree_1', currentDurability: 4 }, { x: 42, y: 42, type: 'TREE', id: 'tree_2', currentDurability: 4 },
-        { x: 20, y: 42, type: 'ROCK', id: 'rock_1', currentDurability: 4 }, { x: 42, y: 20, type: 'ROCK', id: 'rock_2', currentDurability: 4 },
-        { x: 31, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_1', currentDurability: 4 }, { x: 32, y: 25, type: 'FISHING_SPOT', id: 'fishing_spot_2', currentDurability: 4 },
+    name: "Newly Edited Zone",
+    theme: "forest",
+    width: 31,
+    height: 31,
+    gateways: [
+        { x: 15, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 15, y: 29 } },
+        { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 29, y: 15 } },
     ],
-        spawns: [
-            // Spawns relocated to the new 35x35 playable area
-            { x: 25, y: 25, type: 'BLUE_SLIME' }, { x: 26, y: 26, type: 'BLUE_SLIME' }, { x: 26, y: 23, type: 'BLUE_SLIME' }, 
-            { x: 38, y: 38, type: 'YELLOW_SLIME' },
-            { x: 25, y: 38, type: 'RED_SLIME' },
-            { x: 38, y: 25, type: 'GOLEM' },
-            { x: 18, y: 31, type: 'HUMAN' }, { x: 19, y: 32, type: 'BOAR' }, { x: 20, y: 31, type: 'WOLF' },
-            { x: 31, y: 18, type: 'SKELETON' }, { x: 32, y: 19, type: 'SKELETON' },
-            { x: 31, y: 44, type: 'GIANT_SPIDER' }, { x: 32, y: 43, type: 'GIANT_SPIDER' },
-        ],
-        // D = Deep Water, ' ' = Grass, . = Path, F = Forest
-        mapLayout: Array(63).fill("D".repeat(63)) // Start with a 63x63 water map
-    },
+    resources: [
+        { x: 25, y: 20, type: "TREE", id: "tree_1", currentDurability: 4 },
+        { x: 26, y: 22, type: "TREE", id: "tree_2", currentDurability: 4 },
+        { x: 28, y: 10, type: "ROCK", id: "rock_1", currentDurability: 4 },
+        { x: 28, y: 12, type: "ROCK", id: "rock_2", currentDurability: 4 },
+        { x: 3, y: 3, type: "FISHING_SPOT", id: "fishing_spot_1", currentDurability: 4 },
+        { x: 4, y: 3, type: "FISHING_SPOT", id: "fishing_spot_2", currentDurability: 4 }
+    ],
+    spawns: [
+        // Your custom spawns are here
+        { "type": "BLUE_SLIME", "x": 7, "y": 29 },
+        // ...etc
+    ],
+    mapLayout: [ // This should have exactly 31 rows
+        "FFFFFFFFFFF      .   FFFFFFFFFF",
+        "FF       F      ..         FFFF",
+        "FF              .             F",
+        "FF              .             F",
+        "F              ..             F",
+        "F              .              F",
+        "               .              F",
+        "               .             FF",
+        "               ..             F",
+        "                .             F",
+        "                ..            F",
+        "                 .            F",
+        "                 .            F",
+        "                 .            F",
+        "   ...           .            F",
+        "  .. .......   ...            F",
+        "...        .....              F",
+        "                              F",
+        "                             FF",
+        "                             FF",
+        "                              F",
+        "                             FF",
+        "                             FF",
+        "                             FF",
+        "F                             F",
+        "F                             F",
+        "F                            FF",
+        "F                            FF",
+        "FF                           FF",
+        "FFFFFFFFF  FFF           FF   F",
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+    ]
+},
 };
 
 // --- Altar Upgrades ---
@@ -196,60 +228,3 @@ export const ALTAR_UPGRADES = {
 };
 
 
-// --- Helper function to carve out map layouts ---
-function applyMapCarving(mapLayout, carving, startX, startY) {
-    for (let y = 0; y < carving.length; y++) {
-        for (let x = 0; x < carving[y].length; x++) {
-            const layoutY = startY + y;
-            const layoutX = startX + x;
-            if (mapLayout[layoutY] && mapLayout[layoutY][layoutX] !== undefined) {
-                let row = mapLayout[layoutY].split('');
-                row[layoutX] = carving[y][x];
-                mapLayout[layoutY] = row.join('');
-            }
-        }
-    }
-}
-
-// --- Hand-crafted map carving for the Verdant Starting Island ('1,1') - Playable Area ---
-const playableIslandCarving = Array(35).fill(null).map((_, y) => { // 35x35 playable area
-    let row = " ".repeat(35);
-    if (y === 0 || y === 34) row = ".".repeat(35); // Top/Bottom path border
-    if (y > 0 && y < 34) {
-        row = "." + " ".repeat(33) + "."; // Left/Right path border
-    }
-    if (y === 17) row = ".".repeat(17) + " " + ".".repeat(17); // Central horizontal path with gap for spawn
-    if (y > 0 && y < 34) row = row.substring(0,17) + (y === 17 ? ' ' : '.') + row.substring(18); // Central vertical path
-    return row;
-});
-playableIslandCarving[17] = playableIslandCarving[17].substring(0,17) + ' ' + playableIslandCarving[17].substring(18); // Ensure spawn point is grass
-
-
-// Replace placeholders in carving with actual grass/path characters
-for (let i = 0; i < playableIslandCarving.length; i++) {
-    // playableIslandCarving[i] = playableIslandCarving[i].replace(/#/g, ' '); // '#' becomes grass
-    // playableIslandCarving[i] = playableIslandCarving[i].replace(/Pond Area|Main Clearing|\(Player Spawn Here\)|Rocky Area/g, (match) => ' '.repeat(match.length)); // Text becomes grass
-}
-
-// Apply the new carving for Verdant Starting Island's playable area
-applyMapCarving(worldData['1,1'].mapLayout, playableIslandCarving, 14, 14);
-
-// --- Hand-crafted map carving for The Collector's Library ('0,1') ---
-const libraryPlayableCarving = Array(35).fill("W".repeat(35)).map((row, y) => { // 35x35
-    if (y > 0 && y < 34) return "W" + " ".repeat(33) + "W"; // Hollow box
-    return row;
-});
-libraryPlayableCarving[17] = libraryPlayableCarving[17].substring(0,34) + "."; // Gateway path
-applyMapCarving(worldData['0,1'].mapLayout, libraryPlayableCarving, 14, 14);
-
-// --- Hand-crafted map carving for The Quiet Grove ('1,0') ---
-// New carving for The Quiet Grove: 35x35 grass area
-const grovePlayableCarving = Array(35).fill(" ".repeat(35)); // Initialize 35x35 area with grass (' ')
-
-// Ensure the gateway tile at world (31,48) is a path tile for clarity.
-// Carving coordinates: x = 31-14=17, y = 48-14=34.
-let gatewayRowGrove = grovePlayableCarving[34].split('');
-gatewayRowGrove[17] = '.'; // Make the gateway tile a path tile ('.')
-grovePlayableCarving[34] = gatewayRowGrove.join('');
-
-applyMapCarving(worldData['1,0'].mapLayout, grovePlayableCarving, 14, 14);

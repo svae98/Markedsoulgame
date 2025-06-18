@@ -82,6 +82,10 @@ function getActiveCharacter() {
 }
 
 const ui = {
+    openCraftingButton: document.getElementById('openCraftingButton'),
+    craftingModal: document.getElementById('craftingModal'),
+    craftingListContainer: document.getElementById('craftingListContainer'),
+    closeCraftingButton: document.getElementById('closeCraftingButton'),
     canvas: document.getElementById('game-canvas'),
     canvasContainer: document.getElementById('canvas-container'),
     ctx: document.getElementById('game-canvas').getContext('2d'),
@@ -249,7 +253,9 @@ async function initGame() {
     ui.closeInventoryButton.addEventListener('click', closeInventory);
     ui.openMapButton.addEventListener('click', openMap);
     ui.closeMapButton.addEventListener('click', closeMap);
-    
+    ui.openCraftingButton.addEventListener('click', openCrafting);
+    ui.closeCraftingButton.addEventListener('click', closeCrafting);
+    ui.craftingModal.addEventListener('click', (e) => { if (e.target === ui.craftingModal) closeCrafting(); });
     ui.soulAltarModal.addEventListener('click', (e) => { if (e.target === ui.soulAltarModal) closeSoulAltar(); });
     ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
     ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
@@ -341,7 +347,8 @@ function updateCharacterLogic(character, logicDelta) {
         }
     }
 }
-
+function openCrafting() { openModal(ui.craftingModal); /* We can render crafting items here later */ }
+function closeCrafting() { closeModal(ui.craftingModal); }
 function updateCharacterVisuals(character, frameDelta) {
     const visualX = character.visual.x;
     const visualY = character.visual.y;
@@ -814,7 +821,24 @@ function handleMarking(entity) {
 }
 
 function handleMapMarking(enemy, activeChar) {
-    const closestSpot = findWalkableNeighborForEntity(enemy, activeChar.player, [], enemy.zoneX, enemy.zoneY);
+    let referencePos = activeChar.player; // Default to player's position if in the same zone
+
+    // If the enemy is in a different zone, find the gateway entry point to use as a reference
+    if (activeChar.zoneX !== enemy.zoneX || activeChar.zoneY !== enemy.zoneY) {
+        const currentZoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+        const currentZoneData = worldData[currentZoneKey];
+        if (currentZoneData && currentZoneData.gateways) {
+            const relevantGateway = currentZoneData.gateways.find(g => g.destZone.x === enemy.zoneX && g.destZone.y === enemy.zoneY);
+            if (relevantGateway) {
+                // Use the gateway's destination coordinates as the point of reference
+                referencePos = relevantGateway.entry; 
+            }
+        }
+    }
+
+    // Now, find the closest approach spot to the correct reference position
+    const closestSpot = findWalkableNeighborForEntity(enemy, referencePos, [], enemy.zoneX, enemy.zoneY);
+    
     if (closestSpot) {
         addMark(activeChar, enemy, closestSpot, 'hunting');
         saveGameState();
@@ -1124,11 +1148,12 @@ function endCombat(character, playerWon) {
     const { combat } = character; 
     if (!combat.targetId) return; 
     const killedEnemyId = combat.targetId;
-    const targetEnemy = findEnemyById(killedEnemyId);
-    
+    const targetEnemy = findEntityDataForMark(killedEnemyId);
+
     if (playerWon && targetEnemy) {
         const enemyData = ENEMIES_DATA[targetEnemy.type];
-        const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
+        // Corrected zoneKey without <span> tags
+        const zoneKey = `<span class="math-inline">\{targetEnemy\.zoneX\},</span>{targetEnemy.zoneY}`;
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`;
 
         if (enemyData.isBoss) {
@@ -1171,13 +1196,9 @@ function endCombat(character, playerWon) {
         character.automation.markedTiles = []; 
         stopAutomation(character);
         character.isDead = true;
-        
+
         setTimeout(() => {
-            // CRITICAL-LOGIC: This is the player's safe respawn point after death.
-            // It ensures the player always returns to a known, walkable tile.
-            // HOW TO CHANGE THE RESPAWN POINT AFTER DEATH:
-            // Change the x and y values in the respawnPos object below.
-            const respawnPos = { x: 31, y: 31 };
+            const respawnPos = { x: 15, y: 15 };
             character.player = { ...respawnPos };
             character.visual = { ...respawnPos };
             character.target = { ...respawnPos };
@@ -1654,9 +1675,9 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
         for (const resource of zone.resources) {
             // This condition is now updated to include FISHING_SPOT
             if (resource.x === x && resource.y === y && 
-                (resource.type === 'TREE' || resource.type === 'ROCK' || resource.type === 'FISHING_SPOT')) {
-                return false;
-            }
+                    (resource.type === 'TREE' || resource.type === 'ROCK' || resource.type === 'FISHING_SPOT' || resource.type === 'FORGE')) { // Add FORGE here
+                    return false;
+                }
         }
     }
 
@@ -1872,7 +1893,8 @@ function updateAllUI() {
 async function saveGameState() { 
     if (!userId || !appId) return; 
     try { 
-        const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
+        // Corrected path without <span> tags
+        const docRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{userId}/gamestate/main`); 
         const stateToSave = JSON.parse(JSON.stringify(gameState));
         await setDoc(docRef, { ...stateToSave, lastSaved: serverTimestamp() }); 
     } catch(e) { console.error("Failed to save game state:", e); } 
@@ -1885,8 +1907,9 @@ async function loadGameState() {
              gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
         }
         return; 
-    } 
-    const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
+    }
+    // Corrected path without <span> tags 
+    const docRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{userId}/gamestate/main`); 
     const docSnap = await getDoc(docRef); 
     let defaultState = getDefaultGameState(); 
     if (docSnap.exists()) { 
@@ -1904,23 +1927,17 @@ async function loadGameState() {
 
     let needsSave = false;
 
-    // This loop ensures that all characters, upon loading, are in a valid state and position.
     for (const char of gameState.characters) {
-        // Ensure essential properties exist on loaded characters
         if(!char.visual) { char.visual = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.target) { char.target = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.path) { char.path = []; needsSave = true; }
         if(char.movementCooldown === undefined) { char.movementCooldown = 0; needsSave = true; }
-        
-        // Temporarily build the map for the character being checked to ensure isWalkable works correctly.
+
         currentMapData = buildMapData(char.zoneX, char.zoneY);
 
-        // CRITICAL-LOGIC: This block is a safety check to prevent a player
-        // from loading into an unwalkable tile (e.g., if the map changes).
-        // It resets them to the default spawn point if they are stuck. Do not remove.
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
-                console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
-                const respawnPos = { x: 31, y: 31 }; // Centered for 63x63 map
+            console.warn(`Character <span class="math-inline">\{char\.name\} at \(</span>{char.player.x}, ${char.player.y}) in zone <span class="math-inline">\{char\.zoneX\},</span>{char.zoneY} is in an invalid tile. Resetting position.`);
+            const respawnPos = { x: 15, y: 15 };
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
@@ -1934,7 +1951,7 @@ async function loadGameState() {
             console.warn(`Character ${char.name} was dead on load. Respawning.`);
             char.isDead = false;
             char.hp.current = char.hp.max;
-            const respawnPos = { x: 31, y: 31 }; // Centered for 63x63 map
+            const respawnPos = { x: 15, y: 15 };
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
@@ -1944,8 +1961,7 @@ async function loadGameState() {
             needsSave = true;
         }
     };
-    
-    // Apply speed cheat
+
     if (gameState.upgrades) {
         gameState.upgrades.plusOneSpeed = 100;
         console.log("CHEAT APPLIED: Speed stat (plusOneSpeed upgrade) set to 100.");
