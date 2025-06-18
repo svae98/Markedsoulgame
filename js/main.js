@@ -7,7 +7,7 @@
 import {
     MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
     TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES, SPRITES,
-    SKILL_EQUIPMENT_DATA // --- Add this line ---
+    CRAFTING_DATA // --- THIS IS THE ONLY IMPORT NEEDED NOW ---
 } from './gamedata.js';
 
 
@@ -85,10 +85,6 @@ function getActiveCharacter() {
 }
 
 const ui = {
-    openCraftingButton: document.getElementById('openCraftingButton'),
-    craftingModal: document.getElementById('craftingModal'),
-    craftingListContainer: document.getElementById('craftingListContainer'),
-    closeCraftingButton: document.getElementById('closeCraftingButton'),
     canvas: document.getElementById('game-canvas'),
     canvasContainer: document.getElementById('canvas-container'),
     ctx: document.getElementById('game-canvas').getContext('2d'),
@@ -140,7 +136,7 @@ function resizeCanvasAndCenterCamera() {
             // Calculate the perfect tile size to fit the zone in the canvas
             const tileW = ui.canvas.width / zone.width;
             const tileH = ui.canvas.height / zone.height;
-            dynamicTileSize = Math.floor(Math.min(tileW, tileH)); // Use floor to avoid graphical gaps
+            dynamicTileSize = Math.min(tileW, tileH);
 
             // Center the camera on the middle of the zone
             camera.x = zone.width / 2;
@@ -247,21 +243,22 @@ function getDefaultGameState() {
         characters: [], activeCharacterIndex: 0,
         inventory: { 
             soulFragment: 1000, ragingSoul: 0, 
-            wood: 0, copper_ore: 0, fish: 0,
-            copper_bar: 0, iron_bar: 0, steel_bar: 0 // Added bars
+            wood: 0, copper_ore: 0, fish: 0
         },
         level: { current: 1, xp: 0 }, 
-        skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
+        skills: { 
+            woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0},
+            // Add the new crafting skills themselves
+            cooking: { level: 1, xp: 0 }, woodworking: { level: 1, xp: 0 }, blacksmithing: { level: 1, xp: 0 }
+        },
         
-        // --- New State Object ---
-        skillEquipment: {
-            blacksmithing: {
-                sword:    { unlocked: false, level: 1, xp: 0 },
-                leggings: { unlocked: false, level: 1, xp: 0 },
-                helmet:   { unlocked: false, level: 1, xp: 0 }
-            }
+        // --- NEW: This will store the mastery level and progress for each recipe ---
+        craftingMastery: {
+            // This will be populated as you unlock recipes, e.g.:
+            // cooked_fish: { unlocked: true, level: 1, progress: 0 }
         },
 
+        buffs: [],
         upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
         collectedItemDrops: [],
         firstKills: [], 
@@ -270,22 +267,6 @@ function getDefaultGameState() {
 
 
 async function initGame() {
-    function resizeCanvasAndCenterCamera() {
-        ui.canvas.width = ui.canvasContainer.offsetWidth;
-        ui.canvas.height = ui.canvasContainer.offsetHeight;
-        ui.ctx.imageSmoothingEnabled = false;
-        
-        const activeChar = getActiveCharacter();
-        if (activeChar) {
-            const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
-            const zone = worldData[zoneKey];
-            if (zone) {
-                camera.x = zone.width / 2;
-                camera.y = zone.height / 2;
-            }
-        }
-    }
-    resizeCanvasAndCenterCamera();
     window.addEventListener('resize', resizeCanvasAndCenterCamera);
     
     try {
@@ -294,7 +275,6 @@ async function initGame() {
         ui.actionStatus.textContent = "Error: Could not load assets!";
         return;
     }
-
 
     ui.canvas.addEventListener('contextmenu', handleRightClick);
     ui.canvas.addEventListener('click', handleLeftClick);
@@ -312,31 +292,28 @@ async function initGame() {
     ui.closeInventoryButton.addEventListener('click', closeInventory);
     ui.openMapButton.addEventListener('click', openMap);
     ui.closeMapButton.addEventListener('click', closeMap);
-    ui.openCraftingButton.addEventListener('click', openCrafting);
-    ui.closeCraftingButton.addEventListener('click', closeCrafting);
-    ui.craftingModal.addEventListener('click', (e) => { if (e.target === ui.craftingModal) closeCrafting(); });
     ui.soulAltarModal.addEventListener('click', (e) => { if (e.target === ui.soulAltarModal) closeSoulAltar(); });
     ui.levelsModal.addEventListener('click', (e) => { if (e.target === ui.levelsModal) closeLevels(); });
     ui.inventoryModal.addEventListener('click', (e) => { if (e.target === ui.inventoryModal) closeInventory(); });
     ui.mapModal.addEventListener('click', (e) => { if (e.target === ui.mapModal) closeMap(); });
-    
+    const closeStationButton = document.getElementById('closeStationCraftingButton');
+    closeStationButton.addEventListener('click', closeStationCrafting);
     currentGameTime = performance.now(); 
     await loadGameState();
     
+    // Calculate canvas size and camera position *after* the game state is loaded.
+    resizeCanvasAndCenterCamera(); 
+    
     const activeChar = getActiveCharacter();
     if (activeChar) {
-        const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
-        const zone = worldData[zoneKey];
-        if (zone) {
-            camera.x = zone.width / 2;
-            camera.y = zone.height / 2;
-        }
         currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
     }
+
     Object.keys(worldData).forEach(zoneKey => {
         const [zoneX, zoneY] = zoneKey.split(',').map(Number);
         spawnEnemiesForZone(zoneX, zoneY);
     });
+
     updateAllUI();
     ui.actionStatus.textContent = "Right-click for options";
     lastFrameTime = performance.now();
@@ -406,125 +383,120 @@ function updateCharacterLogic(character, logicDelta) {
         }
     }
 }
-function openCrafting() { 
-    renderCraftingList(); // Render the list before opening
-    openModal(ui.craftingModal); 
+
+
+function openCrafting() {
+    renderCraftingTabs();
+    renderCraftingList('cooking'); // Default to the new cooking tab
+    openModal(ui.craftingModal);
 }
-function renderCraftingList() {
+
+function renderCraftingTabs() {
+    const tabsContainer = document.getElementById('craftingTabsContainer');
+    tabsContainer.innerHTML = '';
+    Object.keys(CRAFTING_DATA).forEach(categoryKey => {
+        const tab = document.createElement('button');
+        tab.textContent = CRAFTING_DATA[categoryKey].name;
+        tab.className = 'px-4 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors capitalize';
+        tab.onclick = () => {
+            Array.from(tabsContainer.children).forEach(t => t.classList.remove('border-b-2', 'border-fuchsia-500', 'text-white'));
+            tab.classList.add('border-b-2', 'border-fuchsia-500', 'text-white');
+            renderCraftingList(categoryKey);
+        };
+        tabsContainer.appendChild(tab);
+    });
+    tabsContainer.firstChild?.classList.add('border-b-2', 'border-fuchsia-500', 'text-white');
+}
+
+function renderCraftingList(categoryKey) {
     const container = ui.craftingListContainer;
-    container.innerHTML = ''; // Clear previous content
+    container.innerHTML = '';
+    const categoryData = CRAFTING_DATA[categoryKey];
+    const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0;
 
-    // For now, we are just building the blacksmithing section
-    const skill = 'blacksmithing';
-    const skillData = SKILL_EQUIPMENT_DATA[skill];
-    const skillState = gameState.skillEquipment[skill];
-
-    for (const itemId in skillData) {
-        if (itemId === 'skill') continue; // Skip the skill key
-
-        const itemData = skillData[itemId];
-        const itemState = skillState[itemId];
-        const playerSkillLevel = gameState.skills[skillData.skill].level;
-
+    for (const recipeId in categoryData.recipes) {
+        const recipeData = categoryData.recipes[recipeId];
+        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 0, progress: 0 };
         const itemEl = document.createElement('div');
         itemEl.className = 'modal-item';
 
-        if (playerSkillLevel < itemData.unlockLevel) {
-            // Item is locked
-            itemEl.innerHTML = `<span>${itemData.name}</span> <span class="cost">Requires Lv ${itemData.unlockLevel} ${skillData.skill}</span>`;
+        if (playerSkillLevel < recipeData.unlockLevel) {
+            // Recipe is locked by skill level
+            itemEl.innerHTML = `<span>${recipeData.name}</span> <span class="cost">Requires Lv ${recipeData.unlockLevel} ${categoryData.name}</span>`;
             itemEl.classList.add('disabled');
-        } else if (!itemState.unlocked) {
-            // Item is ready to be unlocked
-            let costString = "Unlock: ";
-            for (const mat in itemData.unlockCost) {
-                costString += `${itemData.unlockCost[mat]} ${ITEM_SPRITES[mat]}`;
-            }
-            itemEl.innerHTML = `<span>${itemData.name}</span> <button class="cost">${costString}</button>`;
-            itemEl.querySelector('button').addEventListener('click', () => craftSkillEquipment(skill, itemId));
         } else {
-            // Item is unlocked and can be leveled up
-            const xpToNext = itemData.xpCurve(itemState.level);
-            const progressPercent = (itemState.xp / xpToNext) * 100;
-            let costString = "Infuse: ";
-             for (const mat in itemData.xpPerCraft) {
-                costString += `${itemData.xpPerCraft[mat]} ${ITEM_SPRITES[mat]}`;
-            }
+            // Recipe is available to be crafted
+            let costString = "Craft: ";
+            for (const mat in recipeData.cost) { costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat]}`; }
             
+            const progressNeeded = recipeData.masteryCurve(masteryData.level);
+            const progressPercent = masteryData.unlocked ? (masteryData.progress / progressNeeded) * 100 : 0;
+            const masteryLevelText = masteryData.unlocked ? `Mastery ${masteryData.level}` : 'Unlock Bonus';
+
             itemEl.innerHTML = `
                 <div class="w-full">
                     <div class="flex justify-between items-center mb-1">
-                        <span>${itemData.name} (Lv ${itemState.level})</span>
+                        <span>${recipeData.name} (${masteryLevelText})</span>
                         <button class="cost">${costString}</button>
                     </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${itemState.xp}/${xpToNext}</div>
+                    <div class="progress-bar-container" title="Mastery Progress">
+                        <div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div>
                     </div>
                 </div>
             `;
-            itemEl.querySelector('button').addEventListener('click', () => craftSkillEquipment(skill, itemId));
+            itemEl.querySelector('button').addEventListener('click', () => craftRecipe(categoryKey, recipeId));
         }
         container.appendChild(itemEl);
     }
 }
 
-function craftSkillEquipment(skill, itemId) {
-    const itemData = SKILL_EQUIPMENT_DATA[skill][itemId];
-    const itemState = gameState.skillEquipment[skill][itemId];
+function craftRecipe(categoryKey, recipeId) {
+    const recipeData = CRAFTING_DATA[categoryKey].recipes[recipeId];
+    const cost = recipeData.cost;
 
-    if (!itemState.unlocked) {
-        // --- UNLOCK LOGIC ---
-        const cost = itemData.unlockCost;
-        let canAfford = true;
-        for (const mat in cost) {
-            if ((gameState.inventory[mat] || 0) < cost[mat]) {
-                canAfford = false;
-                break;
-            }
+    // Check if player can afford the cost
+    if (Object.keys(cost).every(mat => (gameState.inventory[mat] || 0) >= cost[mat])) {
+        // Deduct materials
+        Object.keys(cost).forEach(mat => gameState.inventory[mat] -= cost[mat]);
+
+        // Grant XP to the crafting skill
+        gainSkillXp(CRAFTING_DATA[categoryKey].skill, 25); // Grant 25 xp per craft
+
+        // Initialize mastery data if it doesn't exist
+        if (!gameState.craftingMastery[recipeId]) {
+            gameState.craftingMastery[recipeId] = { unlocked: false, level: 1, progress: 0 };
         }
-        if (canAfford) {
-            for (const mat in cost) {
-                gameState.inventory[mat] -= cost[mat];
-            }
-            itemState.unlocked = true;
-            showNotification(`${itemData.name} unlocked!`);
-            recalculateTeamStats(); // Recalculate stats in case of a level 1 bonus
-        } else {
-            showNotification(`Not enough materials to unlock.`);
+        const masteryData = gameState.craftingMastery[recipeId];
+
+        // Unlock the bonus on the first craft
+        if (!masteryData.unlocked) {
+            masteryData.unlocked = true;
+            showNotification(`${recipeData.name} bonus unlocked!`);
+            recalculateTeamStats();
         }
+
+        // Add mastery progress
+        masteryData.progress += recipeData.masteryPerCraft;
+
+        // Check for mastery level up
+        let progressNeeded = recipeData.masteryCurve(masteryData.level);
+        while (masteryData.progress >= progressNeeded) {
+            masteryData.level++;
+            masteryData.progress -= progressNeeded;
+            showNotification(`${recipeData.name} Mastery increased to ${masteryData.level}!`);
+            recalculateTeamStats(); // Recalculate stats for the new bonus
+            progressNeeded = recipeData.masteryCurve(masteryData.level);
+        }
+
     } else {
-        // --- XP INFUSION LOGIC ---
-        const cost = itemData.xpPerCraft;
-        let canAfford = true;
-        for (const mat in cost) {
-            if ((gameState.inventory[mat] || 0) < cost[mat]) {
-                canAfford = false;
-                break;
-            }
-        }
-        if (canAfford) {
-            for (const mat in cost) {
-                gameState.inventory[mat] -= cost[mat];
-            }
-            itemState.xp += 1; // xpPerCraft value could be used here if it varies
-
-            // Check for level up
-            const xpToNext = itemData.xpCurve(itemState.level);
-            if (itemState.xp >= xpToNext) {
-                itemState.level++;
-                itemState.xp -= xpToNext;
-                showNotification(`${itemData.name} leveled up to ${itemState.level}!`);
-                recalculateTeamStats(); // Stats changed, so recalculate
-            }
-        } else {
-            // This will be spammy, maybe remove later
-            showNotification(`Not enough materials to infuse.`);
-        }
+        showNotification(`Not enough materials.`);
     }
-    // Re-render the crafting list to show the changes
-    renderCraftingList();
-    updateAllUI(); // To update inventory counts
+
+    renderCraftingList(categoryKey);
+    updateAllUI();
     saveGameState();
 }
+
 function closeCrafting() { closeModal(ui.craftingModal); }
 function updateCharacterVisuals(character, frameDelta) {
     const visualX = character.visual.x;
@@ -601,7 +573,7 @@ function drawSprite(sprite, destX, destY, destW = dynamicTileSize, destH = dynam
     const sy = sprite.sy;
     const sw = sprite.sw || 32; // Source width from spritesheet is always 32
     const sh = sprite.sh || 32; // Source height from spritesheet is always 32
-    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), Math.round(destW), Math.round(destH));
+    ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), Math.ceil(destW), Math.ceil(destH));
 }
 
 function drawTile(x, y, zoneX, zoneY) {
@@ -682,22 +654,37 @@ function drawEnemy(enemy) {
 
 function drawMarks(currentZoneKey) {
     ui.ctx.lineWidth = 2;
+    // This part stays the same: get all marks from all characters.
     const allMarks = gameState.characters.flatMap(c => c.automation.markedTiles);
 
     allMarks.forEach(mark => {
-        const enemy = findEnemyById(mark.entityId);
-        if (!enemy) return; 
+        // --- THIS IS THE NEW LOGIC ---
+        
+        // First, try to find the marked entity as an enemy, OR as a resource.
+        const entity = findEnemyById(mark.entityId) || findResourceById(mark.entityId);
 
-        if (`${enemy.zoneX},${enemy.zoneY}` === currentZoneKey) {
+        // If the entity doesn't exist for any reason, skip and do nothing.
+        if (!entity) return; 
+
+        // Check if the entity is in the currently viewed zone.
+        // We use the zone info from the 'mark' itself for reliability.
+        if (`${mark.zoneX},${mark.zoneY}` === currentZoneKey) {
+            
+            // Find which character this mark belongs to for correct coloring.
             const char = gameState.characters.find(c => c.automation.markedTiles.includes(mark));
             ui.ctx.strokeStyle = char ? char.automation.color : '#FFFFFF';
             
-            const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y); 
+            // Get the entity's screen position.
+            const {x: screenX, y: screenY} = worldToScreen(entity.x, entity.y); 
             
-            const enemyData = ENEMIES_DATA[enemy.type];
-            const size = enemyData.size || { w: 1, h: 1 };
-            const width = size.w * TILE_SIZE;
-            const height = size.h * TILE_SIZE;
+            // Get the entity's data from EITHER the enemy list or the resource list.
+            const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
+            if (!entityData) return;
+
+            // Use the size from the entity's data to draw the box correctly.
+            const size = entityData.size || { w: 1, h: 1 };
+            const width = size.w * dynamicTileSize;
+            const height = size.h * dynamicTileSize;
 
             ui.ctx.strokeRect(screenX, screenY, width, height);
         }
@@ -763,8 +750,9 @@ function getTileFromClick(e) {
     const rect = ui.canvas.getBoundingClientRect(); 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / TILE_SIZE) + (screenX / TILE_SIZE) );
-    const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / TILE_SIZE) + (screenY / TILE_SIZE) );
+    // --- BROYTING HER ---
+    const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / dynamicTileSize) + (screenX / dynamicTileSize) );
+    const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / dynamicTileSize) + (screenY / dynamicTileSize) );
     return {x: worldX, y: worldY};
 }
 
@@ -841,6 +829,13 @@ function handleLeftClick(e) {
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
     const enemy = getEnemyAt(x, y, zoneKey);
     const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
+    
+    // --- THIS IS THE NEW PART ---
+    // If you click a resource and it's a crafting station
+    if (resource && CRAFTING_DATA[resource.skill]) {
+        openStationCrafting(resource.skill);
+        return;
+    }
     
     if (e.shiftKey) { 
         handleMarking(enemy || resource);
@@ -1154,29 +1149,45 @@ function renderMap() {
 
 function renderLevels() {
     ui.levelsListContainer.innerHTML = '';
-    const activeChar = getActiveCharacter();
-    const createLevelBar = (name, skillKey, level, xp, neededXp, color) => {
-        const xpPercent = (neededXp > 0 && xp > 0) ? (xp / neededXp) * 100 : (xp >= neededXp ? 100 : 0); // Adjusted for xp=0 case
+    
+    // Helper function to avoid repeating code
+    const createLevelBar = (name, skillKey, color) => {
+        const skill = gameState.skills[skillKey];
+        if (!skill) return null; // Don't create a bar if the skill doesn't exist
+
+        const neededXp = xpForSkillLevel(skill.level);
+        const xpPercent = (neededXp > 0 && skill.xp > 0) ? (skill.xp / neededXp) * 100 : 0;
+        
         const container = document.createElement('div');
-        container.className = `w-full p-2 border rounded-lg modal-item`; // Removed 'clickable' and 'assigned' classes
+        container.className = `w-full p-2 border rounded-lg modal-item`;
         container.innerHTML = `
             <div>
                 <div class="flex justify-between items-center mb-1 text-sm">
                     <span class="font-medium text-${color}-300">${name}</span>
-                    <span>Lv ${level}</span>
+                    <span>Lv ${skill.level}</span>
                 </div>
                 <div class="progress-bar-container">
-                    <div class="progress-bar bg-${color}-500" style="width: ${xpPercent}%;">${Math.floor(xp)}/${neededXp}</div>
+                    <div class="progress-bar bg-${color}-500" style="width: ${xpPercent}%;">${Math.floor(skill.xp)}/${neededXp}</div>
                 </div>
             </div>
         `;
-        // AI-NOTE: Removed event listener for assignSkillTask from skill UI elements
         return container;
     };
     
-    ui.levelsListContainer.appendChild(createLevelBar('Woodcutting', 'woodcutting', gameState.skills.woodcutting.level, Math.floor(gameState.skills.woodcutting.xp), xpForSkillLevel(gameState.skills.woodcutting.level), 'lime'));
-    ui.levelsListContainer.appendChild(createLevelBar('Mining', 'mining', gameState.skills.mining.level, Math.floor(gameState.skills.mining.xp), xpForSkillLevel(gameState.skills.mining.level), 'yellow'));
-    ui.levelsListContainer.appendChild(createLevelBar('Fishing', 'fishing', gameState.skills.fishing.level, Math.floor(gameState.skills.fishing.xp), xpForSkillLevel(gameState.skills.fishing.level), 'sky'));
+    // --- Gathering Skills ---
+    ui.levelsListContainer.appendChild(createLevelBar('Woodcutting', 'woodcutting', 'lime'));
+    ui.levelsListContainer.appendChild(createLevelBar('Mining', 'mining', 'yellow'));
+    ui.levelsListContainer.appendChild(createLevelBar('Fishing', 'fishing', 'sky'));
+
+    // Add a separator for clarity
+    const separator = document.createElement('hr');
+    separator.className = 'w-full border-zinc-600 my-2';
+    ui.levelsListContainer.appendChild(separator);
+
+    // --- Crafting Skills ---
+    ui.levelsListContainer.appendChild(createLevelBar('Blacksmithing', 'blacksmithing', 'orange'));
+    ui.levelsListContainer.appendChild(createLevelBar('Woodworking', 'woodworking', 'amber'));
+    ui.levelsListContainer.appendChild(createLevelBar('Cooking', 'cooking', 'red'));
 }
 
 function renderInventory() {
@@ -1254,18 +1265,29 @@ function updateCombat(character, gameTime) {
     
     const playerStats = getTeamStats(); 
     let damage; 
+
+    // --- THIS IS THE CORRECTED PART ---
+    const activeChar = getActiveCharacter(); // Get the currently viewed character
+
     if (combat.isPlayerTurn) { 
         damage = Math.max(1, playerStats.damage); 
         enemy.currentHp -= damage; 
-        showDamagePopup(enemy.x, enemy.y, damage, false); 
+        // Only show damage if the combat is in the same zone as the active character
+        if (character.zoneX === activeChar.zoneX && character.zoneY === activeChar.zoneY) {
+            showDamagePopup(enemy.x, enemy.y, damage, false); 
+        }
         gainXp(damage); 
     } else { 
         const enemyData = ENEMIES_DATA[enemy.type]; 
         const damageReduction = playerStats.defense * 0.25;
         damage = Math.max(0, enemyData.attack - damageReduction); 
         character.hp.current -= damage; 
-        showDamagePopup(character.player.x, character.player.y, damage, true); 
+        // Only show damage if the combat is in the same zone as the active character
+        if (character.zoneX === activeChar.zoneX && character.zoneY === activeChar.zoneY) {
+            showDamagePopup(character.player.x, character.player.y, damage, true); 
+        }
     } 
+
     combat.isPlayerTurn = !combat.isPlayerTurn; 
     if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
     if (enemy.currentHp <= 0) endCombat(character, true); 
@@ -1388,36 +1410,85 @@ function endCombat(character, playerWon) {
 // text file 2 end
 // text file 3 begin
 function recalculateTeamStats() {
-    let allBonuses = { ADD_MAX_HP: 0 };
-    if(gameState.collectedItemDrops) {
+    // Start with base stats
+    const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
+    let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
+    let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
+    let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
+    let totalHpRegenBonus = 0;
+    let totalDefense = (gameState.level.current - 1) + (gameState.upgrades.plusOneDefense || 0);
+    let totalMaxHpBonus = (gameState.upgrades.plusTwoMaxHp || 0) * 2;
+    totalMaxHpBonus += (gameState.skills.fishing.level - 1) * 3;
+
+    // Add bonuses from trophy items
+    if (gameState.collectedItemDrops) {
         gameState.collectedItemDrops.forEach(itemDropId => {
             const itemDrop = ITEM_DROP_DATA[itemDropId];
-            if (itemDrop && itemDrop.effect.type === 'ADD_MAX_HP') {
-                allBonuses.ADD_MAX_HP += itemDrop.effect.value;
+            if (!itemDrop) return;
+            switch(itemDrop.effect.type) {
+                case 'ADD_DAMAGE': totalDamage += itemDrop.effect.value; break;
+                case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
+                case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
+                case 'ADD_DEFENSE': totalDefense += itemDrop.effect.value; break;
+                case 'ADD_MAX_HP': totalMaxHpBonus += itemDrop.effect.value; break;
             }
         });
     }
-    allBonuses.ADD_MAX_HP += (gameState.upgrades.plusTwoMaxHp || 0) * 2;
-    allBonuses.ADD_MAX_HP += (gameState.skills.fishing.level - 1) * 3;
 
+    // Add bonuses from Crafting Mastery
+    if (gameState.craftingMastery) {
+        for (const recipeId in gameState.craftingMastery) {
+            const masteryData = gameState.craftingMastery[recipeId];
+            if (masteryData.unlocked) {
+                let recipeDef;
+                for (const categoryKey in CRAFTING_DATA) {
+                    if (CRAFTING_DATA[categoryKey].recipes[recipeId]) {
+                        recipeDef = CRAFTING_DATA[categoryKey].recipes[recipeId];
+                        break;
+                    }
+                }
+                
+                if (recipeDef && recipeDef.bonus) {
+                    const bonus = recipeDef.bonus(masteryData.level);
+                    switch(bonus.type) {
+                        case 'ADD_DAMAGE': totalDamage += bonus.value; break;
+                        case 'ADD_SPEED': totalSpeed += bonus.value; break;
+                        case 'ADD_DEFENSE': totalDefense += bonus.value; break;
+                        case 'ADD_MAX_HP': totalMaxHpBonus += bonus.value; break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Apply final stats to characters
+    const finalMaxHp = 4 + gameState.level.current + totalMaxHpBonus;
     gameState.characters.forEach(char => {
-        const levelHp = 4 + gameState.level.current;
         const oldMaxHp = char.hp.max;
-        char.hp.max = levelHp + allBonuses.ADD_MAX_HP;
+        char.hp.max = finalMaxHp;
         const diff = char.hp.max - oldMaxHp;
         char.hp.current = Math.min(char.hp.max, char.hp.current + diff);
     });
-    updateAllUI();
+
+    // Return team-wide stats
+    return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus };
 }
 
 function xpForLevel(level) { return Math.floor(50 * Math.pow(1.23, level - 1)); }
 function gainXp(amount) { 
-    const { level, upgrades } = gameState;
+    const { level, upgrades, buffs } = gameState;
     let finalAmount = amount;
+    
     if (upgrades.learningBoost && upgrades.learningBoost > 0) {
         const boostPercentage = upgrades.learningBoost * 0.02; // 2% per level
         finalAmount += amount * boostPercentage;
     }
+
+    const xpBuff = buffs.find(b => b.effect.type === 'ADD_XP_BOOST');
+    if (xpBuff) {
+        finalAmount += amount * xpBuff.effect.value;
+    }
+
     level.xp += finalAmount;
     let needed = xpForLevel(level.current); 
     while (level.xp >= needed) { 
@@ -1428,6 +1499,77 @@ function gainXp(amount) {
     } 
     updateAllUI(); 
 }
+function openStationCrafting(skillKey) {
+    const modal = document.getElementById('stationCraftingModal');
+    const title = document.getElementById('stationCraftingTitle');
+    const list = document.getElementById('stationCraftingList');
+    const categoryData = CRAFTING_DATA[skillKey];
+
+    title.textContent = categoryData.name;
+    list.innerHTML = ''; // Clear old list
+
+    const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0;
+
+    for (const recipeId in categoryData.recipes) {
+        const recipeData = categoryData.recipes[recipeId];
+        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 0, progress: 0 };
+        const itemEl = document.createElement('div');
+        itemEl.className = 'modal-item';
+
+        if (playerSkillLevel < recipeData.unlockLevel) {
+            itemEl.innerHTML = `<span>${recipeData.name}</span> <span class="cost">Requires Lv ${recipeData.unlockLevel} ${categoryData.name}</span>`;
+            itemEl.classList.add('disabled');
+        } else {
+            let costString = "Cost: ";
+            for (const mat in recipeData.cost) { costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat]}`; }
+             const progressNeeded = recipeData.masteryCurve(masteryData.level);
+            const progressPercent = masteryData.unlocked ? (masteryData.progress / progressNeeded) * 100 : 0;
+            const masteryLevelText = masteryData.unlocked ? `Mastery ${masteryData.level}` : 'Not Mastered';
+
+            itemEl.innerHTML = `<div class="w-full">
+                    <div class="flex justify-between items-center mb-1">
+                        <span>${recipeData.name} (${masteryLevelText})</span> <span class="cost">${costString}</span>
+                    </div>
+                    <div class="progress-bar-container" title="Mastery Progress"><div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div></div>
+                </div>`;
+        }
+        list.appendChild(itemEl);
+    }
+    openModal(modal);
+}
+
+function closeStationCrafting() {
+    const modal = document.getElementById('stationCraftingModal');
+    closeModal(modal);
+}
+
+    // --- NEW: Add bonuses from Crafting Mastery ---
+    if (gameState.craftingMastery) {
+        for (const recipeId in gameState.craftingMastery) {
+            const masteryData = gameState.craftingMastery[recipeId];
+            if (masteryData.unlocked) {
+                // Find the recipe's data to get its bonus function
+                let recipeDef;
+                for (const categoryKey in CRAFTING_DATA) {
+                    if (CRAFTING_DATA[categoryKey].recipes[recipeId]) {
+                        recipeDef = CRAFTING_DATA[categoryKey].recipes[recipeId];
+                        break;
+                    }
+                }
+                
+                if (recipeDef) {
+                    const bonus = recipeDef.bonus(masteryData.level);
+                    switch(bonus.type) {
+                        case 'ADD_DAMAGE': totalDamage += bonus.value; break;
+                        case 'ADD_SPEED': totalSpeed += bonus.value; break;
+                        case 'ADD_DEFENSE': totalDefense += bonus.value; break;
+                        case 'ADD_MAX_HP': totalMaxHpBonus += bonus.value; break;
+                    }
+                }
+            }
+        }
+    }
+    
 
 function xpForSkillLevel(level) { return Math.floor(100 * Math.pow(1.15, level - 1)); }
 function gainSkillXp(skill, amount) {
@@ -1474,162 +1616,153 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const { automation, player, zoneX, zoneY } = character;
 
     if (automation.markedTiles.length === 0) {
-        stopAutomation(character);
-        setStatus("Idle");
+        if (automation.active) stopAutomation(character);
         return;
     }
 
-    // --- Boss Priority Check ---
-    let priorityIndex = -1;
-    for (let i = 0; i < automation.markedTiles.length; i++) {
-        const mark = automation.markedTiles[i];
-        const entity = findEntityDataForMark(mark.entityId);
-        
-        if (entity && !isEnemyDead(entity.id)) { 
-            const enemyData = ENEMIES_DATA[entity.type];
-            if (enemyData && enemyData.isBoss) {
-                priorityIndex = i;
-                break;
-            }
+    if (automation.busyUntil && gameTime < automation.busyUntil) {
+        setStatus('Crafting...');
+        return;
+    }
+    automation.busyUntil = null;
+
+    const potentialTargets = automation.markedTiles.map(mark => {
+        const entity = findEnemyById(mark.entityId) || findResourceById(mark.entityId);
+        if (!entity) return null;
+        return { entity, zoneX: mark.zoneX, zoneY: mark.zoneY };
+    })
+    // --- THIS FILTER LOGIC IS NOW CORRECTED ---
+    .filter(item => {
+        if (!item) return false;
+        const { entity } = item;
+        const entityDef = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
+        if (!entityDef) return false;
+
+        if (ENEMIES_DATA[entity.type]) {
+            return !isEnemyDead(entity.id);
+        } else if (RESOURCE_DATA[entity.type]) {
+            // This now includes crafting stations, which don't have a nextAvailableTime
+            return !entity.nextAvailableTime || gameTime >= entity.nextAvailableTime;
         }
-    }
-    if (priorityIndex > 0) {
-        const [priorityMark] = automation.markedTiles.splice(priorityIndex, 1);
-        automation.markedTiles.unshift(priorityMark);
-    }
-    // --- End of Boss Priority Check ---
+        return false;
+    });
 
-    const currentMark = automation.markedTiles[0];
-    let targetEntity;
-    let entityData;
-    let entityName;
-    const isHunting = currentMark.task === 'hunting';
-
-    if (isHunting) {
-        targetEntity = findEntityDataForMark(currentMark.entityId); 
-        entityData = targetEntity ? ENEMIES_DATA[targetEntity.type] : null;
-    } else {
-        targetEntity = findResourceById(currentMark.entityId);
-        entityData = targetEntity ? RESOURCE_DATA[targetEntity.type] : null;
+    if (potentialTargets.length === 0) {
+        setStatus("All marked targets are unavailable. Waiting...");
+        return;
     }
+
+    let targetsToConsider = potentialTargets.filter(t => ENEMIES_DATA[t.entity.type]?.isBoss);
+    if (targetsToConsider.length === 0) {
+        targetsToConsider = potentialTargets;
+    }
+
+    targetsToConsider.sort((a, b) => {
+        const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
+        const distB = heuristic(player, b.entity) + (b.zoneX !== zoneX || b.zoneY !== zoneY ? 10000 : 0);
+        return distA - distB;
+    });
     
-    if (!targetEntity) {
-        setStatus(`Target not found. Removing mark.`);
-        automation.markedTiles.shift();
+    const bestTarget = targetsToConsider[0];
+    if (!bestTarget) {
+        setStatus("Could not determine a target.");
         return;
     }
 
-    entityName = entityData.name;
-    const entityZoneX = targetEntity.zoneX !== undefined ? targetEntity.zoneX : zoneX;
-    const entityZoneY = targetEntity.zoneY !== undefined ? targetEntity.zoneY : zoneY;
+    const { entity: targetEntity, zoneX: targetZoneX, zoneY: targetZoneY } = bestTarget;
+    const entityData = ENEMIES_DATA[targetEntity.type] || RESOURCE_DATA[targetEntity.type];
+    const entityName = entityData.name;
 
-    if (zoneX !== entityZoneX || zoneY !== entityZoneY) {
-        setStatus(`Traveling to ${entityName}'s zone...`);
-        character.path = findPathToZone(character, entityZoneX, entityZoneY) || [];
-        return;
-    }
+    if (targetZoneX === zoneX && targetZoneY === zoneY) {
+        if (isAdjacent(player, targetEntity, zoneX, zoneY)) {
+            const entityDef = ENEMIES_DATA[targetEntity.type] || RESOURCE_DATA[targetEntity.type];
+            const isStation = !!CRAFTING_DATA[entityDef.skill];
 
-    if (isAdjacent(player, targetEntity, entityZoneX, entityZoneY)) {
-        if (isHunting) {
-             if (isEnemyDead(targetEntity.id)) {
-                const allEnemiesAreDead = automation.markedTiles.every(mark => isEnemyDead(mark.entityId));
-                if (allEnemiesAreDead) {
-                    setStatus(`All targets defeated. Waiting for ${entityName} to respawn...`);
-                } else {
-                    setStatus(`Target down. Moving to next mark...`);
-                    automation.markedTiles.push(automation.markedTiles.shift());
+            if (isStation) {
+                const skillKey = entityDef.skill;
+                const categoryData = CRAFTING_DATA[skillKey];
+                let craftedSomething = false;
+
+                for (const recipeId in categoryData.recipes) {
+                    const recipeData = categoryData.recipes[recipeId];
+                    if (Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
+                        Object.keys(recipeData.cost).forEach(mat => gameState.inventory[mat] -= recipeData.cost[mat]);
+                        gainSkillXp(categoryData.skill, 25);
+                        
+                        if (!gameState.craftingMastery[recipeId]) gameState.craftingMastery[recipeId] = { unlocked: false, level: 1, progress: 0 };
+                        const masteryData = gameState.craftingMastery[recipeId];
+                        if (!masteryData.unlocked) {
+                            masteryData.unlocked = true;
+                            showNotification(`${recipeData.name} bonus unlocked!`);
+                            recalculateTeamStats();
+                        }
+                        masteryData.progress += recipeData.masteryPerCraft;
+                        let needed = recipeData.masteryCurve(masteryData.level);
+                        while (masteryData.progress >= needed) {
+                            masteryData.level++;
+                            masteryData.progress -= needed;
+                            showNotification(`${recipeData.name} Mastery to ${masteryData.level}!`);
+                            recalculateTeamStats();
+                            needed = recipeData.masteryCurve(masteryData.level);
+                        }
+                        
+                        automation.busyUntil = gameTime + recipeData.time;
+                        setStatus('Crafting...');
+                        craftedSomething = true;
+                        saveGameState();
+                        updateAllUI();
+                        break; 
+                    }
                 }
-                return;
-            }
-            if (!character.combat.active) {
-                character.combat.active = true;
-                character.combat.targetId = targetEntity.id;
-                character.combat.isPlayerTurn = true;
-                character.combat.lastUpdateTime = gameTime;
-            }
-        } else { // Skilling logic
-            const resourceDef = RESOURCE_DATA[targetEntity.type];
+                if (!craftedSomething) setStatus(`No materials at ${entityName}.`);
 
-            // If the node is depleted, check if it's time to respawn durability
-            if (targetEntity.nextAvailableTime && gameTime >= targetEntity.nextAvailableTime) {
-                targetEntity.currentDurability = resourceDef.maxDurability;
-                targetEntity.nextAvailableTime = null; // It's available again
-            }
-            
-            // If the node is still waiting to respawn, handle it
-            if (targetEntity.nextAvailableTime && gameTime < targetEntity.nextAvailableTime) {
-                const allResourcesDepleted = automation.markedTiles.every(mark => {
-                    const resource = findResourceById(mark.entityId);
-                    return resource && resource.nextAvailableTime && gameTime < resource.nextAvailableTime;
-                });
-                if (allResourcesDepleted) {
-                    setStatus(`All marked resources are depleted. Waiting...`);
-                } else {
-                    setStatus(`Waiting for ${entityName} to replenish...`);
-                    automation.markedTiles.push(automation.markedTiles.shift());
+            } else if (ENEMIES_DATA[targetEntity.type]) {
+                if (!character.combat.active) {
+                    character.combat.active = true;
+                    character.combat.targetId = targetEntity.id;
+                    character.combat.isPlayerTurn = true;
+                    character.combat.lastUpdateTime = gameTime;
                 }
-                return;
-            }
-
-            if (automation.targetId !== targetEntity.id) {
-                automation.targetId = targetEntity.id;
-                automation.gatheringState.lastGatherAttemptTime = 0;
-            }
-            
-            setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
-
-            if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
-                automation.gatheringState.lastGatherAttemptTime = gameTime;
-                
-                targetEntity.currentDurability--; // Decrement durability
-                
-                gainSkillXp(resourceDef.skill, resourceDef.xp);
-                if (resourceDef.item) {
-                    gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
-                    showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
+            } else {
+                 const resourceDef = RESOURCE_DATA[targetEntity.type];
+                if (automation.targetId !== targetEntity.id) {
+                    automation.targetId = targetEntity.id;
+                    automation.gatheringState.lastGatherAttemptTime = 0;
                 }
-                saveGameState();
-                
-                // If durability is out, deplete the node and cycle the mark
-                if (targetEntity.currentDurability <= 0) {
-                    targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2); // Resources take longer to respawn
-                    automation.markedTiles.push(automation.markedTiles.shift());
-                    automation.targetId = null;
+                setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
+                if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
+                    automation.gatheringState.lastGatherAttemptTime = gameTime;
+                    targetEntity.currentDurability--;
+                    gainSkillXp(resourceDef.skill, resourceDef.xp);
+                    if (resourceDef.item) {
+                        gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
+                        showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
+                    }
+                    saveGameState();
+                    if (targetEntity.currentDurability <= 0) {
+                        targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2);
+                        automation.targetId = null;
+                    }
                 }
-                // If durability remains, the character will stay and gather again after the cooldown.
             }
+        } else {
+            const approachSpot = findWalkableNeighborForEntity(targetEntity, player);
+            if (approachSpot) {
+                const path = findPath(player, approachSpot, zoneX, zoneY);
+                if (path && path.length > 0) character.path = path;
+                setStatus(`Walking to ${entityName}...`);
+            } else { setStatus(`No approach spot for ${entityName}.`); }
         }
     } else {
-        setStatus(`Walking to ${entityName}...`);
-        const path = findPath(player, currentMark, zoneX, zoneY);
+        setStatus(`Traveling to ${entityName}'s zone...`);
+        const path = findPathToZone(character, targetZoneX, targetZoneY);
         if (path && path.length > 0) {
             character.path = path;
         } else {
-            setStatus(`Cannot path to ${entityName}. Skipping.`);
-            automation.markedTiles.shift();
+            setStatus(`Can't find path to ${entityName}'s zone.`);
         }
     }
 }
-function assignSkillTask(skillKey) { 
-    const activeChar = getActiveCharacter();
-    if (!activeChar || activeChar.isDead) return;
-    if (activeChar.automation.task === skillKey && activeChar.automation.active) {
-        stopAutomation(activeChar);
-    } else {
-        stopAutomation(activeChar); // Always stop previous task
-        const resourceType = Object.keys(RESOURCE_DATA).find(rt => RESOURCE_DATA[rt].skill === skillKey);
-        if (resourceType) {
-            const nearestNode = findNearestResource(activeChar, resourceType);
-            if (nearestNode) {
-                const approachSpot = findWalkableNeighborForEntity(nearestNode, activeChar.player);
-                if (approachSpot) {
-                    addMark(activeChar, nearestNode, approachSpot, skillKey);
-                } else { showNotification(`No approach spot for nearest ${resourceType}.`); }
-            } else { showNotification(`No ${resourceType}s found to mark.`); }
-        }
-    }
-}
-
 function findEnemyById(id) {
     for (const zoneKey in enemies) {
         if (enemies[zoneKey][id]) return enemies[zoneKey][id];
@@ -2002,12 +2135,20 @@ function renderCharacterSwitcher() {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌳';
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
-            else if (char.automation.task === 'fishing') taskEmoji = '?';
+            else if (char.automation.task === 'fishing') taskEmoji = '🐟'; // Corrected from '?'
         }
         btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
         btn.className = 'char-button'; 
         if (index === gameState.activeCharacterIndex) btn.classList.add('active'); 
-        btn.addEventListener('click', () => { gameState.activeCharacterIndex = index; saveGameState(); updateAllUI(); }); 
+        
+        // --- THIS IS THE CORRECTED PART ---
+        btn.addEventListener('click', () => { 
+            gameState.activeCharacterIndex = index; 
+            saveGameState(); 
+            resizeCanvasAndCenterCamera(); // Recalculate zoom for the new active character
+            updateAllUI(); 
+        }); 
+        
         ui.characterSwitcher.appendChild(btn); 
     }); 
 }
@@ -2045,15 +2186,13 @@ function updateAllUI() {
     const damageReduction = (teamStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
     ui.playerDefenseStat.textContent = `${teamStats.defense} (${damageReduction})`;
     
-    const allMarksCount = gameState.characters.reduce((sum, char) => sum + char.automation.markedTiles.length, 0);
-    ui.markCount.textContent = `${allMarksCount}/${teamStats.maxMarks * gameState.characters.length}`; 
+    // --- THIS LOGIC IS NOW CORRECTED ---
+    const activeCharMarks = activeChar.automation.markedTiles.length;
+    ui.markCount.textContent = `${activeCharMarks}/${teamStats.maxMarks}`; 
 
     ui.playerSouls.textContent = `${gameState.inventory.soulFragment || 0} ${ITEM_SPRITES.soulFragment}`; 
     const { hp } = activeChar; 
 
-    // --- DECIMAL HP DISPLAY ---
-    // If hp.current is a decimal, display it with one decimal place (e.g., "5.3").
-    // Otherwise, display it as a whole number (e.g., "5").
     const currentHpDisplay = Number.isInteger(hp.current) ? hp.current : hp.current.toFixed(1);
     
     ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`;

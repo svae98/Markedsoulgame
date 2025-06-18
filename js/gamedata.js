@@ -63,10 +63,11 @@ export const ITEM_SPRITES = {
     wood: '🪵',
     copper_ore: '⛏️',
     fish: '🐟',
-    // --- New Items ---
-    copper_bar: '🟧',
-    iron_bar: '⬜',
-    steel_bar: '⬛'
+    // --- BARS REMOVED ---
+    cooked_fish: '🍣',
+    wood_carving: '🦉', // New Carpentry item
+    copper_sword: '🗡️',
+    wooden_shield: '🛡️',
 };
 
 // --- Spritesheet Mapping ---
@@ -133,298 +134,127 @@ export const ENEMIES_DATA = {
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
-    FORGE: { name: 'Forge', time: 5000, levelReq: 1, xp: 0, item: null, skill: 'crafting', maxDurability: 1 },
     TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4 },
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
-    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 }
+    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 },
+    // --- NEW CRAFTING STATIONS ---
+    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'carpentry', size: {w: 2, h: 1} },
+    FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 2} },
+    COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 2, h: 1} },
 };
 
 // --- World Layout ---
 export const worldData = {
     '0,1': {
-        name: "The Collector's Library", theme: 'library',
-        width: 63, height: 63, // New fixed size
-        gateways: [{ x: 48, y: 31, destZone: { x: 1, y: 1 }, entry: { x: 14, y: 31 } }], // Right-edge of playable to left-edge of Island playable
-        pedestals: [
-            // Repositioned for 35x35 playable area (world coords 14-48)
-            { x: 16, y: 16, id: 'gg_pedestal' }, { x: 18, y: 16, id: 'vi_pedestal' }, { x: 20, y: 16, id: 'pc_pedestal' },
-            { x: 16, y: 18, id: 'tc_pedestal' }, { x: 18, y: 18, id: 'bt_pedestal' }, { x: 20, y: 18, id: 'wp_pedestal' },
-            { x: 18, y: 20, id: 'gh_pedestal' },
+        name: "Player House",
+        theme: 'house',
+        width: 12,
+        height: 12,
+        gateways: [{ x: 5, y: 11, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 15 } }],
+        resources: [
+            { x: 1, y: 1, type: 'CARPENTRY_TABLE', id: 'house_carpentry', size: {w: 2, h: 1} },
+            { x: 8, y: 1, type: 'FORGE', id: 'house_forge', size: {w: 2, h: 2} },
+            { x: 1, y: 8, type: 'COOKING_RANGE', id: 'house_cooking', size: {w: 2, h: 1} },
         ],
-        mapLayout: Array(63).fill("W".repeat(63)) // Base map, will be carved
-    },
-    '1,0': {
-        name: "The Quiet Grove", theme: 'dark_forest',
-        width: 63, height: 63, // New fixed size
-        gateways: [{ x: 31, y: 48, destZone: { x: 1, y: 1 }, entry: { x: 31, y: 14 } }], // Bottom-edge of playable to top-edge of Island playable
-        spawns: [ 
-            { x: 31, y: 31, type: 'GOLEM_KING' }, // Centered in 35x35 playable
-        ],
-        mapLayout: Array(63).fill("F".repeat(63)) // Base map, will be carved
+        mapLayout: [
+            "WWWWWWWWWWWW",
+            "WCC.FF.....W",
+            "WCC.FF.....W",
+            "W..........W",
+            "W..........W",
+            "W..........W",
+            "W..........W",
+            "W..........W",
+            "WOO........W",
+            "WOO........W",
+            "W..........W",
+            "WWWWW.WWWWWW",
+        ]
     },
     '1,1': {
-  name: "Verdant Starting Zone",
-  width: 31, height: 31,
-  spawns: [
-    {
-      "x": 12,
-      "y": 21,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 8,
-      "y": 17,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 5,
-      "y": 24,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 8,
-      "y": 22,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 11,
-      "y": 20,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 6,
-      "y": 19,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 10,
-      "y": 18,
-      "type": "BLUE_SLIME"
-    },
-    {
-      "x": 25,
-      "y": 1,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 23,
-      "y": 5,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 28,
-      "y": 3,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 25,
-      "y": 8,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 26,
-      "y": 4,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 27,
-      "y": 6,
-      "type": "YELLOW_SLIME"
-    },
-    {
-      "x": 2,
-      "y": 6,
-      "type": "GOLEM"
-    },
-    {
-      "x": 5,
-      "y": 7,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 3,
-      "y": 9,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 22,
-      "y": 22,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 21,
-      "y": 26,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 18,
-      "y": 25,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 17,
-      "y": 28,
-      "type": "RED_SLIME"
-    },
-    {
-      "x": 13,
-      "y": 3,
-      "type": "BOAR"
-    },
-    {
-      "x": 15,
-      "y": 2,
-      "type": "HUMAN"
-    },
-    {
-      "x": 15,
-      "y": 4,
-      "type": "HUMAN"
+        name: "Verdant Starting Zone",
+        width: 31, height: 31,
+        gateways: [
+            // This gateway now leads to the house
+            { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 10, y: 10 } },
+        ],
+        spawns: [
+            { "x": 12, "y": 21, "type": "BLUE_SLIME" },
+            { "x": 8, "y": 17, "type": "BLUE_SLIME" },
+            { "x": 5, "y": 24, "type": "BLUE_SLIME" },
+            { "x": 8, "y": 22, "type": "BLUE_SLIME" },
+            { "x": 11, "y": 20, "type": "BLUE_SLIME" },
+            { "x": 6, "y": 19, "type": "BLUE_SLIME" },
+            { "x": 10, "y": 18, "type": "BLUE_SLIME" },
+            { "x": 25, "y": 1, "type": "YELLOW_SLIME" },
+            { "x": 23, "y": 5, "type": "YELLOW_SLIME" },
+            { "x": 28, "y": 3, "type": "YELLOW_SLIME" },
+            { "x": 25, "y": 8, "type": "YELLOW_SLIME" },
+            { "x": 26, "y": 4, "type": "YELLOW_SLIME" },
+            { "x": 27, "y": 6, "type": "YELLOW_SLIME" },
+            { "x": 2, "y": 6, "type": "GOLEM" },
+            { "x": 5, "y": 7, "type": "RED_SLIME" },
+            { "x": 3, "y": 9, "type": "RED_SLIME" },
+            { "x": 22, "y": 22, "type": "RED_SLIME" },
+            { "x": 21, "y": 26, "type": "RED_SLIME" },
+            { "x": 18, "y": 25, "type": "RED_SLIME" },
+            { "x": 17, "y": 28, "type": "RED_SLIME" },
+            { "x": 13, "y": 3, "type": "BOAR" },
+            { "x": 15, "y": 2, "type": "HUMAN" },
+            { "x": 15, "y": 4, "type": "HUMAN" }
+        ],
+        "resources": [
+            { "x": 25, "y": 20, "type": "TREE", "id": "tree_1", "currentDurability": 4 },
+            { "x": 26, "y": 22, "type": "TREE", "id": "tree_2", "currentDurability": 4 },
+            { "x": 23, "y": 20, "type": "TREE", "id": "tree_3", "currentDurability": 4 },
+            { "x": 24, "y": 24, "type": "TREE", "id": "tree_4", "currentDurability": 4 },
+            { "x": 28, "y": 10, "type": "ROCK", "id": "rock_1", "currentDurability": 4 },
+            { "x": 28, "y": 12, "type": "ROCK", "id": "rock_2", "currentDurability": 4 },
+            { "x": 26, "y": 11, "type": "ROCK", "id": "rock_3", "currentDurability": 4 },
+            { "x": 26, "y": 13, "type": "ROCK", "id": "rock_4", "currentDurability": 4 },
+            { "x": 27, "y": 15, "type": "ROCK", "id": "rock_5", "currentDurability": 4 },
+            { "x": 3, "y": 3, "type": "FISHING_SPOT", "id": "fishing_spot_1", "currentDurability": 4 },
+            { "x": 4, "y": 3, "type": "FISHING_SPOT", "id": "fishing_spot_2", "currentDurability": 4 },
+            { "x": 4, "y": 2, "type": "FISHING_SPOT", "id": "fishing_spot_3", "currentDurability": 4 },
+            { "x": 4, "y": 1, "type": "FISHING_SPOT", "id": "fishing_spot_4", "currentDurability": 4 },
+            { "x": 5, "y": 1, "type": "FISHING_SPOT", "id": "fishing_spot_5", "currentDurability": 4 },
+            { "x": 5, "y": 2, "type": "FISHING_SPOT", "id": "fishing_spot_6", "currentDurability": 4 }
+        ],
+        "mapLayout": [
+            "FFFFFFFFFFF      .   FFFFFFFFFF",
+            "FF       F      ..         FFFF",
+            "FF              .             F",
+            "FF              .             F",
+            "F              ..             F",
+            "F              .              F",
+            ".              .              F",
+            ".              .             FF",
+            ".              ..             F",
+            ".               .             F",
+            ".               ..            F",
+            ".                .            F",
+            ".                .            F",
+            ".                .            F",
+            ".  ...           .            F",
+            ". .. .......   ...            F",
+            "...        .....              F",
+            "                              F",
+            "                             FF",
+            "                             FF",
+            "                              F",
+            "                             FF",
+            "                             FF",
+            "                             FF",
+            "F                             F",
+            "F                             F",
+            "F                            FF",
+            "F                            FF",
+            "FF                           FF",
+            "FFFFFFFFF  FFF           FF   F",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        ]
     }
-  ],
-  "resources": [
-    {
-      "x": 25,
-      "y": 20,
-      "type": "TREE",
-      "id": "tree_1",
-      "currentDurability": 4
-    },
-    {
-      "x": 26,
-      "y": 22,
-      "type": "TREE",
-      "id": "tree_2",
-      "currentDurability": 4
-    },
-    {
-      "x": 23,
-      "y": 20,
-      "type": "TREE",
-      "id": "tree_3",
-      "currentDurability": 4
-    },
-    {
-      "x": 24,
-      "y": 24,
-      "type": "TREE",
-      "id": "tree_4",
-      "currentDurability": 4
-    },
-    {
-      "x": 28,
-      "y": 10,
-      "type": "ROCK",
-      "id": "rock_1",
-      "currentDurability": 4
-    },
-    {
-      "x": 28,
-      "y": 12,
-      "type": "ROCK",
-      "id": "rock_2",
-      "currentDurability": 4
-    },
-    {
-      "x": 26,
-      "y": 11,
-      "type": "ROCK",
-      "id": "rock_3",
-      "currentDurability": 4
-    },
-    {
-      "x": 26,
-      "y": 13,
-      "type": "ROCK",
-      "id": "rock_4",
-      "currentDurability": 4
-    },
-    {
-      "x": 27,
-      "y": 15,
-      "type": "ROCK",
-      "id": "rock_5",
-      "currentDurability": 4
-    },
-    {
-      "x": 3,
-      "y": 3,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_1",
-      "currentDurability": 4
-    },
-    {
-      "x": 4,
-      "y": 3,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_2",
-      "currentDurability": 4
-    },
-    {
-      "x": 4,
-      "y": 2,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_3",
-      "currentDurability": 4
-    },
-    {
-      "x": 4,
-      "y": 1,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_4",
-      "currentDurability": 4
-    },
-    {
-      "x": 5,
-      "y": 1,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_5",
-      "currentDurability": 4
-    },
-    {
-      "x": 5,
-      "y": 2,
-      "type": "FISHING_SPOT",
-      "id": "fishing_spot_6",
-      "currentDurability": 4
-    }
-  ],
-  "mapLayout": [
-    "FFFFFFFFFFF      .   FFFFFFFFFF",
-    "FF       F      ..         FFFF",
-    "FF              .             F",
-    "FF              .             F",
-    "F              ..             F",
-    "F              .              F",
-    "               .              F",
-    "               .             FF",
-    "               ..             F",
-    "                .             F",
-    "                ..            F",
-    "                 .            F",
-    "                 .            F",
-    "                 .            F",
-    "   ...           .            F",
-    "  .. .......   ...            F",
-    "...        .....              F",
-    "                              F",
-    "                             FF",
-    "                             FF",
-    "                              F",
-    "                             FF",
-    "                             FF",
-    "                             FF",
-    "F                             F",
-    "F                             F",
-    "F                            FF",
-    "F                            FF",
-    "FF                           FF",
-    "FFFFFFFFF  FFF           FF   F",
-    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-  ]
-}
 };
-
 // --- Altar Upgrades ---
 export const ALTAR_UPGRADES = {
     plusOneDamage: { name: "+1 Damage", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(2 * Math.pow(3, level)) }) },
@@ -432,38 +262,49 @@ export const ALTAR_UPGRADES = {
     plusOneSpeed: { name: "+1 Speed", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
     plusOneDefense: { name: "+1 Defense", maxLevel: 10, cost: (level) => ({ soulFragment: Math.floor(5 * Math.pow(3, level)) }) },
     plusOneMaxMarks: { name: "+1 Max Marks", maxLevel: 4, cost: (level) => ({ soulFragment: Math.floor(30 * Math.pow(3, level)) }) },
-    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) },
+    // --- THIS LINE IS CHANGED ---
+    addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ soulFragment: 100 }) },
     learningBoost: { name: "Learning Boost", maxLevel: 5, cost: (level) => ({ soulFragment: Math.floor(50 * Math.pow(2.5, level)) }) } // +2% XP per level
 };
 // --- Universal Skill Equipment ---
-export const SKILL_EQUIPMENT_DATA = {
+export const CRAFTING_DATA = {
+    cooking: {
+        name: 'Cooking',
+        skill: 'cooking',
+        recipes: {
+            cooked_fish: {
+                name: 'Cooked Fish', unlockLevel: 1, cost: { fish: 1 },
+                time: 2000, masteryPerCraft: 5, masteryCurve: (level) => 10 + (level * 5),
+                bonus: (level) => ({ type: 'ADD_MAX_HP', value: level * 2 })
+            }
+        }
+    },
+    carpentry: { // Formerly Woodworking
+        name: 'Carpentry',
+        skill: 'carpentry',
+        recipes: {
+            wood_carving: {
+                name: 'Wood Carving', unlockLevel: 1, cost: { wood: 10 },
+                time: 3000, masteryPerCraft: 10, masteryCurve: (level) => 50 + (level * 10),
+                bonus: (level) => ({ type: 'ADD_SPEED', value: level * 0.25 })
+            }
+        }
+    },
     blacksmithing: {
-        skill: 'mining', // The gathering skill that provides materials
-        sword: {
-            name: "Copper Sword",
-            unlockLevel: 1,
-            unlockCost: { copper_bar: 50 },
-            xpPerCraft: { copper_bar: 1 }, // 1 bar gives 1 XP
-            xpCurve: (level) => 100 * level, // XP for next level
-            bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 2 })
-        },
-        leggings: {
-            name: "Iron Leggings",
-            unlockLevel: 10,
-            unlockCost: { iron_bar: 50 },
-            xpPerCraft: { iron_bar: 1 },
-            xpCurve: (level) => 120 * level,
-            bonus: (level) => ({ type: 'ADD_DEFENSE', value: level * 1 })
-        },
-        helmet: {
-            name: "Steel Helmet",
-            unlockLevel: 20,
-            unlockCost: { steel_bar: 50 },
-            xpPerCraft: { steel_bar: 1 },
-            xpCurve: (level) => 150 * level,
-            bonus: (level) => ({ type: 'ADD_MAX_HP', value: level * 5 })
+        name: 'Blacksmithing',
+        skill: 'blacksmithing',
+        recipes: {
+            copper_sword: {
+                name: 'Copper Sword', unlockLevel: 1, cost: { copper_ore: 25 }, // Uses ore directly
+                time: 4000, masteryPerCraft: 5, masteryCurve: (level) => 20 + (level * 5),
+                bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 0.5 })
+            },
+            wooden_shield: { // Shields are now made here
+                name: 'Wooden Shield', unlockLevel: 5, cost: { wood: 50, copper_ore: 10 },
+                time: 5000, masteryPerCraft: 15, masteryCurve: (level) => 100 + (level * 15),
+                bonus: (level) => ({ type: 'ADD_DEFENSE', value: level * 0.5 })
+            }
         }
     }
-    // You can add 'cooking', 'woodworking' etc. here later
 };
 

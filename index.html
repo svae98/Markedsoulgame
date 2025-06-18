@@ -91,7 +91,6 @@
             </section>
             
             <section class="grid grid-cols-2 gap-2">
-                 <button id="openCraftingButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-stone-300 font-bold py-2 px-4 rounded-lg border border-stone-500 transition-colors">Crafting</button>
                  <button id="openAltarButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-fuchsia-300 font-bold py-2 px-4 rounded-lg border border-fuchsia-500 transition-colors">Altar</button>
                  <button id="openMapButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-emerald-300 font-bold py-2 px-4 rounded-lg border border-emerald-500 transition-colors">Map</button>
                  <button id="openLevelsButton" class="w-full bg-zinc-800 hover:bg-zinc-700 text-sky-300 font-bold py-2 px-4 rounded-lg border border-sky-500 transition-colors">Skills</button>
@@ -131,14 +130,13 @@
             <button id="closeMapButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
         </div>
     </div>
-    <div id="craftingModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
-            <h2 class="text-2xl font-bold text-stone-400 mb-4">Crafting</h2>
-            <div id="craftingListContainer" class="flex flex-col items-center space-y-4 overflow-y-auto max-h-96 pr-2">
-                </div>
-            <button id="closeCraftingButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
-        </div>
+    <div id="stationCraftingModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+        <h2 id="stationCraftingTitle" class="text-2xl font-bold text-stone-400 mb-4">Crafting Station</h2>
+        <div id="stationCraftingList" class="flex flex-col items-center space-y-4 overflow-y-auto max-h-96 pr-2"></div>
+        <button id="closeStationCraftingButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
     </div>
+</div>
 
     <script type="module" src="js/main.js"></script>
 </body>
