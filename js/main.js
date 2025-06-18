@@ -5,7 +5,7 @@
 // js/main.js
 // --- Game Data Import ---
 import {
-    TILE_SIZE, MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
+    MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
     TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES, SPRITES,
     SKILL_EQUIPMENT_DATA // --- Add this line ---
 } from './gamedata.js';
@@ -70,7 +70,7 @@ let statPopupTimeout = null;
 let currentMapData = []; // This will store the tile-type grid, not the character-based layout
 let notificationTimeout = null;
 let camera = { x: 30, y: 30, target: null, lerp: 0.1 };
-
+let dynamicTileSize = 32;
 let lastFrameTime = 0;
 let accumulator = 0;
 let currentGameTime = 0;
@@ -127,7 +127,49 @@ const ui = {
     closeMapButton: document.getElementById('closeMapButton'),
     altarSoulsDisplay: document.getElementById('altar-souls-display'),
 };
+function resizeCanvasAndCenterCamera() {
+    ui.canvas.width = ui.canvasContainer.offsetWidth;
+    ui.canvas.height = ui.canvasContainer.offsetHeight;
+    ui.ctx.imageSmoothingEnabled = false;
+    
+    const activeChar = getActiveCharacter();
+    if (activeChar) {
+        const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+        const zone = worldData[zoneKey];
+        if (zone) {
+            // Calculate the perfect tile size to fit the zone in the canvas
+            const tileW = ui.canvas.width / zone.width;
+            const tileH = ui.canvas.height / zone.height;
+            dynamicTileSize = Math.floor(Math.min(tileW, tileH)); // Use floor to avoid graphical gaps
 
+            // Center the camera on the middle of the zone
+            camera.x = zone.width / 2;
+            camera.y = zone.height / 2;
+        }
+    }
+}
+function checkForGateway(character) {
+    const zone = worldData[`${character.zoneX},${character.zoneY}`];
+    if (zone && zone.gateways) {
+        const gateway = zone.gateways.find(g => g.x === character.player.x && g.y === character.player.y);
+        if (gateway) {
+            character.zoneX = gateway.destZone.x;
+            character.zoneY = gateway.destZone.y;
+            const entryPos = { x: gateway.entry.x, y: gateway.entry.y };
+            character.player = { ...entryPos };
+            character.target = { ...entryPos };
+            character.visual = { ...entryPos };
+            
+            // --- This is the new part ---
+            // After changing zones, resize everything based on the new zone's dimensions
+            resizeCanvasAndCenterCamera(); 
+            
+            currentMapData = buildMapData(character.zoneX, character.zoneY);
+            saveGameState();
+            updateAllUI();
+        }
+    }
+}
 function loadSpriteSheet() {
     return new Promise((resolve, reject) => {
         spriteSheet = new Image();
@@ -508,29 +550,7 @@ function updateCharacterVisuals(character, frameDelta) {
     }
 }
 
-function checkForGateway(character) {
-    const zone = worldData[`${character.zoneX},${character.zoneY}`];
-    if (zone && zone.gateways) {
-        const gateway = zone.gateways.find(g => g.x === character.player.x && g.y === character.player.y);
-        if (gateway) {
-            character.zoneX = gateway.destZone.x;
-            character.zoneY = gateway.destZone.y;
-            const entryPos = { x: gateway.entry.x, y: gateway.entry.y };
-            character.player = { ...entryPos };
-            character.target = { ...entryPos };
-            character.visual = { ...entryPos };
-            const newZoneKey = `${character.zoneX},${character.zoneY}`;
-            const newZone = worldData[newZoneKey];
-            if (newZone) {
-                camera.x = newZone.width / 2;
-                camera.y = newZone.height / 2;
-            }
-            currentMapData = buildMapData(character.zoneX, character.zoneY);
-            saveGameState();
-            updateAllUI();
-        }
-    }
-}
+
 
 function draw() {
     const ctx = ui.ctx;
@@ -542,29 +562,16 @@ function draw() {
     const zone = worldData[zoneKey];
     if (!zone) return;
 
-    const zoneWidth = zone.width;
-    const zoneHeight = zone.height;
-    
-    const halfWidth = (ui.canvas.width / 2 / TILE_SIZE);
-    const halfHeight = (ui.canvas.height / 2 / TILE_SIZE);
-    const startCol = Math.floor(camera.x - halfWidth);
-    const endCol = Math.ceil(camera.x + halfWidth);
-    const startRow = Math.floor(camera.y - halfHeight);
-    const endRow = Math.ceil(camera.y + halfHeight);
-
-    for (let y = startRow; y <= endRow; y++) {
-        for (let x = startCol; x <= endCol; x++) {
-            if (x >= 0 && x < zoneWidth && y >= 0 && y < zoneHeight) {
-                drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
-            }
+    // The new draw loop simply draws every tile in the current zone
+    for (let y = 0; y < zone.height; y++) {
+        for (let x = 0; x < zone.width; x++) {
+            drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
         }
     }
 
     if (zone.resources) {
         zone.resources.forEach(resource => {
-            if (resource.x >= startCol && resource.x <= endCol && resource.y >= startRow && resource.y <= endRow) {
-                drawResourceObject(resource);
-            }
+            drawResourceObject(resource);
         });
     }
     
@@ -582,18 +589,18 @@ function draw() {
 }
 
 function worldToScreen(worldX, worldY) {
-    const screenX = Math.round((worldX - camera.x) * TILE_SIZE + ui.canvas.width / 2);
-    const screenY = Math.round((worldY - camera.y) * TILE_SIZE + ui.canvas.height / 2);
+    const screenX = Math.round((worldX - camera.x) * dynamicTileSize + ui.canvas.width / 2);
+    const screenY = Math.round((worldY - camera.y) * dynamicTileSize + ui.canvas.height / 2);
     return { x: screenX, y: screenY };
 }
 
-function drawSprite(sprite, destX, destY, destW = TILE_SIZE, destH = TILE_SIZE) {
+function drawSprite(sprite, destX, destY, destW = dynamicTileSize, destH = dynamicTileSize) {
     if (!spriteSheet || !sprite) return;
 
     const sx = sprite.sx;
     const sy = sprite.sy;
-    const sw = sprite.sw || TILE_SIZE;
-    const sh = sprite.sh || TILE_SIZE;
+    const sw = sprite.sw || 32; // Source width from spritesheet is always 32
+    const sh = sprite.sh || 32; // Source height from spritesheet is always 32
     ui.ctx.drawImage(spriteSheet, sx, sy, sw, sh, Math.round(destX), Math.round(destY), Math.round(destW), Math.round(destH));
 }
 
@@ -616,8 +623,10 @@ function drawTile(x, y, zoneX, zoneY) {
         default: sprite = SPRITES.GRASS[0];
     }
     
-    const drawWidth = sprite.sw || TILE_SIZE;
-    const drawHeight = sprite.sh || TILE_SIZE;
+    // This is the corrected part. It now uses the dynamicTileSize
+    // to scale the tile properly for the current zoom level.
+    const drawWidth = (sprite.sw || 32) / 32 * dynamicTileSize;
+    const drawHeight = (sprite.sh || 32) / 32 * dynamicTileSize;
     drawSprite(sprite, drawX, drawY, drawWidth, drawHeight);
 }
 
@@ -648,10 +657,10 @@ function drawResourceObject(resource) {
     if (!spriteToDraw) return;
 
     const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
-    const baseDrawWidth = spriteToDraw.sw || TILE_SIZE;
-    const baseDrawHeight = spriteToDraw.sh || TILE_SIZE;
-    const xOffset = (baseDrawWidth - TILE_SIZE) / 2;
-    const yOffset = (baseDrawHeight - TILE_SIZE);
+    const baseDrawWidth = (spriteToDraw.sw || 32) * (dynamicTileSize / 32);
+    const baseDrawHeight = (spriteToDraw.sh || 32) * (dynamicTileSize / 32);
+    const xOffset = (baseDrawWidth - dynamicTileSize) / 2;
+    const yOffset = (baseDrawHeight - dynamicTileSize);
 
     drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
     if (isDepleted && spriteToDraw && ui.ctx.globalAlpha !== 1.0) ui.ctx.globalAlpha = 1.0;
@@ -664,8 +673,8 @@ function drawEnemy(enemy) {
 
     const size = enemyData.size || { w: 1, h: 1 };
     const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y);
-    const width = size.w * TILE_SIZE;
-    const height = size.h * TILE_SIZE;
+    const width = size.w * dynamicTileSize;
+    const height = size.h * dynamicTileSize;
     
     drawSprite(enemyData.sprite, screenX, screenY, width, height);
 }
@@ -697,11 +706,11 @@ function drawMarks(currentZoneKey) {
 
 function drawPlayer(character, isActive) {
     const {x: screenX, y: screenY} = worldToScreen(character.visual.x, character.visual.y);
-    const w = TILE_SIZE;
-    const h = TILE_SIZE;
+    const w = dynamicTileSize;
+    const h = dynamicTileSize;
 
     if (character.isDead) {
-        ui.ctx.fillStyle = '#7f1d1d'; // Keep dead characters as a red square
+        ui.ctx.fillStyle = '#7f1d1d';
         ui.ctx.fillRect(screenX, screenY, w, h);
         return;
     }
@@ -721,7 +730,7 @@ function showDamagePopup(x, y, amount, isPlayerDamage) {
     popup.textContent = amount.toFixed(2).replace(/\.00$/, '');
     popup.className = `damage-popup ${isPlayerDamage ? 'player' : 'enemy'}`;
     ui.canvasContainer.appendChild(popup);
-    popup.style.left = `${screenX + (TILE_SIZE / 2) - popup.offsetWidth / 2}px`;
+    popup.style.left = `${screenX + (dynamicTileSize / 2) - popup.offsetWidth / 2}px`;
     popup.style.top = `${screenY - popup.offsetHeight}px`;
     setTimeout(() => {
         popup.style.transform = 'translateY(-30px)';

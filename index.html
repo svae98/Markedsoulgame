@@ -13,8 +13,6 @@
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <main id="game-container" class="w-full max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-center gap-6">
-
     <main id="game-container" class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-center">
         
         <div id="canvas-container" class="relative">
@@ -22,8 +20,6 @@
             <div id="context-menu"></div>
         </div>
         
-        <div id="ui-panel" class="relative p-4 rounded-lg flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
-
         <div id="ui-panel" class="relative p-4 rounded-lg flex flex-col space-y-4 max-h-[90vh] overflow-y-auto lg:w-96">
             <div id="notification-banner" class="p-2 bg-fuchsia-600 text-white text-center rounded-b-lg shadow-lg z-10">Notification</div>
             
@@ -104,7 +100,6 @@
         </div>
     </main>
     
-    <!-- Modals -->
     <div id="soulAltarModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
             <div class="flex justify-between items-center mb-4">
@@ -136,15 +131,15 @@
             <button id="closeMapButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
         </div>
     </div>
-    <script type="module" src="js/main.js"></script>
     <div id="craftingModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-    <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
-        <h2 class="text-2xl font-bold text-stone-400 mb-4">Crafting</h2>
-        <div id="craftingListContainer" class="flex flex-col items-center space-y-4 overflow-y-auto max-h-96 pr-2">
-            <p class="text-zinc-500">Crafting will be available here.</p>
+        <div class="bg-zinc-900 border border-zinc-700 text-white p-6 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <h2 class="text-2xl font-bold text-stone-400 mb-4">Crafting</h2>
+            <div id="craftingListContainer" class="flex flex-col items-center space-y-4 overflow-y-auto max-h-96 pr-2">
+                </div>
+            <button id="closeCraftingButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
         </div>
-        <button id="closeCraftingButton" class="mt-6 w-full bg-zinc-600 hover:bg-zinc-700 p-2 rounded transition-colors">Close</button>
     </div>
-</div>
+
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
