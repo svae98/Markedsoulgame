@@ -95,7 +95,7 @@ export const SPRITES = {
     CHOPPED_TREE: { sx: 96, sy: 32 }, // Placeholder: Using a rock sprite as a stump for now
     ROCK: { sx: 96, sy: 0 }, // Using a common rock sprite    
     FISHING_SPOT: { sx: 256, sy: 0 }, // Using water for now, was POND
-    DEEP_FOREST: { sx: 0, sy: 160 }, // Using a common bush sprite
+    DEEP_FOREST: { sx: 192, sy: 0 }, // Using a common bush sprite
     GATEWAY: { sx: 224, sy: 32 }, // Using a wall archway piece
     PEDESTAL: { sx: 288, sy: 64 }  // Using a column base sprite
 };

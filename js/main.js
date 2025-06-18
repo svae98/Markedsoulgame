@@ -1529,7 +1529,7 @@ function updateAllPlayerRegen(gameTime) {
         if (char.isDead || char.hp.current >= char.hp.max) return;
         if (gameTime - (char.lastRegenTime || 0) > 1000) {
             const baseRegen = char.hp.max * 0.01;
-            const bonusRegen = char.hp.max * teamStats.hpRegenBonus;
+            const bonusRegen = char.hp.max * (teamStats.hpRegenBonus || 0);
             const totalRegen = baseRegen + bonusRegen;
             char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
             char.lastRegenTime = gameTime;
@@ -1880,7 +1880,12 @@ function updateAllUI() {
 
     ui.playerSouls.textContent = `${gameState.inventory.soulFragment || 0} ${ITEM_SPRITES.soulFragment}`; 
     const { hp } = activeChar; 
+
+    // --- DECIMAL HP DISPLAY ---
+    // If hp.current is a decimal, display it with one decimal place (e.g., "5.3").
+    // Otherwise, display it as a whole number (e.g., "5").
     const currentHpDisplay = Number.isInteger(hp.current) ? hp.current : hp.current.toFixed(1);
+    
     ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`;
     ui.playerHpBar.textContent = `${currentHpDisplay}/${hp.max}`;
     
@@ -1893,40 +1898,49 @@ function updateAllUI() {
 async function saveGameState() { 
     if (!userId || !appId) return; 
     try { 
-        const docRef = doc(db, "artifacts/appId/users/{userId}/gamestate/main");
+        const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`);
         const stateToSave = JSON.parse(JSON.stringify(gameState));
         await setDoc(docRef, { ...stateToSave, lastSaved: serverTimestamp() }); 
     } catch(e) { console.error("Failed to save game state:", e); } 
 }
 
-async function loadGameState() { 
-    if (!userId || !appId) { 
+async function loadGameState() {
+    if (!userId || !appId) {
         gameState = getDefaultGameState();
         if (gameState.characters.length === 0) {
              gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
         }
-        return; 
+        return;
     }
-    // Corrected path without <span> tags 
-    const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
-    const docSnap = await getDoc(docRef); 
-    let defaultState = getDefaultGameState(); 
-    if (docSnap.exists()) { 
+    const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`);
+    const docSnap = await getDoc(docRef);
+    let defaultState = getDefaultGameState();
+    if (docSnap.exists()) {
         let loadedData = docSnap.data();
         if (!loadedData.characters || loadedData.characters.length === 0) {
             loadedData.characters = [getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0])];
         }
         gameState = mergeDeep({}, defaultState, loadedData);
-    } else { 
-        gameState = defaultState; 
+    } else {
+        gameState = defaultState;
         if (gameState.characters.length === 0) {
              gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
         }
     }
 
     let needsSave = false;
+    
+    // --- FIX STARTS HERE ---
+    // Get the current game time, which was set right before this function was called.
+    const timeOnLoad = currentGameTime; 
 
     for (const char of gameState.characters) {
+        // Reset all of this character's timers to prevent desync on load.
+        char.lastRegenTime = timeOnLoad;
+        if (char.combat) char.combat.lastUpdateTime = timeOnLoad;
+        if (char.automation) char.automation.gatheringState.lastGatherAttemptTime = timeOnLoad;
+    // --- FIX ENDS HERE ---
+
         if(!char.visual) { char.visual = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.target) { char.target = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.path) { char.path = []; needsSave = true; }
@@ -1940,7 +1954,7 @@ async function loadGameState() {
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
             char.target = { ...respawnPos };
-            char.zoneX = 1; 
+            char.zoneX = 1;
             char.zoneY = 1;
             char.path = [];
             needsSave = true;
