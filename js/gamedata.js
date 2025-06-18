@@ -75,12 +75,12 @@ export const SPRITES = {
 
     PLAYER: { sx: 32, sy: 0 },
     BLUE_SLIME: { sx: 0, sy: 32 },
-    YELLOW_SLIME: { sx: 96, sy: 192 },
-    RED_SLIME: { sx: 96, sy: 224 },
-    BOAR: { sx: 256, sy: 320 },
+    YELLOW_SLIME: { sx: 32, sy: 32 },
+    RED_SLIME: { sx: 64, sy: 32 },
+    BOAR: { sx: 96, sy: 32 },
     WOLF: { sx: 128, sy: 32 },
     GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 }, // Using WALL sprite, scaled up for Stone Golem appearance
-    HUMAN: { sx: 64, sy: 192 }, 
+    HUMAN: { sx: 160, sy: 32 }, 
     FORGE: { sx: 192, sy:0 },
 
     // Tiles
@@ -159,61 +159,266 @@ export const worldData = {
         mapLayout: Array(63).fill("F".repeat(63)) // Base map, will be carved
     },
     '1,1': {
-    name: "Newly Edited Zone",
-    theme: "forest",
-    width: 31,
-    height: 31,
-    gateways: [
-        { x: 15, y: 0, destZone: { x: 1, y: 0 }, entry: { x: 15, y: 29 } },
-        { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 29, y: 15 } },
-    ],
-    resources: [
-        { x: 25, y: 20, type: "TREE", id: "tree_1", currentDurability: 4 },
-        { x: 26, y: 22, type: "TREE", id: "tree_2", currentDurability: 4 },
-        { x: 28, y: 10, type: "ROCK", id: "rock_1", currentDurability: 4 },
-        { x: 28, y: 12, type: "ROCK", id: "rock_2", currentDurability: 4 },
-        { x: 3, y: 3, type: "FISHING_SPOT", id: "fishing_spot_1", currentDurability: 4 },
-        { x: 4, y: 3, type: "FISHING_SPOT", id: "fishing_spot_2", currentDurability: 4 }
-    ],
-    spawns: [
-        // Your custom spawns are here
-        { "type": "BLUE_SLIME", "x": 7, "y": 29 },
-        // ...etc
-    ],
-    mapLayout: [ // This should have exactly 31 rows
-        "FFFFFFFFFFF      .   FFFFFFFFFF",
-        "FF       F      ..         FFFF",
-        "FF              .             F",
-        "FF              .             F",
-        "F              ..             F",
-        "F              .              F",
-        "               .              F",
-        "               .             FF",
-        "               ..             F",
-        "                .             F",
-        "                ..            F",
-        "                 .            F",
-        "                 .            F",
-        "                 .            F",
-        "   ...           .            F",
-        "  .. .......   ...            F",
-        "...        .....              F",
-        "                              F",
-        "                             FF",
-        "                             FF",
-        "                              F",
-        "                             FF",
-        "                             FF",
-        "                             FF",
-        "F                             F",
-        "F                             F",
-        "F                            FF",
-        "F                            FF",
-        "FF                           FF",
-        "FFFFFFFFF  FFF           FF   F",
-        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-    ]
-},
+  name: "Verdant Starting Zone",
+  width: 31, height: 31,
+  spawns: [
+    {
+      "x": 12,
+      "y": 21,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 8,
+      "y": 17,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 5,
+      "y": 24,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 8,
+      "y": 22,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 11,
+      "y": 20,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 6,
+      "y": 19,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 10,
+      "y": 18,
+      "type": "BLUE_SLIME"
+    },
+    {
+      "x": 25,
+      "y": 1,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 23,
+      "y": 5,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 28,
+      "y": 3,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 25,
+      "y": 8,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 26,
+      "y": 4,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 27,
+      "y": 6,
+      "type": "YELLOW_SLIME"
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "type": "GOLEM"
+    },
+    {
+      "x": 5,
+      "y": 7,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 3,
+      "y": 9,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 22,
+      "y": 22,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 21,
+      "y": 26,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 18,
+      "y": 25,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 17,
+      "y": 28,
+      "type": "RED_SLIME"
+    },
+    {
+      "x": 13,
+      "y": 3,
+      "type": "BOAR"
+    },
+    {
+      "x": 15,
+      "y": 2,
+      "type": "HUMAN"
+    },
+    {
+      "x": 15,
+      "y": 4,
+      "type": "HUMAN"
+    }
+  ],
+  "resources": [
+    {
+      "x": 25,
+      "y": 20,
+      "type": "TREE",
+      "id": "tree_1",
+      "currentDurability": 4
+    },
+    {
+      "x": 26,
+      "y": 22,
+      "type": "TREE",
+      "id": "tree_2",
+      "currentDurability": 4
+    },
+    {
+      "x": 23,
+      "y": 20,
+      "type": "TREE",
+      "id": "tree_3",
+      "currentDurability": 4
+    },
+    {
+      "x": 24,
+      "y": 24,
+      "type": "TREE",
+      "id": "tree_4",
+      "currentDurability": 4
+    },
+    {
+      "x": 28,
+      "y": 10,
+      "type": "ROCK",
+      "id": "rock_1",
+      "currentDurability": 4
+    },
+    {
+      "x": 28,
+      "y": 12,
+      "type": "ROCK",
+      "id": "rock_2",
+      "currentDurability": 4
+    },
+    {
+      "x": 26,
+      "y": 11,
+      "type": "ROCK",
+      "id": "rock_3",
+      "currentDurability": 4
+    },
+    {
+      "x": 26,
+      "y": 13,
+      "type": "ROCK",
+      "id": "rock_4",
+      "currentDurability": 4
+    },
+    {
+      "x": 27,
+      "y": 15,
+      "type": "ROCK",
+      "id": "rock_5",
+      "currentDurability": 4
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_1",
+      "currentDurability": 4
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_2",
+      "currentDurability": 4
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_3",
+      "currentDurability": 4
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_4",
+      "currentDurability": 4
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_5",
+      "currentDurability": 4
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "type": "FISHING_SPOT",
+      "id": "fishing_spot_6",
+      "currentDurability": 4
+    }
+  ],
+  "mapLayout": [
+    "FFFFFFFFFFF      .   FFFFFFFFFF",
+    "FF       F      ..         FFFF",
+    "FF              .             F",
+    "FF              .             F",
+    "F              ..             F",
+    "F              .              F",
+    "               .              F",
+    "               .             FF",
+    "               ..             F",
+    "                .             F",
+    "                ..            F",
+    "                 .            F",
+    "                 .            F",
+    "                 .            F",
+    "   ...           .            F",
+    "  .. .......   ...            F",
+    "...        .....              F",
+    "                              F",
+    "                             FF",
+    "                             FF",
+    "                              F",
+    "                             FF",
+    "                             FF",
+    "                             FF",
+    "F                             F",
+    "F                             F",
+    "F                            FF",
+    "F                            FF",
+    "FF                           FF",
+    "FFFFFFFFF  FFF           FF   F",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+  ]
+}
 };
 
 // --- Altar Upgrades ---

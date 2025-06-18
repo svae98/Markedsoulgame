@@ -182,7 +182,7 @@ function buildMapData(zoneX, zoneY) {
 
 
 function getDefaultCharacterState(id, name, color) {
-    const startPos = { x: 31, y: 31 };
+    const startPos = { x: 15, y: 15 }; // Correct central spawn point for 31x31 map
     return {
         id, name, zoneX: 1, zoneY: 1, 
         player: { ...startPos },        
@@ -1153,7 +1153,7 @@ function endCombat(character, playerWon) {
     if (playerWon && targetEnemy) {
         const enemyData = ENEMIES_DATA[targetEnemy.type];
         // Corrected zoneKey without <span> tags
-        const zoneKey = `<span class="math-inline">\{targetEnemy\.zoneX\},</span>{targetEnemy.zoneY}`;
+        const zoneKey = `${targetEnemy.zoneX},${targetEnemy.zoneY}`;
         if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = `Monster neutralized.`;
 
         if (enemyData.isBoss) {
@@ -1893,8 +1893,7 @@ function updateAllUI() {
 async function saveGameState() { 
     if (!userId || !appId) return; 
     try { 
-        // Corrected path without <span> tags
-        const docRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{userId}/gamestate/main`); 
+        const docRef = doc(db, "artifacts/appId/users/{userId}/gamestate/main");
         const stateToSave = JSON.parse(JSON.stringify(gameState));
         await setDoc(docRef, { ...stateToSave, lastSaved: serverTimestamp() }); 
     } catch(e) { console.error("Failed to save game state:", e); } 
@@ -1909,7 +1908,7 @@ async function loadGameState() {
         return; 
     }
     // Corrected path without <span> tags 
-    const docRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{userId}/gamestate/main`); 
+    const docRef = doc(db, `artifacts/${appId}/users/${userId}/gamestate/main`); 
     const docSnap = await getDoc(docRef); 
     let defaultState = getDefaultGameState(); 
     if (docSnap.exists()) { 
@@ -1936,7 +1935,7 @@ async function loadGameState() {
         currentMapData = buildMapData(char.zoneX, char.zoneY);
 
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
-            console.warn(`Character <span class="math-inline">\{char\.name\} at \(</span>{char.player.x}, ${char.player.y}) in zone <span class="math-inline">\{char\.zoneX\},</span>{char.zoneY} is in an invalid tile. Resetting position.`);
+            console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
             const respawnPos = { x: 15, y: 15 };
             char.player = { ...respawnPos };
             char.visual = { ...respawnPos };
