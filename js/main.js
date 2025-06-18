@@ -2,9 +2,12 @@
 // The Island Update - Resource Automation Fix
 // text file 1 begin
 // --- Game Data Import ---
+// js/main.js
+// --- Game Data Import ---
 import {
     TILE_SIZE, MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
-    TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES, SPRITES
+    TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES, SPRITES,
+    SKILL_EQUIPMENT_DATA // --- Add this line ---
 } from './gamedata.js';
 
 
@@ -200,9 +203,23 @@ function getDefaultCharacterState(id, name, color) {
 function getDefaultGameState() {
     return { 
         characters: [], activeCharacterIndex: 0,
-        inventory: { soulFragment: 1000, ragingSoul: 0, wood: 0, copper_ore: 0, fish: 0 },
+        inventory: { 
+            soulFragment: 1000, ragingSoul: 0, 
+            wood: 0, copper_ore: 0, fish: 0,
+            copper_bar: 0, iron_bar: 0, steel_bar: 0 // Added bars
+        },
         level: { current: 1, xp: 0 }, 
         skills: { woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0} },
+        
+        // --- New State Object ---
+        skillEquipment: {
+            blacksmithing: {
+                sword:    { unlocked: false, level: 1, xp: 0 },
+                leggings: { unlocked: false, level: 1, xp: 0 },
+                helmet:   { unlocked: false, level: 1, xp: 0 }
+            }
+        },
+
         upgrades: { addCharacter: 0, plusOneDamage: 0, plusOneMaxMarks: 0, plusTwoMaxHp: 0, plusOneSpeed: 0, plusOneDefense: 0 },
         collectedItemDrops: [],
         firstKills: [], 
@@ -347,7 +364,125 @@ function updateCharacterLogic(character, logicDelta) {
         }
     }
 }
-function openCrafting() { openModal(ui.craftingModal); /* We can render crafting items here later */ }
+function openCrafting() { 
+    renderCraftingList(); // Render the list before opening
+    openModal(ui.craftingModal); 
+}
+function renderCraftingList() {
+    const container = ui.craftingListContainer;
+    container.innerHTML = ''; // Clear previous content
+
+    // For now, we are just building the blacksmithing section
+    const skill = 'blacksmithing';
+    const skillData = SKILL_EQUIPMENT_DATA[skill];
+    const skillState = gameState.skillEquipment[skill];
+
+    for (const itemId in skillData) {
+        if (itemId === 'skill') continue; // Skip the skill key
+
+        const itemData = skillData[itemId];
+        const itemState = skillState[itemId];
+        const playerSkillLevel = gameState.skills[skillData.skill].level;
+
+        const itemEl = document.createElement('div');
+        itemEl.className = 'modal-item';
+
+        if (playerSkillLevel < itemData.unlockLevel) {
+            // Item is locked
+            itemEl.innerHTML = `<span>${itemData.name}</span> <span class="cost">Requires Lv ${itemData.unlockLevel} ${skillData.skill}</span>`;
+            itemEl.classList.add('disabled');
+        } else if (!itemState.unlocked) {
+            // Item is ready to be unlocked
+            let costString = "Unlock: ";
+            for (const mat in itemData.unlockCost) {
+                costString += `${itemData.unlockCost[mat]} ${ITEM_SPRITES[mat]}`;
+            }
+            itemEl.innerHTML = `<span>${itemData.name}</span> <button class="cost">${costString}</button>`;
+            itemEl.querySelector('button').addEventListener('click', () => craftSkillEquipment(skill, itemId));
+        } else {
+            // Item is unlocked and can be leveled up
+            const xpToNext = itemData.xpCurve(itemState.level);
+            const progressPercent = (itemState.xp / xpToNext) * 100;
+            let costString = "Infuse: ";
+             for (const mat in itemData.xpPerCraft) {
+                costString += `${itemData.xpPerCraft[mat]} ${ITEM_SPRITES[mat]}`;
+            }
+            
+            itemEl.innerHTML = `
+                <div class="w-full">
+                    <div class="flex justify-between items-center mb-1">
+                        <span>${itemData.name} (Lv ${itemState.level})</span>
+                        <button class="cost">${costString}</button>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${itemState.xp}/${xpToNext}</div>
+                    </div>
+                </div>
+            `;
+            itemEl.querySelector('button').addEventListener('click', () => craftSkillEquipment(skill, itemId));
+        }
+        container.appendChild(itemEl);
+    }
+}
+
+function craftSkillEquipment(skill, itemId) {
+    const itemData = SKILL_EQUIPMENT_DATA[skill][itemId];
+    const itemState = gameState.skillEquipment[skill][itemId];
+
+    if (!itemState.unlocked) {
+        // --- UNLOCK LOGIC ---
+        const cost = itemData.unlockCost;
+        let canAfford = true;
+        for (const mat in cost) {
+            if ((gameState.inventory[mat] || 0) < cost[mat]) {
+                canAfford = false;
+                break;
+            }
+        }
+        if (canAfford) {
+            for (const mat in cost) {
+                gameState.inventory[mat] -= cost[mat];
+            }
+            itemState.unlocked = true;
+            showNotification(`${itemData.name} unlocked!`);
+            recalculateTeamStats(); // Recalculate stats in case of a level 1 bonus
+        } else {
+            showNotification(`Not enough materials to unlock.`);
+        }
+    } else {
+        // --- XP INFUSION LOGIC ---
+        const cost = itemData.xpPerCraft;
+        let canAfford = true;
+        for (const mat in cost) {
+            if ((gameState.inventory[mat] || 0) < cost[mat]) {
+                canAfford = false;
+                break;
+            }
+        }
+        if (canAfford) {
+            for (const mat in cost) {
+                gameState.inventory[mat] -= cost[mat];
+            }
+            itemState.xp += 1; // xpPerCraft value could be used here if it varies
+
+            // Check for level up
+            const xpToNext = itemData.xpCurve(itemState.level);
+            if (itemState.xp >= xpToNext) {
+                itemState.level++;
+                itemState.xp -= xpToNext;
+                showNotification(`${itemData.name} leveled up to ${itemState.level}!`);
+                recalculateTeamStats(); // Stats changed, so recalculate
+            }
+        } else {
+            // This will be spammy, maybe remove later
+            showNotification(`Not enough materials to infuse.`);
+        }
+    }
+    // Re-render the crafting list to show the changes
+    renderCraftingList();
+    updateAllUI(); // To update inventory counts
+    saveGameState();
+}
 function closeCrafting() { closeModal(ui.craftingModal); }
 function updateCharacterVisuals(character, frameDelta) {
     const visualX = character.visual.x;
@@ -1056,7 +1191,9 @@ function getTeamStats() {
     let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
     let totalHpRegenBonus = 0;
     let totalDefense = (gameState.level.current - 1) + (gameState.upgrades.plusOneDefense || 0);
+    let totalMaxHpBonus = 0; // Separate from regen
 
+    // --- Add bonuses from trophy items ---
     if (gameState.collectedItemDrops) {
         gameState.collectedItemDrops.forEach(itemDropId => {
             const itemDrop = ITEM_DROP_DATA[itemDropId];
@@ -1066,10 +1203,34 @@ function getTeamStats() {
                 case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
                 case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
                 case 'ADD_DEFENSE': totalDefense += itemDrop.effect.value; break;
+                case 'ADD_MAX_HP': totalMaxHpBonus += itemDrop.effect.value; break;
             }
         });
     }
-    return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense }; 
+
+    // --- NEW: Add bonuses from universal skill equipment ---
+    if (gameState.skillEquipment) {
+        for (const skill in gameState.skillEquipment) {
+            const skillItems = gameState.skillEquipment[skill];
+            for (const itemId in skillItems) {
+                const itemState = skillItems[itemId];
+                if (itemState.unlocked) {
+                    const itemData = SKILL_EQUIPMENT_DATA[skill][itemId];
+                    const bonus = itemData.bonus(itemState.level);
+                    switch(bonus.type) {
+                        case 'ADD_DAMAGE': totalDamage += bonus.value; break;
+                        case 'ADD_SPEED': totalSpeed += bonus.value; break;
+                        case 'ADD_DEFENSE': totalDefense += bonus.value; break;
+                        case 'ADD_MAX_HP': totalMaxHpBonus += bonus.value; break;
+                        // Add other bonus types here if you create them
+                    }
+                }
+            }
+        }
+    }
+    
+    // Pass max HP bonus to recalculateTeamStats, which handles the final HP calculation
+    return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus }; 
 }
 
 function updateCombat(character, gameTime) { 

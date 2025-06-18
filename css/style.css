@@ -11,7 +11,13 @@ body {
 #game-container {
     height: 98vh; /* Make the container almost full screen height */
 }
-
+#canvas-container {
+    /* This forces the container to be a square */
+    aspect-ratio: 1 / 1;
+    
+    /* This makes sure its height doesn't exceed the parent's height (which is 98vh) */
+    max-height: 100%;
+}
 /* --- UI Panel Styling --- */
 #ui-panel {
     background-color: #27272a; /* zinc-800 */

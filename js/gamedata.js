@@ -62,7 +62,11 @@ export const ITEM_SPRITES = {
     ragingSoul: '✧',
     wood: '🪵',
     copper_ore: '⛏️',
-    fish: '🐟'
+    fish: '🐟',
+    // --- New Items ---
+    copper_bar: '🟧',
+    iron_bar: '⬜',
+    steel_bar: '⬛'
 };
 
 // --- Spritesheet Mapping ---
@@ -431,5 +435,35 @@ export const ALTAR_UPGRADES = {
     addCharacter: { name: "Add Character", maxLevel: 3, cost: (level) => ({ ragingSoul: 1 }) },
     learningBoost: { name: "Learning Boost", maxLevel: 5, cost: (level) => ({ soulFragment: Math.floor(50 * Math.pow(2.5, level)) }) } // +2% XP per level
 };
-
+// --- Universal Skill Equipment ---
+export const SKILL_EQUIPMENT_DATA = {
+    blacksmithing: {
+        skill: 'mining', // The gathering skill that provides materials
+        sword: {
+            name: "Copper Sword",
+            unlockLevel: 1,
+            unlockCost: { copper_bar: 50 },
+            xpPerCraft: { copper_bar: 1 }, // 1 bar gives 1 XP
+            xpCurve: (level) => 100 * level, // XP for next level
+            bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 2 })
+        },
+        leggings: {
+            name: "Iron Leggings",
+            unlockLevel: 10,
+            unlockCost: { iron_bar: 50 },
+            xpPerCraft: { iron_bar: 1 },
+            xpCurve: (level) => 120 * level,
+            bonus: (level) => ({ type: 'ADD_DEFENSE', value: level * 1 })
+        },
+        helmet: {
+            name: "Steel Helmet",
+            unlockLevel: 20,
+            unlockCost: { steel_bar: 50 },
+            xpPerCraft: { steel_bar: 1 },
+            xpCurve: (level) => 150 * level,
+            bonus: (level) => ({ type: 'ADD_MAX_HP', value: level * 5 })
+        }
+    }
+    // You can add 'cooking', 'woodworking' etc. here later
+};
 
