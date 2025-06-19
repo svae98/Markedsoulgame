@@ -252,7 +252,6 @@ function getDefaultGameState() {
             cooking: { level: 1, xp: 0 }, woodworking: { level: 1, xp: 0 }, blacksmithing: { level: 1, xp: 0 } // Changed 'carpentry' to 'woodworking'
         },
 
-        // --- NEW: This will store the mastery level and progress for each recipe ---
         craftingMastery: {
             // This will be populated as you unlock recipes, e.g.:
             // cooked_fish: { unlocked: true, level: 1, progress: 0 }
@@ -1362,55 +1361,11 @@ function renderInventory() {
     }
 }
 
-function getTeamStats() { 
-    const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
-    let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
-    let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
-    let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
-    let totalHpRegenBonus = 0;
-    let totalDefense = (gameState.level.current - 1) + (gameState.upgrades.plusOneDefense || 0);
-    let totalMaxHpBonus = 0; // Separate from regen
-
-    // --- Add bonuses from trophy items ---
-    if (gameState.collectedItemDrops) {
-        gameState.collectedItemDrops.forEach(itemDropId => {
-            const itemDrop = ITEM_DROP_DATA[itemDropId];
-            if (!itemDrop) return;
-            switch(itemDrop.effect.type) {
-                case 'ADD_DAMAGE': totalDamage += itemDrop.effect.value; break;
-                case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
-                case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
-                case 'ADD_DEFENSE': totalDefense += itemDrop.effect.value; break;
-                case 'ADD_MAX_HP': totalMaxHpBonus += itemDrop.effect.value; break;
-            }
-        });
-    }
-
-    // --- NEW: Add bonuses from universal skill equipment ---
-    if (gameState.skillEquipment) {
-        for (const skill in gameState.skillEquipment) {
-            const skillItems = gameState.skillEquipment[skill];
-            for (const itemId in skillItems) {
-                const itemState = skillItems[itemId];
-                if (itemState.unlocked) {
-                    const itemData = SKILL_EQUIPMENT_DATA[skill][itemId];
-                    const bonus = itemData.bonus(itemState.level);
-                    switch(bonus.type) {
-                        case 'ADD_DAMAGE': totalDamage += bonus.value; break;
-                        case 'ADD_SPEED': totalSpeed += bonus.value; break;
-                        case 'ADD_DEFENSE': totalDefense += bonus.value; break;
-                        case 'ADD_MAX_HP': totalMaxHpBonus += bonus.value; break;
-                        // Add other bonus types here if you create them
-                    }
-                }
-            }
-        }
-    }
-    
-    // Pass max HP bonus to recalculateTeamStats, which handles the final HP calculation
-    return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus }; 
+function getTeamStats() {
+    // Instead of recalculating here, simply call the function that already does it correctly.
+    // This ensures all bonuses (including crafting mastery) are always applied.
+    return recalculateTeamStats();
 }
-
 function updateCombat(character, gameTime) { 
     const { combat } = character; 
     if (!combat.active || character.isDead) return;
@@ -1569,7 +1524,7 @@ function endCombat(character, playerWon) {
 // text file 3 begin
 function recalculateTeamStats() {
     // Start with base stats
-    const baseDamage = 1 + Math.floor(gameState.level.current / 2); 
+    const baseDamage = 1 + Math.floor(gameState.level.current / 2);
     let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
     let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
     let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
@@ -1597,6 +1552,11 @@ function recalculateTeamStats() {
     if (gameState.craftingMastery) {
         for (const recipeId in gameState.craftingMastery) {
             const masteryData = gameState.craftingMastery[recipeId];
+
+            // --- ADDED CONSOLE.LOG HERE ---
+            console.log(`Mastery for recipe '${recipeId}': Unlocked = ${masteryData.unlocked}, Level = ${masteryData.level}, Progress = ${masteryData.progress}`);
+            // --- END ADDED CONSOLE.LOG ---
+
             if (masteryData.unlocked) {
                 let recipeDef;
                 for (const categoryKey in CRAFTING_DATA) {
@@ -1629,6 +1589,14 @@ function recalculateTeamStats() {
     });
 
     // Return team-wide stats
+    // --- ADDED DEBUGGING LOGS HERE ---
+    console.log("Calculated Team Stats:");
+    console.log(`  Damage: ${totalDamage}`);
+    console.log(`  Speed: ${totalSpeed}`);
+    console.log(`  Defense: ${totalDefense}`);
+    console.log(`  Max HP Bonus: ${totalMaxHpBonus}`);
+    console.log(`  HP Regen Bonus: ${totalHpRegenBonus}`);
+    // --- END ADDED DEBUGGING LOGS ---
     return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus };
 }
 

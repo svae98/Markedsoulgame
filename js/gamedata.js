@@ -304,7 +304,7 @@ export const CRAFTING_DATA = {
                 unlockCost: { wood: 60 }, // Initial unlock cost: 60 wood (resource of the skill)
                 time: BASE_CRAFTING_TIME,
                 masteryPerCraft: 10, masteryCurve: (level) => 50 + (level * 10),
-                bonus: (level) => ({ type: 'ADD_SPEED', value: level * 0.25 })
+                bonus: (level) => ({ type: 'ADD_SPEED', value: level * 1 })
             },
             wooden_axe: {
                 name: 'Wooden Axe', unlockLevel: 2, cost: { wood: 1 }, // Per-craft cost: 1 wood
