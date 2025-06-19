@@ -145,7 +145,7 @@ export const RESOURCE_DATA = {
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
     FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 },
     // --- NEW CRAFTING STATIONS ---
-    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'carpentry', size: {w: 2, h: 1} }, // CRAFTING_TABLE: h 1 w 2 (matches current)
+    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'woodworking', size: {w: 2, h: 1} }, // CRAFTING_TABLE: h 1 w 2 (matches current)
     FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1} }, // ANVIL_AND_FORGE: h 1 w 2
     COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2} }, // COOKING_RANGE: h 2 w 1
 };
@@ -295,9 +295,9 @@ export const CRAFTING_DATA = {
             }
         }
     },
-    carpentry: {
+    woodworking: { // Changed from carpentry to woodworking
         name: 'Woodworking',
-        skill: 'Woodworking',
+        skill: 'woodworking', // Changed from Woodworking to woodworking (lowercase for consistency)
         recipes: {
             wood_carving: {
                 name: 'Wood Carving', unlockLevel: 1, cost: { wood: 1 }, // Per-craft cost: 1 wood
