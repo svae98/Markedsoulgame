@@ -822,34 +822,35 @@ function handleKeydown(e) {
 }
 
 function initiateMoveToEntity(character, entity) {
-    character.path = []; 
+    character.path = [];
     const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
     if (!entityData) return;
 
-    let targetPos;
+    let targetPos = null;
     const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : character.zoneX;
     const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : character.zoneY;
 
-    if (ENEMIES_DATA[entity.type]) {
-        targetPos = findWalkableNeighborForEntity(entity, character.player);
-    } else { 
-        const neighbors = getWalkableNeighborsForEntity(entity, false, entityZoneX, entityZoneY);
-        if (neighbors.length > 0) {
-            neighbors.sort((a, b) => {
-                if (!character || !character.player) return 0;
-                const distA = heuristic(character.player, a);
-                const distB = heuristic(character.player, b);
-                return distA - distB;
-            });
-            targetPos = neighbors[0];
-        }
+    // Consistently get all walkable neighbors and sort them to find the closest
+    const neighbors = getWalkableNeighborsForEntity(entity, ENEMIES_DATA[entity.type] ? true : false, entityZoneX, entityZoneY);
+    if (neighbors.length > 0) {
+        neighbors.sort((a, b) => {
+            if (!character || !character.player) return 0;
+            const distA = heuristic(character.player, a);
+            const distB = heuristic(character.player, b);
+            return distA - distB;
+        });
+        targetPos = neighbors[0]; // Select the closest neighbor
     }
 
     if (targetPos) {
         const path = findPath(character.player, targetPos, character.zoneX, character.zoneY);
         if (path && path.length > 0) {
             character.path = path;
+        } else {
+            console.warn(`No path found to target entity ${entity.id} at ${targetPos.x},${targetPos.y}.`);
         }
+    } else {
+        console.warn(`No walkable neighbor found for entity ${entity.id}.`);
     }
 }
 
@@ -925,9 +926,11 @@ function handleResourceClick(resource) {
 
 function handleMovementClick(clickedX, clickedY, activeChar) {
     let destination = null;
+    // Call to isWalkable is already correct here, passing zoneX, zoneY
     if (isWalkable(clickedX, clickedY, activeChar.zoneX, activeChar.zoneY, true)) {
         destination = {x: clickedX, y: clickedY};
     } else {
+        // Call to getNeighbors will be updated to pass zoneX, zoneY
         const neighbors = getNeighbors({x: clickedX, y: clickedY}, activeChar.zoneX, activeChar.zoneY);
         if (neighbors.length > 0) {
             neighbors.sort((a, b) => heuristic(activeChar.player, a) - heuristic(activeChar.player, b));
@@ -1784,11 +1787,17 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         return;
     }
 
+    // THIS IS THE CRITICAL CHANGE: If busyUntil is active, but the character's current automation task
+    // is NOT 'crafting', then busyUntil should be cleared immediately.
+    if (automation.busyUntil && automation.task !== 'crafting') {
+         automation.busyUntil = null;
+    }
+    // Now proceed with the normal busy check
     if (automation.busyUntil && gameTime < automation.busyUntil) {
         setStatus('Crafting...');
         return;
     }
-    automation.busyUntil = null;
+    automation.busyUntil = null; // Clear if the busy time has passed.
 
     const potentialTargets = automation.markedTiles.map(mark => {
         const entity = findEnemyById(mark.entityId) || findResourceById(mark.entityId);
@@ -1804,7 +1813,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         if (ENEMIES_DATA[entity.type]) {
             return !isEnemyDead(entity.id);
         } else if (RESOURCE_DATA[entity.type]) {
-            // This now includes crafting stations, which don't have a nextAvailableTime
             return !entity.nextAvailableTime || gameTime >= entity.nextAvailableTime;
         }
         return false;
@@ -1842,16 +1850,15 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             const isStation = !!CRAFTING_DATA[entityDef.skill];
 
             if (isStation) {
-                // --- START FIX: Use the marked recipe ID for crafting automation ---
                 const markedRecipeId = automation.markedTiles.find(mark => mark.entityId === targetEntity.id)?.recipeId;
                 if (!markedRecipeId) {
                     setStatus(`No recipe selected for ${entityName}.`);
-                    automation.busyUntil = null; // Ensure it doesn't get stuck
+                    automation.busyUntil = null; 
                     return;
                 }
                 const skillKey = entityDef.skill;
                 const categoryData = CRAFTING_DATA[skillKey];
-                const recipeData = categoryData.recipes[markedRecipeId]; // Get the specific marked recipe
+                const recipeData = categoryData.recipes[markedRecipeId];
 
                 if (!recipeData) {
                     setStatus(`Invalid recipe for ${entityName}.`);
@@ -1859,7 +1866,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     return;
                 }
 
-                // Check if recipe is unlocked (should already be handled by markRecipeForCrafting, but a safeguard)
                 const masteryData = gameState.craftingMastery[markedRecipeId] || { unlocked: false, level: 0, progress: 0 };
                 if (!masteryData.unlocked) {
                     setStatus(`${recipeData.name} not unlocked.`);
@@ -1867,18 +1873,13 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     return;
                 }
 
-                // Check if player can afford the per-craft cost
                 if (Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
-                    // Deduct materials (per-craft cost, which you've set to 1)
                     Object.keys(recipeData.cost).forEach(mat => gameState.inventory[mat] -= recipeData.cost[mat]);
 
-                    // Grant XP to the crafting skill
-                    gainSkillXp(categoryData.skill, 25); // Grant 25 xp per craft
+                    gainSkillXp(categoryData.skill, 25); 
 
-                    // Add mastery progress
                     masteryData.progress += recipeData.masteryPerCraft;
 
-                    // Check for mastery level up
                     let progressNeeded = recipeData.masteryCurve(masteryData.level);
                     while (masteryData.progress >= progressNeeded) {
                         masteryData.level++;
@@ -1888,15 +1889,14 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                         progressNeeded = recipeData.masteryCurve(masteryData.level);
                     }
 
-                    automation.busyUntil = gameTime + recipeData.time; // Use the recipe's time
+                    automation.busyUntil = gameTime + recipeData.time; 
                     setStatus('Crafting...');
                     saveGameState();
-                    updateAllUI(); // Update UI to reflect material changes and mastery progress
+                    updateAllUI(); 
                 } else {
                     setStatus(`Not enough materials for ${recipeData.name}.`);
-                    automation.busyUntil = null; // Allow re-evaluation if cannot afford
+                    automation.busyUntil = null; 
                 }
-                // --- END FIX: Use the marked recipe ID for crafting automation ---
 
             } else if (ENEMIES_DATA[targetEntity.type]) {
                 if (!character.combat.active) {
@@ -1904,41 +1904,70 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     character.combat.targetId = targetEntity.id;
                     character.combat.isPlayerTurn = true;
                     character.combat.lastUpdateTime = gameTime;
+                    automation.busyUntil = null; // Clear busyUntil if starting combat
                 }
             } else { // This block handles gathering resources
                  const resourceDef = RESOURCE_DATA[targetEntity.type];
+                
+                // --- ADD THESE CONSOLE.LOG STATEMENTS ---
+                console.log(`[Gathering Debug] Char: ${character.name}, Entity: ${entityName} (ID: ${targetEntity.id})`);
+                console.log(`[Gathering Debug] Current Durability: ${targetEntity.currentDurability}/${resourceDef.maxDurability}`);
+                console.log(`[Gathering Debug] Required Gather Time: ${resourceDef.time}ms`);
+
                 if (automation.targetId !== targetEntity.id) {
                     automation.targetId = targetEntity.id;
-                    automation.gatheringState.lastGatherAttemptTime = 0;
-                }
-                setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
-                if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
                     automation.gatheringState.lastGatherAttemptTime = gameTime;
-                    targetEntity.currentDurability--;
+                    console.log(`[Gathering Debug] NEW TARGET. Last gather time set to: ${gameTime}`);
+                }
+
+                setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
+                
+                const timeSinceLastGather = gameTime - (automation.gatheringState.lastGatherAttemptTime || 0);
+                console.log(`[Gathering Debug] Time since last gather: ${timeSinceLastGather}ms`);
+
+                if (timeSinceLastGather >= resourceDef.time) {
+                    console.log(`[Gathering Debug] GATHERING SUCCESS! Durability BEFORE: ${targetEntity.currentDurability}`);
+                    automation.gatheringState.lastGatherAttemptTime = gameTime; 
+                    targetEntity.currentDurability--; 
                     gainSkillXp(resourceDef.skill, resourceDef.xp);
                     if (resourceDef.item) {
                         gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
-                        // The notification below only shows for the active character.
-                        // showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
+                        console.log(`[Gathering Debug] Item Gained: +1 ${resourceDef.item}. Inventory count: ${gameState.inventory[resourceDef.item]}`);
                     }
                     saveGameState();
-                    // --- START FIX ---
-                    // Force a UI update to immediately reflect new resources gained by any character.
-                    updateAllUI();
-                    // --- END FIX ---
+                    updateAllUI(); 
+                    console.log(`[Gathering Debug] Durability AFTER: ${targetEntity.currentDurability}`);
+
                     if (targetEntity.currentDurability <= 0) {
                         targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2);
                         automation.targetId = null;
+                        automation.busyUntil = null;
+                        console.log(`[Gathering Debug] RESOURCE DEPLETED. Will respawn at: ${targetEntity.nextAvailableTime}`);
                     }
+                } else {
+                    console.log(`[Gathering Debug] WAITING FOR COOLDOWN... Remaining: ${resourceDef.time - timeSinceLastGather}ms`);
                 }
             }
         } else {
-            const approachSpot = findWalkableNeighborForEntity(targetEntity, player);
-            if (approachSpot) {
-                const path = findPath(player, approachSpot, zoneX, zoneY);
+            const potentialApproachSpots = findWalkableNeighborForEntity(targetEntity, player, [], targetZoneX, targetZoneY);
+            let closestApproachSpot = null;
+            let minDistanceToSpot = Infinity;
+
+            for (const spot of potentialApproachSpots) {
+                const dist = heuristic(player, spot);
+                if (dist < minDistanceToSpot) {
+                    minDistanceToSpot = dist;
+                    closestApproachSpot = spot;
+                }
+            }
+
+            if (closestApproachSpot) {
+                const path = findPath(player, closestApproachSpot, zoneX, zoneY);
                 if (path && path.length > 0) character.path = path;
                 setStatus(`Walking to ${entityName}...`);
-            } else { setStatus(`No approach spot for ${entityName}.`); }
+            } else {
+                setStatus(`No approach spot for ${entityName}.`);
+            }
         }
     } else {
         setStatus(`Traveling to ${entityName}'s zone...`);
@@ -2030,9 +2059,9 @@ function updateAllPlayerRegen(gameTime) {
 
 // --- A* Pathfinding Implementation ---
 
-function findPath(start, end, zoneX, zoneY) {
-    const zoneData = worldData[`${zoneX},${zoneY}`]; // Get zoneData here
-    if (!zoneData) return null; // Add a null check for zoneData
+function findPath(start, end, zoneX, zoneY) { // zoneX, zoneY already here
+    const zoneData = worldData[`${zoneX},${zoneY}`]; // This line remains the same as zoneX, zoneY are available
+    if (!zoneData) return null;
 
     const openSet = [];
     const closedSet = new Set();
@@ -2066,9 +2095,8 @@ function findPath(start, end, zoneX, zoneY) {
 
         closedSet.add(currentKey);
 
-        // --- FIX START: Pass zoneData to getNeighbors ---
-        const neighbors = getNeighbors(currentNode, zoneData); // Pass the correct zoneData
-        // --- FIX END ---
+        // Pass zoneX, zoneY to getNeighbors
+        const neighbors = getNeighbors(currentNode, zoneX, zoneY); // Pass the correct zoneX, zoneY
 
         for (const neighborPos of neighbors) {
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
@@ -2109,7 +2137,7 @@ function heuristic(a, b) {
 }
 
 
-function getNeighbors(node, zoneData) { // --- FIX START: Signature changed to accept zoneData directly ---
+function getNeighbors(node, zoneX, zoneY) { // Signature changed to accept zoneX, zoneY directly
     const neighbors = [];
     const { x, y } = node;
     const directions = [
@@ -2122,8 +2150,8 @@ function getNeighbors(node, zoneData) { // --- FIX START: Signature changed to a
     for (const dir of directions) {
         const newX = x + dir.x;
         const newY = y + dir.y;
-        // Pass the zoneData object correctly to isWalkable
-        if (isWalkable(newX, newY, zoneData, true)) {
+        // Pass the zoneX, zoneY correctly to isWalkable
+        if (isWalkable(newX, newY, zoneX, zoneY, true)) {
             neighbors.push({ x: newX, y: newY });
         }
     }
@@ -2154,14 +2182,14 @@ function findPathToZone(character, targetZoneX, targetZoneY) {
     return null;
 }
 
-function isWalkable(x, y, zoneData, ignoreChars = false) {
-    // --- START FIX: Add robust checks for zoneData and mapLayout ---
+function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { // Signature changed to accept zoneX, zoneY
+    const zoneKey = `${zoneX},${zoneY}`;
+    const zoneData = worldData[zoneKey]; // Get zoneData using the passed zoneX, zoneY
+
     if (!zoneData || !zoneData.mapLayout) {
         console.error("isWalkable: Missing or malformed zoneData or mapLayout. Zone:", zoneData);
-        // This might happen if worldData[`${zoneX},${zoneY}`] yields undefined or an object without mapLayout.
         return false;
     }
-    // --- END FIX ---
 
     const { width, height, mapLayout } = zoneData;
 
@@ -2170,21 +2198,15 @@ function isWalkable(x, y, zoneData, ignoreChars = false) {
         return false;
     }
 
-    // --- START FIX: Ensure the specific mapLayout row exists ---
-    // This catches cases where mapLayout[y] might be undefined even if y < height,
-    // which could happen if mapLayout is a sparse array or its reported height
-    // doesn't match the actual number of rows.
     if (!mapLayout[y]) {
         console.error(`isWalkable: mapLayout row ${y} is undefined for zone`, zoneData);
         return false;
     }
-    // --- END FIX ---
 
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         '.': TILES.PATH,
     };
-    // No more `?.` needed here, as `mapLayout[y]` is now guaranteed to exist by the above check
     const tileChar = mapLayout[y][x] || ' ';
     const tileType = legend[tileChar] ?? TILES.GRASS;
 
@@ -2208,13 +2230,13 @@ function isWalkable(x, y, zoneData, ignoreChars = false) {
         }
     }
 
-    // Check for enemies at the position
-    if (getEnemyAt(x, y, `${zoneData.zoneX},${zoneData.zoneY}`)) return false;
+    // Check for enemies at the position - NOW uses correct zoneX, zoneY
+    if (getEnemyAt(x, y, zoneKey)) return false;
 
-    // Check for other characters at the position, unless ignored
-    if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneData.zoneX && c.zoneY === zoneData.zoneY && c.player.x === x && c.player.y === y)) return false;
+    // Check for other characters at the position, unless ignored - NOW uses correct zoneX, zoneY
+    if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
 
-    return true; // If none of the above conditions block movement, the tile is walkable
+    return true;
 }
 
 function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicitZoneY) {
@@ -2224,7 +2246,6 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
     const size = entityData.size || { w: 1, h: 1 };
     const perimeter = new Set();
 
-    // This logic explicitly gets all tiles the entity occupies
     const entityTiles = [];
     for (let i = 0; i < size.w; i++) {
         for (let j = 0; j < size.h; j++) {
@@ -2232,13 +2253,11 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
         }
     }
 
-    // It then finds only the N, S, E, W neighbors for those tiles
-    const directions = [{x:0,y:-1}, {x:0,y:1}, {x:-1,y:0}, {x:1,y:0}]; // Cardinal directions only
+    const directions = [{x:0,y:-1}, {x:0,y:1}, {x:-1,y:0}, {x:1,y:0}];
 
     for (const tile of entityTiles) {
         for (const dir of directions) {
             const neighborPos = { x: tile.x + dir.x, y: tile.y + dir.y };
-            // This ensures the neighbor spot isn't part of the entity itself
             if (!entityTiles.some(et => et.x === neighborPos.x && et.y === neighborPos.y)) {
                 perimeter.add(`${neighborPos.x},${neighborPos.y}`);
             }
@@ -2252,7 +2271,7 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
         return [];
     }
     
-    // Finally, it filters for only walkable tiles
+    // Call to isWalkable is already correct here, passing zoneX, zoneY
     return [...perimeter]
         .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: currentEntityZoneX, zoneY: currentEntityZoneY }))
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
@@ -2261,12 +2280,12 @@ function findWalkableNeighborForEntity(entity, charPos, reservedSpots = [], expl
     const entityZoneX = explicitZoneX !== undefined ? explicitZoneX : entity.zoneX;
     const entityZoneY = explicitZoneY !== undefined ? explicitZoneY : entity.zoneY;
 
-    // --- FIX START: Get zoneData for the entity's zone ---
+    // The entityZoneData is fetched but no longer passed directly to isWalkable.
+    // It's still needed here for initial checks if necessary, but not for isWalkable's signature.
     const entityZoneData = worldData[`${entityZoneX},${entityZoneY}`];
-    if (!entityZoneData) { // Add a null check for zoneData
+    if (!entityZoneData) {
         return [];
     }
-    // --- END FIX ---
 
     const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
     if (!entityData) return [];
@@ -2292,11 +2311,10 @@ function findWalkableNeighborForEntity(entity, charPos, reservedSpots = [], expl
         }
     }
 
-    // --- FIX START: Pass entityZoneData to isWalkable ---
+    // Pass entityZoneX, entityZoneY to isWalkable
     return [...perimeter]
         .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]) }))
-        .filter(p => isWalkable(p.x, p.y, entityZoneData, true)); // Pass entityZoneData
-    // --- END FIX ---
+        .filter(p => isWalkable(p.x, p.y, entityZoneX, entityZoneY, true));
 }
 
 function startAutomation(character, task) {
@@ -2332,6 +2350,7 @@ function stopAutomation(character) {
     character.automation.state = 'IDLE'; 
     character.path = [];
     character.automation.markedTiles = []; // Clear all marks when stopping
+    character.automation.busyUntil = null; // <-- CRITICAL FIX: Ensure busyUntil is cleared here
     
     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
     if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
@@ -2507,10 +2526,8 @@ async function loadGameState() {
 
         currentMapData = buildMapData(char.zoneX, char.zoneY); // Still used for drawing, but not pathfinding
 
-        // --- START FIX: Pass actual zoneData to isWalkable ---
-        const charZoneData = worldData[`${char.zoneX},${char.zoneY}`]; // Get the actual zoneData for the character's zone
-        if (!isWalkable(char.player.x, char.player.y, charZoneData, true)) { // Pass the zoneData object
-        // --- END FIX ---
+        // Call to isWalkable is already correct here, passing zoneX, zoneY
+        if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
             console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
             const respawnPos = { x: 15, y: 15 };
             char.player = { ...respawnPos };
