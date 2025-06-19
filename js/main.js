@@ -623,7 +623,7 @@ function drawResourceObject(resource) {
     } else {
         spriteToDraw = SPRITES[resource.type.toUpperCase()];
     }
-    
+
     if (resource.type === 'FISHING_SPOT' && SPRITES.FISHING_SPOT) spriteToDraw = SPRITES.FISHING_SPOT;
 
     if (!spriteToDraw) return;
@@ -631,8 +631,26 @@ function drawResourceObject(resource) {
     const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
     const baseDrawWidth = (spriteToDraw.sw || 32) * (dynamicTileSize / 32);
     const baseDrawHeight = (spriteToDraw.sh || 32) * (dynamicTileSize / 32);
-    const xOffset = (baseDrawWidth - dynamicTileSize) / 2;
-    const yOffset = (baseDrawHeight - dynamicTileSize);
+
+    let xOffset = (baseDrawWidth - dynamicTileSize) / 2;
+    let yOffset = (baseDrawHeight - dynamicTileSize);
+
+    // --- FIX START: Adjust offsets specifically for multi-tile crafting stations ---
+    // If the resource has a 'skill' property, it's likely a crafting station.
+    // We want these large sprites to align perfectly with the top-left of their first tile.
+    if (resourceDef.skill) {
+        // If the sprite's pixel width is designed to perfectly span the object's tile width,
+        // then no horizontal offset is needed. (e.g., 64px sprite for a 2-tile wide object).
+        if (spriteToDraw.sw === (resourceDef.size?.w || 1) * 32) {
+            xOffset = 0;
+        }
+        // If the sprite's pixel height is designed to perfectly span the object's tile height,
+        // then no vertical offset is needed. (e.g., 64px sprite for a 2-tile high object).
+        if (spriteToDraw.sh === (resourceDef.size?.h || 1) * 32) {
+            yOffset = 0;
+        }
+    }
+    // --- FIX END ---
 
     drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
     if (isDepleted && spriteToDraw && ui.ctx.globalAlpha !== 1.0) ui.ctx.globalAlpha = 1.0;
@@ -777,16 +795,30 @@ function getResourceNodeAt(x, y, zoneX, zoneY) {
     });
 }
 
-function handleKeydown(e) { 
-    const key = parseInt(e.key); 
-    if (!isNaN(key) && key > 0 && key <= MAX_CHARACTERS) { 
-        const charIndex = key - 1; 
-        if (gameState.characters[charIndex]) { 
-            gameState.activeCharacterIndex = charIndex; 
-            saveGameState(); 
-            updateAllUI(); 
-        } 
-   }
+function handleKeydown(e) {
+    const key = parseInt(e.key);
+    // Check if the pressed key is a number and corresponds to a valid character index
+    // The condition `key > 0 && key <= MAX_CHARACTERS` needs to be updated to `key >= 0` to include '0' for the 10th character,
+    // and potentially `key <= MAX_CHARACTERS` for total characters, given MAX_CHARACTERS is now 10
+    // Adjusting based on common 1-indexed UI for characters and 0 for 10th.
+    let charIndex;
+    if (e.key === '0') {
+        charIndex = 9; // Map '0' to the 10th character (index 9)
+    } else if (!isNaN(key) && key > 0 && key <= 9) { // Keys '1' through '9'
+        charIndex = key - 1; // Map '1' to index 0, '2' to index 1, etc.
+    } else {
+        return; // Not a character switch key
+    }
+
+    if (gameState.characters[charIndex]) {
+        gameState.activeCharacterIndex = charIndex;
+        saveGameState();
+        // --- FIX START ---
+        // Recalculate canvas size and camera position for the newly active character's zone
+        resizeCanvasAndCenterCamera();
+        // --- FIX END ---
+        updateAllUI();
+    }
 }
 
 function initiateMoveToEntity(character, entity) {
@@ -829,19 +861,33 @@ function handleLeftClick(e) {
     const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
     const enemy = getEnemyAt(x, y, zoneKey);
     const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
-    
-    // --- THIS IS THE NEW PART ---
-    // If you click a resource and it's a crafting station
-    if (resource && CRAFTING_DATA[resource.skill]) {
-        openStationCrafting(resource.skill);
+
+    // Determine if the clicked resource is a crafting station
+    const isCraftingStation = resource && (resource.type === 'CARPENTRY_TABLE' || resource.type === 'FORGE' || resource.type === 'COOKING_RANGE');
+
+    // --- START FIX: Implement new shift-click for crafting stations ---
+    if (e.shiftKey) { // If the Shift key is pressed
+        if (isCraftingStation) {
+            // If it's a crafting station, open the recipe selection menu for this specific station.
+            // We'll need to adapt openStationCrafting or create a new function for this.
+            openStationCrafting(resource); // Pass the entire resource object
+            return;
+        } else {
+            // If it's not a crafting station (e.g., monster, tree), handle marking directly.
+            handleMarking(enemy || resource);
+            return;
+        }
+    }
+    // --- END FIX ---
+
+    // Existing logic for regular (non-shift) clicks:
+    // If it's a crafting station, a regular click should just initiate movement to it.
+    if (isCraftingStation) { // No shift key, and it's a crafting station
+        initiateMoveToEntity(activeChar, resource);
         return;
     }
-    
-    if (e.shiftKey) { 
-        handleMarking(enemy || resource);
-        return;
-    }
-    
+
+    // Continue with existing logic for regular clicks on enemies, other resources, or ground
     if (enemy) {
         initiateMoveToEntity(activeChar, enemy);
         return;
@@ -850,7 +896,8 @@ function handleLeftClick(e) {
         initiateMoveToEntity(activeChar, resource);
         return;
     }
-    
+
+    // Fallback for regular clicks not handled above (e.g., clicking on empty ground)
     if (activeChar.automation.active) {
         stopAutomation(activeChar);
     }
@@ -923,7 +970,105 @@ function addMark(activeChar, entity, approachSpot, taskForMark) {
     const entityName = ENEMIES_DATA[entity.type]?.name || RESOURCE_DATA[entity.type]?.name;
     showNotification(`Marked ${entityName} for ${activeChar.name}.`);
 }
+/**
+ * Marks a specific crafting station for automation with a chosen recipe.
+ * @param {string} stationId - The ID of the crafting station resource.
+ * @param {string} recipeId - The ID of the recipe to craft at this station.
+ */
+/**
+ * Marks a specific crafting station for automation with a chosen recipe.
+ * Handles initial unlock cost or proceeds to marking for crafting.
+ * @param {string} stationId - The ID of the crafting station resource.
+ * @param {string} recipeId - The ID of the recipe to craft at this station.
+ */
+function markRecipeForCrafting(stationId, recipeId) {
+    const activeChar = getActiveCharacter();
+    if (!activeChar || activeChar.isDead) return;
 
+    const stationResource = findResourceById(stationId);
+    if (!stationResource) {
+        showNotification("Crafting station not found.");
+        return;
+    }
+
+    const skillKey = RESOURCE_DATA[stationResource.type].skill;
+    const categoryData = CRAFTING_DATA[skillKey];
+    const recipeData = categoryData.recipes[recipeId];
+
+    if (!recipeData) {
+        showNotification("Recipe not found.");
+        return;
+    }
+
+    // Get current mastery data for this recipe
+    if (!gameState.craftingMastery[recipeId]) {
+        gameState.craftingMastery[recipeId] = { unlocked: false, level: 0, progress: 0 };
+    }
+    const masteryData = gameState.craftingMastery[recipeId];
+
+    // --- START FIX: Handle initial unlock cost ---
+    if (!masteryData.unlocked) {
+        const unlockCost = recipeData.unlockCost;
+        let canAffordUnlock = true;
+        for (const currency in unlockCost) {
+            if ((gameState.inventory[currency] || 0) < unlockCost[currency]) {
+                canAffordUnlock = false;
+                break;
+            }
+        }
+
+        if (canAffordUnlock) {
+            // Deduct unlock cost instantly
+            for (const currency in unlockCost) {
+                gameState.inventory[currency] -= unlockCost[currency];
+            }
+            masteryData.unlocked = true; // Mark as unlocked
+            showNotification(`Unlocked ${recipeData.name}!`);
+            saveGameState();
+            updateAllUI(); // Update UI to reflect cost deduction and unlocked state
+
+            // After unlocking, immediately proceed to mark for crafting
+        } else {
+            // Display message about not affording unlock cost
+            let costString = '';
+            for (const currency in unlockCost) {
+                costString += `${unlockCost[currency]} ${ITEM_SPRITES[currency]} `;
+            }
+            showNotification(`Cannot afford to unlock ${recipeData.name}. Need: ${costString.trim()}`);
+            return; // Stop here if cannot afford unlock
+        }
+    }
+    // --- END FIX ---
+
+    // Proceed with marking for crafting (this part executes if already unlocked, or just unlocked)
+    const taskForMark = 'crafting';
+
+    const closestSpot = findWalkableNeighborForEntity(stationResource, activeChar.player);
+
+    if (closestSpot) {
+        // Clear any existing mark on this specific station to ensure we apply the chosen recipe
+        activeChar.automation.markedTiles = activeChar.automation.markedTiles.filter(
+            mark => !(mark.entityId === stationId && mark.task === 'crafting')
+        );
+
+        // Add the new mark with the specific recipe ID
+        activeChar.automation.markedTiles.push({
+            ...closestSpot,
+            entityId: stationId,
+            task: taskForMark,
+            zoneX: stationResource.zoneX || activeChar.zoneX,
+            zoneY: stationResource.zoneY || activeChar.zoneY,
+            recipeId: recipeId // Store the chosen recipe ID with the mark
+        });
+
+        startAutomation(activeChar, taskForMark);
+        showNotification(`Marked ${stationResource.name} for ${recipeData.name}.`);
+        saveGameState();
+        updateAllUI();
+    } else {
+        showNotification(`No approach spot for ${stationResource.name}.`);
+    }
+}
 function handleMarking(entity) {
     const activeChar = getActiveCharacter();
     if (!entity || !activeChar) return;
@@ -935,7 +1080,16 @@ function handleMarking(entity) {
         taskForMark = 'hunting';
         entityName = ENEMIES_DATA[entity.type].name;
     } else if (RESOURCE_DATA[entity.type]) {
-        taskForMark = RESOURCE_DATA[entity.type].skill;
+        // --- START FIX: Group crafting stations under a single 'crafting' task type ---
+        // Check if the resource's skill corresponds to a known crafting category.
+        // This makes all crafting stations belong to one markable 'type'.
+        const skillOfResource = RESOURCE_DATA[entity.type].skill;
+        if (CRAFTING_DATA[skillOfResource]) { // Check if the skill is a crafting category
+            taskForMark = 'crafting'; // Assign a generic 'crafting' task type
+        } else {
+            taskForMark = skillOfResource; // For other resources (tree, rock, fish), use their specific skill
+        }
+        // --- END FIX ---
         entityName = RESOURCE_DATA[entity.type].name;
     } else return;
 
@@ -1499,22 +1653,23 @@ function gainXp(amount) {
     } 
     updateAllUI(); 
 }
-function openStationCrafting(skillKey) {
+function openStationCrafting(stationResource) { // Now accepts the full resource object
     const modal = document.getElementById('stationCraftingModal');
     const title = document.getElementById('stationCraftingTitle');
     const list = document.getElementById('stationCraftingList');
-    const categoryData = CRAFTING_DATA[skillKey];
-
-    title.textContent = categoryData.name;
     list.innerHTML = ''; // Clear old list
 
+    const skillKey = RESOURCE_DATA[stationResource.type].skill; // Get the skill key from the resource type
+    const categoryData = CRAFTING_DATA[skillKey];
     const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0;
+
+    title.textContent = categoryData.name; // Set modal title based on the station's name
 
     for (const recipeId in categoryData.recipes) {
         const recipeData = categoryData.recipes[recipeId];
         const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 0, progress: 0 };
         const itemEl = document.createElement('div');
-        itemEl.className = 'modal-item';
+        itemEl.className = 'modal-item clickable'; // Make the entire item clickable
 
         if (playerSkillLevel < recipeData.unlockLevel) {
             itemEl.innerHTML = `<span>${recipeData.name}</span> <span class="cost">Requires Lv ${recipeData.unlockLevel} ${categoryData.name}</span>`;
@@ -1522,20 +1677,29 @@ function openStationCrafting(skillKey) {
         } else {
             let costString = "Cost: ";
             for (const mat in recipeData.cost) { costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat]}`; }
-             const progressNeeded = recipeData.masteryCurve(masteryData.level);
+            const progressNeeded = recipeData.masteryCurve(masteryData.level);
             const progressPercent = masteryData.unlocked ? (masteryData.progress / progressNeeded) * 100 : 0;
             const masteryLevelText = masteryData.unlocked ? `Mastery ${masteryData.level}` : 'Not Mastered';
 
-            itemEl.innerHTML = `<div class="w-full">
+            itemEl.innerHTML = `
+                <div class="w-full">
                     <div class="flex justify-between items-center mb-1">
                         <span>${recipeData.name} (${masteryLevelText})</span> <span class="cost">${costString}</span>
                     </div>
                     <div class="progress-bar-container" title="Mastery Progress"><div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div></div>
-                </div>`;
+                </div>
+            `;
+            // --- START FIX: Add event listener to select and mark the specific recipe ---
+            itemEl.addEventListener('click', () => {
+                // When a recipe is clicked, mark the station with this specific recipe
+                markRecipeForCrafting(stationResource.id, recipeId);
+                closeStationCrafting(); // Close the modal after selecting a recipe
+            });
+            // --- END FIX ---
         }
         list.appendChild(itemEl);
     }
-    openModal(modal);
+    openModal(modal); // Open the crafting modal
 }
 
 function closeStationCrafting() {
@@ -1631,7 +1795,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         if (!entity) return null;
         return { entity, zoneX: mark.zoneX, zoneY: mark.zoneY };
     })
-    // --- THIS FILTER LOGIC IS NOW CORRECTED ---
     .filter(item => {
         if (!item) return false;
         const { entity } = item;
@@ -1679,42 +1842,61 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             const isStation = !!CRAFTING_DATA[entityDef.skill];
 
             if (isStation) {
+                // --- START FIX: Use the marked recipe ID for crafting automation ---
+                const markedRecipeId = automation.markedTiles.find(mark => mark.entityId === targetEntity.id)?.recipeId;
+                if (!markedRecipeId) {
+                    setStatus(`No recipe selected for ${entityName}.`);
+                    automation.busyUntil = null; // Ensure it doesn't get stuck
+                    return;
+                }
                 const skillKey = entityDef.skill;
                 const categoryData = CRAFTING_DATA[skillKey];
-                let craftedSomething = false;
+                const recipeData = categoryData.recipes[markedRecipeId]; // Get the specific marked recipe
 
-                for (const recipeId in categoryData.recipes) {
-                    const recipeData = categoryData.recipes[recipeId];
-                    if (Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
-                        Object.keys(recipeData.cost).forEach(mat => gameState.inventory[mat] -= recipeData.cost[mat]);
-                        gainSkillXp(categoryData.skill, 25);
-                        
-                        if (!gameState.craftingMastery[recipeId]) gameState.craftingMastery[recipeId] = { unlocked: false, level: 1, progress: 0 };
-                        const masteryData = gameState.craftingMastery[recipeId];
-                        if (!masteryData.unlocked) {
-                            masteryData.unlocked = true;
-                            showNotification(`${recipeData.name} bonus unlocked!`);
-                            recalculateTeamStats();
-                        }
-                        masteryData.progress += recipeData.masteryPerCraft;
-                        let needed = recipeData.masteryCurve(masteryData.level);
-                        while (masteryData.progress >= needed) {
-                            masteryData.level++;
-                            masteryData.progress -= needed;
-                            showNotification(`${recipeData.name} Mastery to ${masteryData.level}!`);
-                            recalculateTeamStats();
-                            needed = recipeData.masteryCurve(masteryData.level);
-                        }
-                        
-                        automation.busyUntil = gameTime + recipeData.time;
-                        setStatus('Crafting...');
-                        craftedSomething = true;
-                        saveGameState();
-                        updateAllUI();
-                        break; 
-                    }
+                if (!recipeData) {
+                    setStatus(`Invalid recipe for ${entityName}.`);
+                    automation.busyUntil = null;
+                    return;
                 }
-                if (!craftedSomething) setStatus(`No materials at ${entityName}.`);
+
+                // Check if recipe is unlocked (should already be handled by markRecipeForCrafting, but a safeguard)
+                const masteryData = gameState.craftingMastery[markedRecipeId] || { unlocked: false, level: 0, progress: 0 };
+                if (!masteryData.unlocked) {
+                    setStatus(`${recipeData.name} not unlocked.`);
+                    automation.busyUntil = null;
+                    return;
+                }
+
+                // Check if player can afford the per-craft cost
+                if (Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
+                    // Deduct materials (per-craft cost, which you've set to 1)
+                    Object.keys(recipeData.cost).forEach(mat => gameState.inventory[mat] -= recipeData.cost[mat]);
+
+                    // Grant XP to the crafting skill
+                    gainSkillXp(categoryData.skill, 25); // Grant 25 xp per craft
+
+                    // Add mastery progress
+                    masteryData.progress += recipeData.masteryPerCraft;
+
+                    // Check for mastery level up
+                    let progressNeeded = recipeData.masteryCurve(masteryData.level);
+                    while (masteryData.progress >= progressNeeded) {
+                        masteryData.level++;
+                        masteryData.progress -= progressNeeded;
+                        showNotification(`${recipeData.name} Mastery to ${masteryData.level}!`);
+                        recalculateTeamStats();
+                        progressNeeded = recipeData.masteryCurve(masteryData.level);
+                    }
+
+                    automation.busyUntil = gameTime + recipeData.time; // Use the recipe's time
+                    setStatus('Crafting...');
+                    saveGameState();
+                    updateAllUI(); // Update UI to reflect material changes and mastery progress
+                } else {
+                    setStatus(`Not enough materials for ${recipeData.name}.`);
+                    automation.busyUntil = null; // Allow re-evaluation if cannot afford
+                }
+                // --- END FIX: Use the marked recipe ID for crafting automation ---
 
             } else if (ENEMIES_DATA[targetEntity.type]) {
                 if (!character.combat.active) {
@@ -1723,7 +1905,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     character.combat.isPlayerTurn = true;
                     character.combat.lastUpdateTime = gameTime;
                 }
-            } else {
+            } else { // This block handles gathering resources
                  const resourceDef = RESOURCE_DATA[targetEntity.type];
                 if (automation.targetId !== targetEntity.id) {
                     automation.targetId = targetEntity.id;
@@ -1736,9 +1918,14 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     gainSkillXp(resourceDef.skill, resourceDef.xp);
                     if (resourceDef.item) {
                         gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
-                        showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
+                        // The notification below only shows for the active character.
+                        // showNotification(`+1 ${resourceDef.item.replace(/_/g, ' ')}`);
                     }
                     saveGameState();
+                    // --- START FIX ---
+                    // Force a UI update to immediately reflect new resources gained by any character.
+                    updateAllUI();
+                    // --- END FIX ---
                     if (targetEntity.currentDurability <= 0) {
                         targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2);
                         automation.targetId = null;
@@ -1844,6 +2031,9 @@ function updateAllPlayerRegen(gameTime) {
 // --- A* Pathfinding Implementation ---
 
 function findPath(start, end, zoneX, zoneY) {
+    const zoneData = worldData[`${zoneX},${zoneY}`]; // Get zoneData here
+    if (!zoneData) return null; // Add a null check for zoneData
+
     const openSet = [];
     const closedSet = new Set();
     const grid = new Map();
@@ -1876,7 +2066,9 @@ function findPath(start, end, zoneX, zoneY) {
 
         closedSet.add(currentKey);
 
-        const neighbors = getNeighbors(currentNode, zoneX, zoneY);
+        // --- FIX START: Pass zoneData to getNeighbors ---
+        const neighbors = getNeighbors(currentNode, zoneData); // Pass the correct zoneData
+        // --- FIX END ---
 
         for (const neighborPos of neighbors) {
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
@@ -1917,7 +2109,7 @@ function heuristic(a, b) {
 }
 
 
-function getNeighbors(node, zoneX, zoneY) {
+function getNeighbors(node, zoneData) { // --- FIX START: Signature changed to accept zoneData directly ---
     const neighbors = [];
     const { x, y } = node;
     const directions = [
@@ -1930,7 +2122,8 @@ function getNeighbors(node, zoneX, zoneY) {
     for (const dir of directions) {
         const newX = x + dir.x;
         const newY = y + dir.y;
-        if (isWalkable(newX, newY, zoneX, zoneY, true)) {
+        // Pass the zoneData object correctly to isWalkable
+        if (isWalkable(newX, newY, zoneData, true)) {
             neighbors.push({ x: newX, y: newY });
         }
     }
@@ -1961,33 +2154,67 @@ function findPathToZone(character, targetZoneX, targetZoneY) {
     return null;
 }
 
-function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) {
-    const zone = worldData[`${zoneX},${zoneY}`];
-    if (!zone) return false;
-    const { width, height } = zone;
+function isWalkable(x, y, zoneData, ignoreChars = false) {
+    // --- START FIX: Add robust checks for zoneData and mapLayout ---
+    if (!zoneData || !zoneData.mapLayout) {
+        console.error("isWalkable: Missing or malformed zoneData or mapLayout. Zone:", zoneData);
+        // This might happen if worldData[`${zoneX},${zoneY}`] yields undefined or an object without mapLayout.
+        return false;
+    }
+    // --- END FIX ---
 
-    if (x < 0 || x >= width || y < 0 || y >= height) return false;
-    if (!currentMapData[y] || currentMapData[y][x] === undefined) return false;
-    
-    const tileType = currentMapData[y][x];
+    const { width, height, mapLayout } = zoneData;
+
+    // Check if coordinates are within zone bounds
+    if (x < 0 || x >= width || y < 0 || y >= height) {
+        return false;
+    }
+
+    // --- START FIX: Ensure the specific mapLayout row exists ---
+    // This catches cases where mapLayout[y] might be undefined even if y < height,
+    // which could happen if mapLayout is a sparse array or its reported height
+    // doesn't match the actual number of rows.
+    if (!mapLayout[y]) {
+        console.error(`isWalkable: mapLayout row ${y} is undefined for zone`, zoneData);
+        return false;
+    }
+    // --- END FIX ---
+
+    const legend = {
+        ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
+        '.': TILES.PATH,
+    };
+    // No more `?.` needed here, as `mapLayout[y]` is now guaranteed to exist by the above check
+    const tileChar = mapLayout[y][x] || ' ';
+    const tileType = legend[tileChar] ?? TILES.GRASS;
+
+    // Check if the tile type itself is unwalkable (Wall, Deep Water, Deep Forest)
     if (tileType === TILES.WALL || tileType === TILES.DEEP_WATER || tileType === TILES.DEEP_FOREST) {
         return false;
     }
-    
-    if (zone.resources) {
-        for (const resource of zone.resources) {
-            // This condition is now updated to include FISHING_SPOT
-            if (resource.x === x && resource.y === y && 
-                    (resource.type === 'TREE' || resource.type === 'ROCK' || resource.type === 'FISHING_SPOT' || resource.type === 'FORGE')) { // Add FORGE here
-                    return false;
-                }
+
+    // Improved resource collision detection
+    if (zoneData.resources) {
+        for (const resource of zoneData.resources) {
+            const resourceDef = RESOURCE_DATA[resource.type];
+            if (!resourceDef) continue;
+
+            const size = resourceDef.size || { w: 1, h: 1 };
+
+            if (x >= resource.x && x < resource.x + size.w &&
+                y >= resource.y && y < resource.y + size.h) {
+                return false;
+            }
         }
     }
 
-    if (getEnemyAt(x, y, `${zoneX},${zoneY}`)) return false;
-    if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
-    
-    return true;
+    // Check for enemies at the position
+    if (getEnemyAt(x, y, `${zoneData.zoneX},${zoneData.zoneY}`)) return false;
+
+    // Check for other characters at the position, unless ignored
+    if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneData.zoneX && c.zoneY === zoneData.zoneY && c.player.x === x && c.player.y === y)) return false;
+
+    return true; // If none of the above conditions block movement, the tile is walkable
 }
 
 function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicitZoneY) {
@@ -2030,21 +2257,46 @@ function getWalkableNeighborsForEntity(entity, isCombat, explicitZoneX, explicit
         .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]), zoneX: currentEntityZoneX, zoneY: currentEntityZoneY }))
         .filter(p => isWalkable(p.x, p.y, p.zoneX, p.zoneY, isCombat));
 }
-function findWalkableNeighborForEntity(entity, charPos, reservedSpots = []) {
-    const entityZoneX = entity.zoneX !== undefined ? entity.zoneX : getActiveCharacter().zoneX;
-    const entityZoneY = entity.zoneY !== undefined ? entity.zoneY : getActiveCharacter().zoneY;
+function findWalkableNeighborForEntity(entity, charPos, reservedSpots = [], explicitZoneX, explicitZoneY) {
+    const entityZoneX = explicitZoneX !== undefined ? explicitZoneX : entity.zoneX;
+    const entityZoneY = explicitZoneY !== undefined ? explicitZoneY : entity.zoneY;
 
-    const walkableNeighbors = getWalkableNeighborsForEntity(entity, true, entityZoneX, entityZoneY);
-    const reservedSet = new Set(reservedSpots.map(s => `${s.x},${s.y}`));
-    const availableNeighbors = walkableNeighbors.filter(p => !reservedSet.has(`${p.x},${p.y}`));
-    if (availableNeighbors.length === 0) return null;
+    // --- FIX START: Get zoneData for the entity's zone ---
+    const entityZoneData = worldData[`${entityZoneX},${entityZoneY}`];
+    if (!entityZoneData) { // Add a null check for zoneData
+        return [];
+    }
+    // --- END FIX ---
 
-    availableNeighbors.sort((a, b) => {
-        const distA = Math.abs(a.x - charPos.x) + Math.abs(a.y - charPos.y);
-        const distB = Math.abs(b.x - charPos.x) + Math.abs(b.y - charPos.y);
-        return distA - distB;
-    });
-    return availableNeighbors[0];
+    const entityData = ENEMIES_DATA[entity.type] || RESOURCE_DATA[entity.type];
+    if (!entityData) return [];
+
+    const size = entityData.size || { w: 1, h: 1 };
+    const perimeter = new Set();
+
+    const entityTiles = [];
+    for (let i = 0; i < size.w; i++) {
+        for (let j = 0; j < size.h; j++) {
+            entityTiles.push({ x: entity.x + i, y: entity.y + j });
+        }
+    }
+
+    const directions = [{x:0,y:-1}, {x:0,y:1}, {x:-1,y:0}, {x:1,y:0}];
+
+    for (const tile of entityTiles) {
+        for (const dir of directions) {
+            const neighborPos = { x: tile.x + dir.x, y: tile.y + dir.y };
+            if (!entityTiles.some(et => et.x === neighborPos.x && et.y === neighborPos.y)) {
+                perimeter.add(`${neighborPos.x},${neighborPos.y}`);
+            }
+        }
+    }
+
+    // --- FIX START: Pass entityZoneData to isWalkable ---
+    return [...perimeter]
+        .map(s => ({ x: parseInt(s.split(',')[0]), y: parseInt(s.split(',')[1]) }))
+        .filter(p => isWalkable(p.x, p.y, entityZoneData, true)); // Pass entityZoneData
+    // --- END FIX ---
 }
 
 function startAutomation(character, task) {
@@ -2125,32 +2377,34 @@ function isAdjacent(charPos, entity, entityActualZoneX, entityActualZoneY) {
     return neighbors.some(n => n.x === charPos.x && n.y === charPos.y);
 }
 
-function renderCharacterSwitcher() { 
-    ui.characterSwitcher.innerHTML = ''; 
-    gameState.characters.forEach((char, index) => { 
+function renderCharacterSwitcher() {
+    ui.characterSwitcher.innerHTML = '';
+    gameState.characters.forEach((char, index) => {
         const btn = document.createElement('button');
         let taskEmoji = '';
-        if(char.isDead) { taskEmoji = '💀'; } 
+        if(char.isDead) { taskEmoji = '💀'; }
         else if (char.automation.active) {
             if (char.automation.task === 'hunting') taskEmoji = '⚔️';
             else if (char.automation.task === 'woodcutting') taskEmoji = '🌳';
             else if (char.automation.task === 'mining') taskEmoji = '⛏️';
-            else if (char.automation.task === 'fishing') taskEmoji = '🐟'; // Corrected from '?'
+            else if (char.automation.task === 'fishing') taskEmoji = '🐟';
+            // --- START FIX: Add emoji for generic 'crafting' task ---
+            else if (char.automation.task === 'crafting') taskEmoji = '🔨'; // A hammer emoji for crafting
+            // --- END FIX ---
         }
-        btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`; 
-        btn.className = 'char-button'; 
-        if (index === gameState.activeCharacterIndex) btn.classList.add('active'); 
-        
-        // --- THIS IS THE CORRECTED PART ---
-        btn.addEventListener('click', () => { 
-            gameState.activeCharacterIndex = index; 
-            saveGameState(); 
+        btn.innerHTML = `${index + 1}: ${char.name} <span class="text-xs">${taskEmoji}</span>`;
+        btn.className = 'char-button';
+        if (index === gameState.activeCharacterIndex) btn.classList.add('active');
+
+        btn.addEventListener('click', () => {
+            gameState.activeCharacterIndex = index;
+            saveGameState();
             resizeCanvasAndCenterCamera(); // Recalculate zoom for the new active character
-            updateAllUI(); 
-        }); 
-        
-        ui.characterSwitcher.appendChild(btn); 
-    }); 
+            updateAllUI();
+        });
+
+        ui.characterSwitcher.appendChild(btn);
+    });
 }
 
 function updateCombatPanelUI() { 
@@ -2238,26 +2492,25 @@ async function loadGameState() {
     }
 
     let needsSave = false;
-    
-    // --- FIX STARTS HERE ---
-    // Get the current game time, which was set right before this function was called.
-    const timeOnLoad = currentGameTime; 
+
+    const timeOnLoad = currentGameTime;
 
     for (const char of gameState.characters) {
-        // Reset all of this character's timers to prevent desync on load.
         char.lastRegenTime = timeOnLoad;
         if (char.combat) char.combat.lastUpdateTime = timeOnLoad;
         if (char.automation) char.automation.gatheringState.lastGatherAttemptTime = timeOnLoad;
-    // --- FIX ENDS HERE ---
 
         if(!char.visual) { char.visual = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.target) { char.target = { x: char.player.x, y: char.player.y }; needsSave = true; }
         if(!char.path) { char.path = []; needsSave = true; }
         if(char.movementCooldown === undefined) { char.movementCooldown = 0; needsSave = true; }
 
-        currentMapData = buildMapData(char.zoneX, char.zoneY);
+        currentMapData = buildMapData(char.zoneX, char.zoneY); // Still used for drawing, but not pathfinding
 
-        if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
+        // --- START FIX: Pass actual zoneData to isWalkable ---
+        const charZoneData = worldData[`${char.zoneX},${char.zoneY}`]; // Get the actual zoneData for the character's zone
+        if (!isWalkable(char.player.x, char.player.y, charZoneData, true)) { // Pass the zoneData object
+        // --- END FIX ---
             console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
             const respawnPos = { x: 15, y: 15 };
             char.player = { ...respawnPos };

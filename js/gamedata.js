@@ -28,6 +28,7 @@
 // the mark should show up on the target itself, not adjacent to it.
 // when you mark a object of another type that you have marked already (for example, you have marks on monsters and then you mark a tree), 
 // the first object type gets removed in favor of this new object, meaning you can only do one individual skill or activity at a time on each character.
+// UPDATE ABOUT THE MARKING, IT FIRST PRIORITES BOSSES AND THEN CLOSEST ENEMY, NOT BASED ON THE ORDER OF MARKING
 // explanation about what "adjacent" means below:
 // 010
 // 1O1
@@ -39,12 +40,13 @@
 
 // --- Core Game Mechanics ---
 export const TILE_SIZE = 32;
+export const BASE_CRAFTING_TIME = 1000;
 // Note: MAP_WIDTH/HEIGHT are now fallback values.
 // The game will prioritize per-zone dimensions.
 export const MAP_WIDTH_TILES = 150; 
 export const MAP_HEIGHT_TILES = 150;
 export const RESPAWN_TIME = 10000; 
-export const MAX_CHARACTERS = 4;
+export const MAX_CHARACTERS = 10;
 export const CHARACTER_COLORS = ['#FFFFFF', '#06b6d4', '#d946ef', '#f59e0b'];
 
 // --- Tile & Item Definitions ---
@@ -84,25 +86,30 @@ export const SPRITES = {
     RED_SLIME: { sx: 64, sy: 32 },
     BOAR: { sx: 96, sy: 32 },
     WOLF: { sx: 128, sy: 32 },
-    GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 }, // Using WALL sprite, scaled up for Stone Golem appearance
-    HUMAN: { sx: 160, sy: 32 }, 
-    FORGE: { sx: 192, sy:0 },
+    GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 },
+    HUMAN: { sx: 160, sy: 32 },
+
+    // --- UPDATED FORGE SPRITE DIMENSIONS ---
+    FORGE: { sx: 32, sy: 64, sw: 64, sh: 32 }, // ANVIL_AND_FORGE: 2 tiles wide (64px), 1 tile high (32px)
+
+    // --- NEW CRAFTING STATION SPRITES (PLACEHOLDER COORDINATES) ---
+    CARPENTRY_TABLE: { sx: 64, sy: 96, sw: 64, sh: 32 }, // CRAFTING_TABLE: 2 tiles wide (64px), 1 tile high (32px)
+    COOKING_RANGE: { sx: 0, sy: 128, sw: 32, sh: 64 },   // COOKING_RANGE: 1 tile wide (32px), 2 tiles high (64px)
 
     // Tiles
-    // GRASS is now an array for visual variety
     GRASS: [
-        { sx: 0, sy: 0 } // Standard top-left grass
+        { sx: 0, sy: 0 }
     ],
     PATH: { sx: 128, sy: 0 },
     WALL: { sx: 224, sy: 0 },
-    DEEP_WATER: { sx: 256, sy: 224 }, // Reverted to actual DEEP_WATER sprite
-    TREE: { sx: 64, sy: 0 }, // Using a common tree top sprite
-    CHOPPED_TREE: { sx: 96, sy: 32 }, // Placeholder: Using a rock sprite as a stump for now
-    ROCK: { sx: 96, sy: 0 }, // Using a common rock sprite    
-    FISHING_SPOT: { sx: 256, sy: 0 }, // Using water for now, was POND
-    DEEP_FOREST: { sx: 192, sy: 0 }, // Using a common bush sprite
-    GATEWAY: { sx: 224, sy: 32 }, // Using a wall archway piece
-    PEDESTAL: { sx: 288, sy: 64 }  // Using a column base sprite
+    DEEP_WATER: { sx: 256, sy: 224 },
+    TREE: { sx: 64, sy: 0 },
+    CHOPPED_TREE: { sx: 96, sy: 32 },
+    ROCK: { sx: 96, sy: 0 },
+    FISHING_SPOT: { sx: 256, sy: 0 },
+    DEEP_FOREST: { sx: 192, sy: 0 },
+    GATEWAY: { sx: 224, sy: 32 },
+    PEDESTAL: { sx: 288, sy: 64 }
 };
 // --- Item Drop Data ---
 export const ITEM_DROP_DATA = {
@@ -138,9 +145,9 @@ export const RESOURCE_DATA = {
     ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
     FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 },
     // --- NEW CRAFTING STATIONS ---
-    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'carpentry', size: {w: 2, h: 1} },
-    FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 2} },
-    COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 2, h: 1} },
+    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'carpentry', size: {w: 2, h: 1} }, // CRAFTING_TABLE: h 1 w 2 (matches current)
+    FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1} }, // ANVIL_AND_FORGE: h 1 w 2
+    COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2} }, // COOKING_RANGE: h 2 w 1
 };
 
 // --- World Layout ---
@@ -153,8 +160,8 @@ export const worldData = {
         gateways: [{ x: 5, y: 11, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 15 } }],
         resources: [
             { x: 1, y: 1, type: 'CARPENTRY_TABLE', id: 'house_carpentry', size: {w: 2, h: 1} },
-            { x: 8, y: 1, type: 'FORGE', id: 'house_forge', size: {w: 2, h: 2} },
-            { x: 1, y: 8, type: 'COOKING_RANGE', id: 'house_cooking', size: {w: 2, h: 1} },
+            { x: 8, y: 1, type: 'FORGE', id: 'house_forge', size: {w: 2, h: 1} },
+            { x: 1, y: 8, type: 'COOKING_RANGE', id: 'house_cooking', size: {w: 1, h: 2} },
         ],
         mapLayout: [
             "WWWWWWWWWWWW",
@@ -273,20 +280,38 @@ export const CRAFTING_DATA = {
         skill: 'cooking',
         recipes: {
             cooked_fish: {
-                name: 'Cooked Fish', unlockLevel: 1, cost: { fish: 1 },
-                time: 2000, masteryPerCraft: 5, masteryCurve: (level) => 10 + (level * 5),
+                name: 'Cooked Fish', unlockLevel: 1, cost: { fish: 1 }, // Per-craft cost: 1 fish
+                unlockCost: { fish: 50 }, // Initial unlock cost: 50 fish (resource of the skill)
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 5, masteryCurve: (level) => 10 + (level * 5),
                 bonus: (level) => ({ type: 'ADD_MAX_HP', value: level * 2 })
+            },
+            cooked_meat: {
+                name: 'Cooked Meat', unlockLevel: 2, cost: { raw_meat: 1 }, // Per-craft cost: 1 raw_meat
+                unlockCost: { raw_meat: 75 }, // Initial unlock cost: 75 raw_meat (resource of the skill)
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 7, masteryCurve: (level) => 15 + (level * 7),
+                bonus: (level) => ({ type: 'ADD_DEFENSE', value: level * 0.1 })
             }
         }
     },
-    carpentry: { // Formerly Woodworking
+    carpentry: {
         name: 'Carpentry',
         skill: 'carpentry',
         recipes: {
             wood_carving: {
-                name: 'Wood Carving', unlockLevel: 1, cost: { wood: 10 },
-                time: 3000, masteryPerCraft: 10, masteryCurve: (level) => 50 + (level * 10),
+                name: 'Wood Carving', unlockLevel: 1, cost: { wood: 1 }, // Per-craft cost: 1 wood
+                unlockCost: { wood: 60 }, // Initial unlock cost: 60 wood (resource of the skill)
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 10, masteryCurve: (level) => 50 + (level * 10),
                 bonus: (level) => ({ type: 'ADD_SPEED', value: level * 0.25 })
+            },
+            wooden_axe: {
+                name: 'Wooden Axe', unlockLevel: 2, cost: { wood: 1 }, // Per-craft cost: 1 wood
+                unlockCost: { wood: 80 }, // Initial unlock cost: 80 wood (resource of the skill)
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 12, masteryCurve: (level) => 60 + (level * 12),
+                bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 0.1 })
             }
         }
     },
@@ -295,13 +320,17 @@ export const CRAFTING_DATA = {
         skill: 'blacksmithing',
         recipes: {
             copper_sword: {
-                name: 'Copper Sword', unlockLevel: 1, cost: { copper_ore: 25 }, // Uses ore directly
-                time: 4000, masteryPerCraft: 5, masteryCurve: (level) => 20 + (level * 5),
+                name: 'Copper Sword', unlockLevel: 1, cost: { copper_ore: 1 }, // Per-craft cost: 1 copper_ore (as you specified)
+                unlockCost: { copper_ore: 100 }, // Initial unlock cost: 100 copper_ore (resource of the skill)
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 5, masteryCurve: (level) => 20 + (level * 5),
                 bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 0.5 })
             },
-            wooden_shield: { // Shields are now made here
-                name: 'Wooden Shield', unlockLevel: 5, cost: { wood: 50, copper_ore: 10 },
-                time: 5000, masteryPerCraft: 15, masteryCurve: (level) => 100 + (level * 15),
+            wooden_shield: {
+                name: 'Wooden Shield', unlockLevel: 5, cost: { wood: 1, copper_ore: 1 }, // Per-craft cost: 1 wood, 1 copper_ore
+                unlockCost: { wood: 50, copper_ore: 25 }, // Initial unlock cost: 50 wood, 25 copper_ore
+                time: BASE_CRAFTING_TIME,
+                masteryPerCraft: 15, masteryCurve: (level) => 100 + (level * 15),
                 bonus: (level) => ({ type: 'ADD_DEFENSE', value: level * 0.5 })
             }
         }
