@@ -52,7 +52,7 @@ async function initFirebase() {
         } else {
             await signInAnonymously(auth);
         }
-        
+
         userId = auth.currentUser.uid;
         await initGame();
 
@@ -61,7 +61,6 @@ async function initFirebase() {
         document.getElementById('action-status').textContent = "Connection failed!";
     }
 }
-
 // --- Game State Variables ---
 let gameState = {};
 let enemies = {};
@@ -199,14 +198,16 @@ function mergeDeep(target, ...sources) {
 function buildMapData(zoneX, zoneY) {
     const zoneKey = `${zoneX},${zoneY}`;
     const zone = worldData[zoneKey];
-    if (!zone || !zone.mapLayout) return []; 
-    
+    if (!zone || !zone.mapLayout) return [];
+
     const width = zone.width || MAP_WIDTH_TILES;
     const height = zone.height || MAP_HEIGHT_TILES;
-    
+
+    // --- UPDATED LEGEND FOR NEW TILES ---
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
-        '.': TILES.PATH,
+        '.': TILES.PATH, 'S': TILES.SAND, 'G': TILES.DIRT, '~': TILES.SHALLOW_WATER,
+        '#': TILES.HOUSE_WALL, '+': TILES.DOOR_1, 'H': TILES.HOUSE_WALL, 'M': TILES.STONE_WALL // Example chars for new tiles
     };
 
     const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
@@ -584,23 +585,29 @@ function drawTile(x, y, zoneX, zoneY) {
     const { x: drawX, y: drawY } = worldToScreen(x, y);
     const tileType = currentMapData[y]?.[x];
     if (tileType === undefined) return;
-    
+
     let sprite;
     switch(tileType) {
         case TILES.GRASS:
-            const grassVariationCount = SPRITES.GRASS.length;
+            const grassVariationCount = SPRITES.GROUND_TILES.GRASS.length;
             const tileHash = (x * 19 + y * 71);
-            sprite = SPRITES.GRASS[tileHash % grassVariationCount];
+            sprite = SPRITES.GROUND_TILES.GRASS[tileHash % grassVariationCount];
             break;
-        case TILES.WALL: sprite = SPRITES.WALL; break;
-        case TILES.DEEP_WATER: sprite = SPRITES.DEEP_WATER; break;
-        case TILES.DEEP_FOREST: sprite = SPRITES.DEEP_FOREST; break;
-        case TILES.PATH: sprite = SPRITES.PATH; break;
-        default: sprite = SPRITES.GRASS[0];
+        case TILES.WALL: sprite = SPRITES.UNWALKABLE_TILES.WALL; break;
+        case TILES.DEEP_WATER: sprite = SPRITES.UNWALKABLE_TILES.DEEP_WATER; break;
+        case TILES.DEEP_FOREST: sprite = SPRITES.UNWALKABLE_TILES.DEEP_FOREST; break;
+        case TILES.PATH: sprite = SPRITES.GROUND_TILES.PATH; break;
+        // --- NEW TILE CASES ---
+        case TILES.SAND: sprite = SPRITES.GROUND_TILES.SAND; break;
+        case TILES.DIRT: sprite = SPRITES.GROUND_TILES.DIRT; break;
+        case TILES.SHALLOW_WATER: sprite = SPRITES.GROUND_TILES.SHALLOW_WATER; break;
+        case TILES.HOUSE_WALL: sprite = SPRITES.UNWALKABLE_TILES.HOUSE_WALL; break;
+        case TILES.DOOR_1: sprite = SPRITES.GATEWAYS.DOOR; break; // Assuming DOOR_1 uses the general DOOR sprite
+        case TILES.DOOR_2: sprite = SPRITES.GATEWAYS.DOOR; break; // Assuming DOOR_2 also uses the general DOOR sprite
+        case TILES.STONE_WALL: sprite = SPRITES.UNWALKABLE_TILES.STONE_WALL; break;
+        default: sprite = SPRITES.GROUND_TILES.GRASS[0]; // Default to a grass sprite if type is unknown
     }
-    
-    // This is the corrected part. It now uses the dynamicTileSize
-    // to scale the tile properly for the current zoom level.
+
     const drawWidth = (sprite.sw || 32) / 32 * dynamicTileSize;
     const drawHeight = (sprite.sh || 32) / 32 * dynamicTileSize;
     drawSprite(sprite, drawX, drawY, drawWidth, drawHeight);
@@ -616,21 +623,21 @@ function drawResourceObject(resource) {
 
     if (isDepleted) {
         const depletedSpriteKey = `DEPLETED_${resource.type.toUpperCase()}`;
-        if (SPRITES[depletedSpriteKey]) {
-            spriteToDraw = SPRITES[depletedSpriteKey];
-        } else if (resource.type === 'TREE' && SPRITES.CHOPPED_TREE) {
-            spriteToDraw = SPRITES.CHOPPED_TREE;
+        // Check in RESOURCE_NODES first, then other categories if applicable
+        if (SPRITES.RESOURCE_NODES[depletedSpriteKey]) {
+            spriteToDraw = SPRITES.RESOURCE_NODES[depletedSpriteKey];
+        } else if (resource.type === 'TREE' && SPRITES.RESOURCE_NODES.CHOPPED_TREE) {
+            spriteToDraw = SPRITES.RESOURCE_NODES.CHOPPED_TREE;
         } else {
-            spriteToDraw = SPRITES[resource.type.toUpperCase()];
+            // Fallback to the resource's default sprite, but apply alpha for depletion
+            spriteToDraw = resourceDef.sprite; // resourceDef.sprite already points to the correct categorized sprite
             if (spriteToDraw) ui.ctx.globalAlpha = 0.5;
         }
     } else {
-        spriteToDraw = SPRITES[resource.type.toUpperCase()];
+        spriteToDraw = resourceDef.sprite; // resourceDef.sprite already points to the correct categorized sprite
     }
 
-    if (resource.type === 'FISHING_SPOT' && SPRITES.FISHING_SPOT) spriteToDraw = SPRITES.FISHING_SPOT;
-
-    if (!spriteToDraw) return;
+    if (!spriteToDraw) return; // Ensure a sprite is found before attempting to draw
 
     const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
     const baseDrawWidth = (spriteToDraw.sw || 32) * (dynamicTileSize / 32);
@@ -639,22 +646,16 @@ function drawResourceObject(resource) {
     let xOffset = (baseDrawWidth - dynamicTileSize) / 2;
     let yOffset = (baseDrawHeight - dynamicTileSize);
 
-    // --- FIX START: Adjust offsets specifically for multi-tile crafting stations ---
     // If the resource has a 'skill' property, it's likely a crafting station.
-    // We want these large sprites to align perfectly with the top-left of their first tile.
-    if (resourceDef.skill) {
-        // If the sprite's pixel width is designed to perfectly span the object's tile width,
-        // then no horizontal offset is needed. (e.g., 64px sprite for a 2-tile wide object).
+    // Adjust offsets specifically for multi-tile crafting stations.
+    if (resourceDef.skill && SPRITES.CRAFTING_STATIONS[resource.type]) { // Check if it's a crafting station type
         if (spriteToDraw.sw === (resourceDef.size?.w || 1) * 32) {
             xOffset = 0;
         }
-        // If the sprite's pixel height is designed to perfectly span the object's tile height,
-        // then no vertical offset is needed. (e.g., 64px sprite for a 2-tile high object).
         if (spriteToDraw.sh === (resourceDef.size?.h || 1) * 32) {
             yOffset = 0;
         }
     }
-    // --- FIX END ---
 
     drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
     if (isDepleted && spriteToDraw && ui.ctx.globalAlpha !== 1.0) ui.ctx.globalAlpha = 1.0;
@@ -663,13 +664,13 @@ function drawResourceObject(resource) {
 
 function drawEnemy(enemy) {
     const enemyData = ENEMIES_DATA[enemy.type];
-    if (!enemyData || !enemyData.sprite) return;
+    if (!enemyData || !enemyData.sprite) return; // enemyData.sprite now correctly points to SPRITES.MONSTERS.XYZ
 
     const size = enemyData.size || { w: 1, h: 1 };
     const {x: screenX, y: screenY} = worldToScreen(enemy.x, enemy.y);
     const width = size.w * dynamicTileSize;
     const height = size.h * dynamicTileSize;
-    
+
     drawSprite(enemyData.sprite, screenX, screenY, width, height);
 }
 
@@ -723,9 +724,9 @@ function drawPlayer(character, isActive) {
         ui.ctx.fillRect(screenX, screenY, w, h);
         return;
     }
-    
-    drawSprite(SPRITES.PLAYER, screenX, screenY);
-    
+
+    drawSprite(SPRITES.PLAYER_CHARS.PLAYER, screenX, screenY); // Corrected sprite path
+
     if (isActive) {
         ui.ctx.strokeStyle = '#facc15';
         ui.ctx.lineWidth = 2;
@@ -1553,9 +1554,7 @@ function recalculateTeamStats() {
         for (const recipeId in gameState.craftingMastery) {
             const masteryData = gameState.craftingMastery[recipeId];
 
-            // --- ADDED CONSOLE.LOG HERE ---
-            console.log(`Mastery for recipe '${recipeId}': Unlocked = ${masteryData.unlocked}, Level = ${masteryData.level}, Progress = ${masteryData.progress}`);
-            // --- END ADDED CONSOLE.LOG ---
+            // Removed: console.log(`Mastery for recipe '${recipeId}': Unlocked = ${masteryData.unlocked}, Level = ${masteryData.level}, Progress = ${masteryData.progress}`);
 
             if (masteryData.unlocked) {
                 let recipeDef;
@@ -1565,7 +1564,7 @@ function recalculateTeamStats() {
                         break;
                     }
                 }
-                
+
                 if (recipeDef && recipeDef.bonus) {
                     const bonus = recipeDef.bonus(masteryData.level);
                     switch(bonus.type) {
@@ -1578,7 +1577,7 @@ function recalculateTeamStats() {
             }
         }
     }
-    
+
     // Apply final stats to characters
     const finalMaxHp = 4 + gameState.level.current + totalMaxHpBonus;
     gameState.characters.forEach(char => {
@@ -1588,15 +1587,14 @@ function recalculateTeamStats() {
         char.hp.current = Math.min(char.hp.max, char.hp.current + diff);
     });
 
-    // Return team-wide stats
-    // --- ADDED DEBUGGING LOGS HERE ---
-    console.log("Calculated Team Stats:");
-    console.log(`  Damage: ${totalDamage}`);
-    console.log(`  Speed: ${totalSpeed}`);
-    console.log(`  Defense: ${totalDefense}`);
-    console.log(`  Max HP Bonus: ${totalMaxHpBonus}`);
-    console.log(`  HP Regen Bonus: ${totalHpRegenBonus}`);
-    // --- END ADDED DEBUGGING LOGS ---
+    // Removed: Debugging logs for calculated team stats
+    // console.log("Calculated Team Stats:");
+    // console.log(`  Damage: ${totalDamage}`);
+    // console.log(`  Speed: ${totalSpeed}`);
+    // console.log(`  Defense: ${totalDefense}`);
+    // console.log(`  Max HP Bonus: ${totalMaxHpBonus}`);
+    // console.log(`  HP Regen Bonus: ${totalHpRegenBonus}`);
+
     return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus };
 }
 
@@ -1815,7 +1813,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             if (isAvailable && entity.currentDurability <= 0 && entityDef.maxDurability) {
                 entity.currentDurability = entityDef.maxDurability;
                 entity.nextAvailableTime = null;
-                console.log(`[Resource Respawn] ${entity.type} (ID: ${entity.id}) respawned, durability reset to ${entity.currentDurability}`);
+                // Removed: console.log(`[Resource Respawn] ${entity.type} (ID: ${entity.id}) respawned, durability reset to ${entity.currentDurability}`);
             }
             return isAvailable;
         }
@@ -1826,14 +1824,12 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const currentTask = automation.task;
 
     if (currentTask === 'crafting') {
-        // --- DISTINCT LOGIC FOR CRAFTING CYCLING ---
         let startIndex = automation.craftingMarkIndex;
         let foundIndex = -1;
         let attemptedCycleCount = 0;
 
-        // Loop cyclically through markedTiles to find the next affordable station
         while (attemptedCycleCount < automation.markedTiles.length * 2 && foundIndex === -1) {
-            if (automation.markedTiles.length === 0) break; // Handle empty marked tiles
+            if (automation.markedTiles.length === 0) break;
 
             const markedTile = automation.markedTiles[startIndex % automation.markedTiles.length];
             if (!markedTile) {
@@ -1844,7 +1840,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
 
             const targetEntry = potentialTargets.find(pt => pt.entity.id === markedTile.entityId && pt.recipeId === markedTile.recipeId);
 
-            if (!targetEntry) { // Marked entity not currently available or invalid
+            if (!targetEntry) {
                 attemptedCycleCount++;
                 startIndex++;
                 continue;
@@ -1876,14 +1872,14 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 startIndex++;
                 continue;
             }
-            
-                console.log(`Material '${mat}': Needed=${recipeData.cost[mat]}, Have=${gameState.inventory[mat] || 0}`);
+
+                // Removed: console.log(`Material '${mat}': Needed=${recipeData.cost[mat]}, Have=${gameState.inventory[mat] || 0}`);
             }
             const canAfford = Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat]);
 
             if (canAfford) {
                 bestTarget = targetEntry;
-                foundIndex = startIndex % automation.markedTiles.length; // Store the actual index
+                foundIndex = startIndex % automation.markedTiles.length;
                 break;
             }
 
@@ -1894,14 +1890,13 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         if (bestTarget) {
             automation.targetId = bestTarget.entity.id;
             automation.recipeId = bestTarget.recipeId;
-            automation.craftingMarkIndex = foundIndex; // Update the index for the next cycle
+            automation.craftingMarkIndex = foundIndex;
         } else {
             setStatus("No materials for any marked crafting recipe.");
             automation.state = 'WAITING_RESOURCES';
             character.path = [];
             return;
         }
-        // --- END DISTINCT LOGIC FOR CRAFTING CYCLING ---
 
     } else if (currentTask === 'hunting') {
         const bossTargets = potentialTargets.filter(t => ENEMIES_DATA[t.entity.type]?.isBoss);
@@ -1920,7 +1915,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             });
             bestTarget = potentialTargets[0];
         }
-    } else { // For other gathering tasks (woodcutting, mining, fishing)
+    } else {
         if (potentialTargets.length > 0) {
             potentialTargets.sort((a, b) => {
                 const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
@@ -1981,7 +1976,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     const deprioritizedMark = character.automation.markedTiles.splice(markToDeprioritizeIndex, 1)[0];
                     character.automation.markedTiles.push(deprioritizedMark);
 
-                    // Adjust craftingMarkIndex to account for the moved element
                     if (markToDeprioritizeIndex <= automation.craftingMarkIndex) {
                         automation.craftingMarkIndex = (automation.craftingMarkIndex - 1 + automation.markedTiles.length) % automation.markedTiles.length;
                     }
