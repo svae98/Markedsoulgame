@@ -41,6 +41,7 @@
 // --- Core Game Mechanics ---
 export const TILE_SIZE = 32;
 export const BASE_CRAFTING_TIME = 1000;
+export const BASE_GATHERING_SPEED = 4000; // New universal base speed for gathering skills
 // Note: MAP_WIDTH/HEIGHT are now fallback values.
 // The game will prioritize per-zone dimensions.
 export const MAP_WIDTH_TILES = 150; 
@@ -56,20 +57,35 @@ export const TILES = {
     DEEP_FOREST: 2, // Not Walkable (dense foliage tile)
     DEEP_WATER: 3,  // Not Walkable
     PATH: 4,        // Walkable
+    TREE_LOG: 5,        // Not Walkable
+    FALLEN_TREE: 6,     // Not Walkable
     // TREE, ROCK, POND, PEDESTAL, GATEWAY are now objects, not base tiles.
 };
 
 export const ITEM_SPRITES = {
+    // ... existing item sprites ...
     soulFragment: '✧',
     ragingSoul: '✧',
     wood: '🪵',
     copper_ore: '⛏️',
     fish: '🐟',
-    // --- BARS REMOVED ---
     cooked_fish: '🍣',
-    wood_carving: '🦉', // New Woodworking item
+    wood_carving: '🦉',
     copper_sword: '🗡️',
     wooden_shield: '🛡️',
+    // --- NEW TIERED RESOURCE ITEMS ---
+    oak_wood: '🌳',
+    tin_ore: '🔩',
+    salmon: '🐟', // Shared sprite, or use '🐠' if preferred for distinction
+    willow_wood: '🌿',
+    iron_ore: '🪨',
+    trout: '🐠',
+    maple_wood: '🍁',
+    silver_ore: '⚪',
+    tuna: '🐡',
+    elder_wood: '🌲',
+    gold_ore: '🟡',
+    shark: '🦈',
 };
 
 // --- Spritesheet Mapping ---
@@ -79,7 +95,7 @@ export const ITEM_SPRITES = {
 // All sprites are assumed to be 32x32 unless sw/sh are specified.
 // do NOT adjust sprites without user permission
 export const SPRITES = {
-
+    // ... existing sprites ...
     PLAYER: { sx: 32, sy: 0 },
     BLUE_SLIME: { sx: 0, sy: 32 },
     YELLOW_SLIME: { sx: 32, sy: 32 },
@@ -89,12 +105,13 @@ export const SPRITES = {
     GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 },
     HUMAN: { sx: 160, sy: 32 },
 
+    // --- NEW MONSTER SPRITES ---
+    FOREST_IMP: { sx: 160, sy: 64 }, // Example placeholder coordinates for Forest Imp
+    GIANT_BEETLE: { sx: 192, sy: 64 }, // Example placeholder coordinates for Giant Beetle
     // --- UPDATED FORGE SPRITE DIMENSIONS ---
-    FORGE: { sx: 32, sy: 64, sw: 64, sh: 32 }, // ANVIL_AND_FORGE: 2 tiles wide (64px), 1 tile high (32px)
-
-    // --- NEW CRAFTING STATION SPRITES (PLACEHOLDER COORDINATES) ---
-    CARPENTRY_TABLE: { sx: 64, sy: 96, sw: 64, sh: 32 }, // CRAFTING_TABLE: 2 tiles wide (64px), 1 tile high (32px)
-    COOKING_RANGE: { sx: 0, sy: 128, sw: 32, sh: 64 },   // COOKING_RANGE: 1 tile wide (32px), 2 tiles high (64px)
+    FORGE: { sx: 32, sy: 64, sw: 64, sh: 32 },
+    CARPENTRY_TABLE: { sx: 64, sy: 96, sw: 64, sh: 32 },
+    COOKING_RANGE: { sx: 0, sy: 128, sw: 32, sh: 64 },
 
     // Tiles
     GRASS: [
@@ -109,7 +126,19 @@ export const SPRITES = {
     FISHING_SPOT: { sx: 256, sy: 0 },
     DEEP_FOREST: { sx: 192, sy: 0 },
     GATEWAY: { sx: 224, sy: 32 },
-    PEDESTAL: { sx: 288, sy: 64 }
+    PEDESTAL: { sx: 288, sy: 64 },
+    OAK_TREE: { sx: 0, sy: 192 },
+    TIN_ROCK: { sx: 32, sy: 192 },
+    RIVER_FISHING_SPOT: { sx: 64, sy: 192 },
+    WILLOW_TREE: { sx: 96, sy: 192 },
+    IRON_ROCK: { sx: 128, sy: 192 },
+    LAKE_FISHING_SPOT: { sx: 160, sy: 192 },
+    MAPLE_TREE: { sx: 192, sy: 192 },
+    SILVER_ROCK: { sx: 224, sy: 192 },
+    OCEAN_FISHING_SPOT: { sx: 256, sy: 192 },
+    ELDER_TREE: { sx: 288, sy: 192 },
+    GOLD_ROCK: { sx: 320, sy: 192 },
+    DEEP_SEA_FISHING_SPOT: { sx: 352, sy: 192 }
 };
 // --- Item Drop Data ---
 export const ITEM_DROP_DATA = {
@@ -136,15 +165,38 @@ export const ENEMIES_DATA = {
     BOAR: { name: 'Boar', sprite: SPRITES.BOAR, hp: 40, attack: 9, loot: { soulFragment: 2 }, itemDrop: ['boar_tusk'] },
     WOLF: { name: 'Wolf', sprite: SPRITES.WOLF, hp: 50, attack: 12, loot: { soulFragment: 2 }, itemDrop: ['wolf_pelt'] },
     SKELETON: { name: 'Skeleton', sprite: { sx: 224, sy: 32 }, hp: 25, attack: 6, loot: { soulFragment: 1 } },
-    GIANT_SPIDER: { name: 'Giant Spider', sprite: { sx: 288, sy: 0 }, hp: 35, attack: 8, loot: { soulFragment: 1 } }
+    GIANT_SPIDER: { name: 'Giant Spider', sprite: { sx: 288, sy: 0 }, hp: 35, attack: 8, loot: { soulFragment: 1 } },
+
+    // --- NEW MONSTER DEFINITIONS (NO ITEM DROPS FOR NOW) ---
+    FOREST_IMP: { name: 'Forest Imp', sprite: SPRITES.FOREST_IMP, hp: 30, attack: 8, loot: { soulFragment: 1 } },
+    GIANT_BEETLE: { name: 'Giant Beetle', sprite: SPRITES.GIANT_BEETLE, hp: 60, attack: 6, loot: { soulFragment: 2 } }
 };
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
-    TREE: { name: 'Tree', time: 4000, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4 },
-    ROCK: { name: 'Copper Rock', time: 4000, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
-    FISHING_SPOT: { name: 'Fishing Spot', time: 4000, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 },
-    // --- NEW CRAFTING STATIONS ---
+    TREE: { name: 'Tree', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4 },
+    ROCK: { name: 'Copper Rock', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4 },
+    FISHING_SPOT: { name: 'Fishing Spot', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4 },
+    CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'woodworking', size: {w: 2, h: 1} },
+    FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1} },
+    COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2} },
+    // --- NEW TIERED RESOURCES (Tier 2-5) ---
+    OAK_TREE: { name: 'Oak Tree', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 20, item: 'oak_wood', skill: 'woodcutting', maxDurability: 5, sprite: SPRITES.OAK_TREE },
+    TIN_ROCK: { name: 'Tin Rock', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 30, item: 'tin_ore', skill: 'mining', maxDurability: 5, sprite: SPRITES.TIN_ROCK },
+    RIVER_FISHING_SPOT: { name: 'River Fishing Spot', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 50, item: 'salmon', skill: 'fishing', maxDurability: 5, sprite: SPRITES.RIVER_FISHING_SPOT },
+
+    WILLOW_TREE: { name: 'Willow Tree', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 40, item: 'willow_wood', skill: 'woodcutting', maxDurability: 6, sprite: SPRITES.WILLOW_TREE },
+    IRON_ROCK: { name: 'Iron Rock', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 60, item: 'iron_ore', skill: 'mining', maxDurability: 6, sprite: SPRITES.IRON_ROCK },
+    LAKE_FISHING_SPOT: { name: 'Lake Fishing Spot', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 100, item: 'trout', skill: 'fishing', maxDurability: 6, sprite: SPRITES.LAKE_FISHING_SPOT },
+
+    MAPLE_TREE: { name: 'Maple Tree', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 80, item: 'maple_wood', skill: 'woodcutting', maxDurability: 7, sprite: SPRITES.MAPLE_TREE },
+    SILVER_ROCK: { name: 'Silver Rock', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 120, item: 'silver_ore', skill: 'mining', maxDurability: 7, sprite: SPRITES.SILVER_ROCK },
+    OCEAN_FISHING_SPOT: { name: 'Ocean Fishing Spot', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 200, item: 'tuna', skill: 'fishing', maxDurability: 7, sprite: SPRITES.OCEAN_FISHING_SPOT },
+
+    ELDER_TREE: { name: 'Elder Tree', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 160, item: 'elder_wood', skill: 'woodcutting', maxDurability: 8, sprite: SPRITES.ELDER_TREE },
+    GOLD_ROCK: { name: 'Gold Rock', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 240, item: 'gold_ore', skill: 'mining', maxDurability: 8, sprite: SPRITES.GOLD_ROCK },
+    DEEP_SEA_FISHING_SPOT: { name: 'Deep Sea Fishing Spot', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 400, item: 'shark', skill: 'fishing', maxDurability: 8, sprite: SPRITES.DEEP_SEA_FISHING_SPOT },
+
     CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'woodworking', size: {w: 2, h: 1} }, // CRAFTING_TABLE: h 1 w 2 (matches current)
     FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1} }, // ANVIL_AND_FORGE: h 1 w 2
     COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2} }, // COOKING_RANGE: h 2 w 1
