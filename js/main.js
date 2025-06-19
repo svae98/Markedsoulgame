@@ -379,8 +379,12 @@ function updateCharacterLogic(character, logicDelta) {
         character.movementCooldown = speeds.stepInterval;
 
         if (character.path.length === 0) {
-             checkForGateway(character);
-        }
+         checkForGateway(character);
+         // If automation is active and path is complete, transition to IDLE
+         if (character.automation.active) {
+            character.automation.state = 'IDLE'; 
+         }
+    }
     }
 }
 
@@ -1779,6 +1783,11 @@ function updateAutomation(character, gameTime) {
  * Unified state machine for handling marked entities (monsters or resources).
  * Manages pathfinding, interaction (combat/gathering), and mark cycling.
  */
+// js/main.js
+/**
+ * Unified state machine for handling marked entities (monsters or resources).
+ * Manages pathfinding, interaction (combat/gathering), and mark cycling.
+ */
 function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const { automation, player, zoneX, zoneY } = character;
 
@@ -1787,22 +1796,46 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         return;
     }
 
-    // THIS IS THE CRITICAL CHANGE: If busyUntil is active, but the character's current automation task
-    // is NOT 'crafting', then busyUntil should be cleared immediately.
     if (automation.busyUntil && automation.task !== 'crafting') {
          automation.busyUntil = null;
     }
-    // Now proceed with the normal busy check
     if (automation.busyUntil && gameTime < automation.busyUntil) {
         setStatus('Crafting...');
+        automation.state = 'PERFORMING_ACTION';
         return;
     }
-    automation.busyUntil = null; // Clear if the busy time has passed.
+    automation.busyUntil = null;
+
+    if (automation.state === 'WAITING_RESOURCES') {
+        let anyStationNowCraftable = false;
+        for (const mark of automation.markedTiles) {
+            const entity = findResourceById(mark.entityId);
+            if (entity) {
+                const entityDef = RESOURCE_DATA[entity.type];
+                if (entityDef && CRAFTING_DATA[entityDef.skill] && mark.recipeId) {
+                    const recipeData = CRAFTING_DATA[entityDef.skill].recipes[mark.recipeId];
+                    if (recipeData && Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
+                        anyStationNowCraftable = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!anyStationNowCraftable) {
+            setStatus(`Waiting for resources for any marked station...`);
+            character.path = [];
+            return;
+        } else {
+            automation.state = 'IDLE';
+            setStatus("Resources acquired, resuming automation...");
+        }
+    }
 
     const potentialTargets = automation.markedTiles.map(mark => {
         const entity = findEnemyById(mark.entityId) || findResourceById(mark.entityId);
         if (!entity) return null;
-        return { entity, zoneX: mark.zoneX, zoneY: mark.zoneY };
+        return { entity, zoneX: mark.zoneX, zoneY: mark.zoneY, originalMarkId: mark.id };
     })
     .filter(item => {
         if (!item) return false;
@@ -1813,30 +1846,87 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         if (ENEMIES_DATA[entity.type]) {
             return !isEnemyDead(entity.id);
         } else if (RESOURCE_DATA[entity.type]) {
-            return !entity.nextAvailableTime || gameTime >= entity.nextAvailableTime;
+            const isAvailable = !entity.nextAvailableTime || gameTime >= entity.nextAvailableTime;
+            if (isAvailable && entity.currentDurability <= 0 && entityDef.maxDurability) {
+                entity.currentDurability = entityDef.maxDurability;
+                entity.nextAvailableTime = null;
+                console.log(`[Resource Respawn] ${entity.type} (ID: ${entity.id}) respawned, durability reset to ${entity.currentDurability}`);
+            }
+            return isAvailable;
         }
         return false;
     });
 
     if (potentialTargets.length === 0) {
         setStatus("All marked targets are unavailable. Waiting...");
+        automation.state = 'IDLE';
         return;
     }
 
-    let targetsToConsider = potentialTargets.filter(t => ENEMIES_DATA[t.entity.type]?.isBoss);
-    if (targetsToConsider.length === 0) {
-        targetsToConsider = potentialTargets;
+    let bestTarget = null;
+    const currentTask = automation.task;
+
+    if (currentTask === 'crafting') {
+        for (const markedTile of character.automation.markedTiles) {
+            const entity = findEnemyById(markedTile.entityId) || findResourceById(markedTile.entityId);
+            if (entity) {
+                const entityDef = RESOURCE_DATA[entity.type];
+                if (entityDef && CRAFTING_DATA[entityDef.skill]) {
+                    const availableTargetInPotentialList = potentialTargets.find(pt => pt.entity.id === entity.id);
+                    if (availableTargetInPotentialList) {
+                        const markedRecipeId = markedTile.recipeId;
+                        const skillKey = entityDef.skill;
+                        const categoryData = CRAFTING_DATA[skillKey];
+                        const recipeData = markedRecipeId ? categoryData.recipes[markedRecipeId] : null;
+
+                        let hasResourcesForThisStation = false;
+                        if (recipeData) {
+                            hasResourcesForThisStation = Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat]);
+                        }
+
+                        if (hasResourcesForThisStation) {
+                            bestTarget = availableTargetInPotentialList;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } else if (currentTask === 'hunting') {
+        const bossTargets = potentialTargets.filter(t => ENEMIES_DATA[t.entity.type]?.isBoss);
+        if (bossTargets.length > 0) {
+            bossTargets.sort((a, b) => {
+                const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
+                const distB = heuristic(player, b.entity) + (b.zoneX !== zoneX || b.zoneY !== zoneY ? 10000 : 0);
+                return distA - distB;
+            });
+            bestTarget = bossTargets[0];
+        } else if (potentialTargets.length > 0) {
+            potentialTargets.sort((a, b) => {
+                const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
+                const distB = heuristic(player, b.entity) + (b.zoneX !== zoneX || b.zoneY !== zoneY ? 10000 : 0);
+                return distA - distB;
+            });
+            bestTarget = potentialTargets[0];
+        }
+    } else {
+        if (potentialTargets.length > 0) {
+            potentialTargets.sort((a, b) => {
+                const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
+                const distB = heuristic(player, b.entity) + (b.zoneX !== zoneX || b.zoneY !== zoneY ? 10000 : 0);
+                return distA - distB;
+            });
+            bestTarget = potentialTargets[0];
+        }
     }
 
-    targetsToConsider.sort((a, b) => {
-        const distA = heuristic(player, a.entity) + (a.zoneX !== zoneX || a.zoneY !== zoneY ? 10000 : 0);
-        const distB = heuristic(player, b.entity) + (b.zoneX !== zoneX || b.zoneY !== zoneY ? 10000 : 0);
-        return distA - distB;
-    });
-    
-    const bestTarget = targetsToConsider[0];
     if (!bestTarget) {
-        setStatus("Could not determine a target.");
+        if (automation.task === 'crafting') {
+            setStatus("No available resources for crafting at marked stations.");
+        } else {
+            setStatus("Could not determine a suitable target.");
+        }
+        automation.state = 'IDLE';
         return;
     }
 
@@ -1844,19 +1934,37 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const entityData = ENEMIES_DATA[targetEntity.type] || RESOURCE_DATA[targetEntity.type];
     const entityName = entityData.name;
 
+    const isStation = !!CRAFTING_DATA[entityData.skill];
+
+    if (isStation && automation.task === 'crafting') {
+        const markedRecipeId = automation.markedTiles.find(mark => mark.entityId === targetEntity.id)?.recipeId;
+        const skillKey = entityData.skill;
+        const categoryData = CRAFTING_DATA[skillKey];
+        const recipeData = markedRecipeId ? categoryData.recipes[markedRecipeId] : null;
+
+        let hasResourcesForTarget = false;
+        if (recipeData) {
+            hasResourcesForTarget = Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat]);
+        }
+
+        if (!hasResourcesForTarget && !isAdjacent(player, targetEntity, zoneX, zoneY)) {
+            automation.state = 'WAITING_RESOURCES';
+            // FIX: Removed incorrect HTML/math-inline tags from status message
+            setStatus(`Waiting for materials for ${entityName} (${recipeData?.name || 'recipe'})...`); 
+            character.path = [];
+            return;
+        }
+    }
+
     if (targetZoneX === zoneX && targetZoneY === zoneY) {
         if (isAdjacent(player, targetEntity, zoneX, zoneY)) {
-            const entityDef = ENEMIES_DATA[targetEntity.type] || RESOURCE_DATA[targetEntity.type];
-            const isStation = !!CRAFTING_DATA[entityDef.skill];
+            automation.state = 'PERFORMING_ACTION';
+
+            const isStation = !!CRAFTING_DATA[entityData.skill];
 
             if (isStation) {
                 const markedRecipeId = automation.markedTiles.find(mark => mark.entityId === targetEntity.id)?.recipeId;
-                if (!markedRecipeId) {
-                    setStatus(`No recipe selected for ${entityName}.`);
-                    automation.busyUntil = null; 
-                    return;
-                }
-                const skillKey = entityDef.skill;
+                const skillKey = entityData.skill;
                 const categoryData = CRAFTING_DATA[skillKey];
                 const recipeData = categoryData.recipes[markedRecipeId];
 
@@ -1895,7 +2003,18 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     updateAllUI(); 
                 } else {
                     setStatus(`Not enough materials for ${recipeData.name}.`);
-                    automation.busyUntil = null; 
+                    automation.busyUntil = null;
+                    automation.state = 'WAITING_RESOURCES';
+                    
+                    const markToDeprioritizeIndex = character.automation.markedTiles.findIndex(
+                        m => m.entityId === targetEntity.id && m.task === 'crafting'
+                    );
+
+                    if (markToDeprioritizeIndex !== -1) {
+                        const deprioritizedMark = character.automation.markedTiles.splice(markToDeprioritizeIndex, 1)[0];
+                        character.automation.markedTiles.push(deprioritizedMark);
+                        showNotification(`Deprioritizing ${entityName} (not enough materials).`);
+                    }
                 }
 
             } else if (ENEMIES_DATA[targetEntity.type]) {
@@ -1904,51 +2023,35 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                     character.combat.targetId = targetEntity.id;
                     character.combat.isPlayerTurn = true;
                     character.combat.lastUpdateTime = gameTime;
-                    automation.busyUntil = null; // Clear busyUntil if starting combat
+                    automation.busyUntil = null; 
                 }
-            } else { // This block handles gathering resources
+            } else { 
                  const resourceDef = RESOURCE_DATA[targetEntity.type];
-                
-                // --- ADD THESE CONSOLE.LOG STATEMENTS ---
-                console.log(`[Gathering Debug] Char: ${character.name}, Entity: ${entityName} (ID: ${targetEntity.id})`);
-                console.log(`[Gathering Debug] Current Durability: ${targetEntity.currentDurability}/${resourceDef.maxDurability}`);
-                console.log(`[Gathering Debug] Required Gather Time: ${resourceDef.time}ms`);
-
                 if (automation.targetId !== targetEntity.id) {
-                    automation.targetId = targetEntity.id;
-                    automation.gatheringState.lastGatherAttemptTime = gameTime;
-                    console.log(`[Gathering Debug] NEW TARGET. Last gather time set to: ${gameTime}`);
+                    // FIX: Ensure targetId is set to the current bestTarget's ID
+                    automation.targetId = targetEntity.id; 
+                    automation.gatheringState.lastGatherAttemptTime = gameTime; 
                 }
-
-                setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);
-                
-                const timeSinceLastGather = gameTime - (automation.gatheringState.lastGatherAttemptTime || 0);
-                console.log(`[Gathering Debug] Time since last gather: ${timeSinceLastGather}ms`);
-
-                if (timeSinceLastGather >= resourceDef.time) {
-                    console.log(`[Gathering Debug] GATHERING SUCCESS! Durability BEFORE: ${targetEntity.currentDurability}`);
+                // FIX: Removed incorrect HTML/math-inline tags from status message
+                setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`); 
+                if (gameTime - (automation.gatheringState.lastGatherAttemptTime || 0) >= resourceDef.time) {
                     automation.gatheringState.lastGatherAttemptTime = gameTime; 
                     targetEntity.currentDurability--; 
                     gainSkillXp(resourceDef.skill, resourceDef.xp);
                     if (resourceDef.item) {
                         gameState.inventory[resourceDef.item] = (gameState.inventory[resourceDef.item] || 0) + 1;
-                        console.log(`[Gathering Debug] Item Gained: +1 ${resourceDef.item}. Inventory count: ${gameState.inventory[resourceDef.item]}`);
                     }
                     saveGameState();
-                    updateAllUI(); 
-                    console.log(`[Gathering Debug] Durability AFTER: ${targetEntity.currentDurability}`);
-
+                    updateAllUI();
                     if (targetEntity.currentDurability <= 0) {
-                        targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2);
+                        targetEntity.nextAvailableTime = gameTime + (RESPAWN_TIME * 2); 
                         automation.targetId = null;
-                        automation.busyUntil = null;
-                        console.log(`[Gathering Debug] RESOURCE DEPLETED. Will respawn at: ${targetEntity.nextAvailableTime}`);
+                        automation.busyUntil = null; 
                     }
-                } else {
-                    console.log(`[Gathering Debug] WAITING FOR COOLDOWN... Remaining: ${resourceDef.time - timeSinceLastGather}ms`);
                 }
             }
         } else {
+            automation.state = 'PATHING';
             const potentialApproachSpots = findWalkableNeighborForEntity(targetEntity, player, [], targetZoneX, targetZoneY);
             let closestApproachSpot = null;
             let minDistanceToSpot = Infinity;
@@ -1967,15 +2070,18 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 setStatus(`Walking to ${entityName}...`);
             } else {
                 setStatus(`No approach spot for ${entityName}.`);
+                automation.state = 'IDLE';
             }
         }
     } else {
+        automation.state = 'PATHING';
         setStatus(`Traveling to ${entityName}'s zone...`);
         const path = findPathToZone(character, targetZoneX, targetZoneY);
         if (path && path.length > 0) {
             character.path = path;
         } else {
             setStatus(`Can't find path to ${entityName}'s zone.`);
+            automation.state = 'IDLE';
         }
     }
 }

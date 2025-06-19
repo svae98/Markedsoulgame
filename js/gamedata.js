@@ -67,7 +67,7 @@ export const ITEM_SPRITES = {
     fish: '🐟',
     // --- BARS REMOVED ---
     cooked_fish: '🍣',
-    wood_carving: '🦉', // New Carpentry item
+    wood_carving: '🦉', // New Woodworking item
     copper_sword: '🗡️',
     wooden_shield: '🛡️',
 };
@@ -296,8 +296,8 @@ export const CRAFTING_DATA = {
         }
     },
     carpentry: {
-        name: 'Carpentry',
-        skill: 'carpentry',
+        name: 'Woodworking',
+        skill: 'Woodworking',
         recipes: {
             wood_carving: {
                 name: 'Wood Carving', unlockLevel: 1, cost: { wood: 1 }, // Per-craft cost: 1 wood
