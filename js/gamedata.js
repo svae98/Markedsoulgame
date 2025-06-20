@@ -49,7 +49,12 @@ export const MAP_HEIGHT_TILES = 150;
 export const RESPAWN_TIME = 10000;
 export const MAX_CHARACTERS = 10;
 export const CHARACTER_COLORS = ['#FFFFFF', '#06b6d4', '#d946ef', '#f59e0b'];
-
+function getSpriteCoords(colIndex, rowIndex) {
+    return {
+        sx: colIndex * TILE_SIZE,
+        sy: rowIndex * TILE_SIZE
+    };
+}
 // --- Tile & Item Definitions ---
 export const TILES = {
     GRASS: 0,
@@ -101,88 +106,88 @@ export const ITEM_SPRITES = {
 // do NOT adjust sprites without user permission
 export const SPRITES = {
     PLAYER_CHARS: {
-        PLAYER: { sx: 32, sy: 0 }
+        PLAYER: { ...getSpriteCoords(1, 0) } // (Column 1, Row 0) -> (32, 0)
     },
 
     MONSTERS: {
-        BLUE_SLIME: { sx: 0, sy: 32 },
-        YELLOW_SLIME: { sx: 32, sy: 32 },
-        RED_SLIME: { sx: 64, sy: 32 },
-        BOAR: { sx: 96, sy: 32 },
-        WOLF: { sx: 128, sy: 32 },
-        GOLEM: { sx: 0, sy: 192, sw: 64, sh: 64 },
-        HUMAN: { sx: 160, sy: 32 },
-        SKELETON: { sx: 224, sy: 32 },
-        GIANT_SPIDER: { sx: 288, sy: 0 },
-        FOREST_IMP: { sx: 160, sy: 64 },
-        GIANT_BEETLE: { sx: 192, sy: 64 },
-        GOBLIN: { sx: 0, sy: 224 },
-        OGRE: { sx: 32, sy: 224, sw: 64, sh: 64 },
-        HARPY: { sx: 96, sy: 224 },
-        SWAMP_BEAST: { sx: 128, sy: 224 },
-        WISP: { sx: 160, sy: 224 }
+        BLUE_SLIME: { ...getSpriteCoords(0, 1) }, // (Column 0, Row 1) -> (0, 32)
+        YELLOW_SLIME: { ...getSpriteCoords(1, 1) }, // (Column 1, Row 1) -> (32, 32)
+        RED_SLIME: { ...getSpriteCoords(2, 1) }, // (Column 2, Row 1) -> (64, 32)
+        BOAR: { ...getSpriteCoords(3, 1) }, // (Column 3, Row 1) -> (96, 32)
+        WOLF: { ...getSpriteCoords(4, 1) }, // (Column 4, Row 1) -> (128, 32)
+        GOLEM: { ...getSpriteCoords(0, 6), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, // (Column 0, Row 6) -> (0, 192), 64x64px
+        HUMAN: { ...getSpriteCoords(5, 1) }, // (Column 5, Row 1) -> (160, 32)
+        SKELETON: { ...getSpriteCoords(7, 1) }, // (Column 7, Row 1) -> (224, 32)
+        GIANT_SPIDER: { ...getSpriteCoords(9, 0) }, // (Column 9, Row 0) -> (288, 0)
+        FOREST_IMP: { ...getSpriteCoords(5, 2) }, // (Column 5, Row 2) -> (160, 64)
+        GIANT_BEETLE: { ...getSpriteCoords(6, 2) }, // (Column 6, Row 2) -> (192, 64)
+        GOBLIN: { ...getSpriteCoords(0, 7) }, // (Column 0, Row 7) -> (0, 224)
+        OGRE: { ...getSpriteCoords(1, 7), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, // (Column 1, Row 7) -> (32, 224), 64x64px
+        HARPY: { ...getSpriteCoords(3, 7) }, // (Column 3, Row 7) -> (96, 224)
+        SWAMP_BEAST: { ...getSpriteCoords(4, 7) }, // (Column 4, Row 7) -> (128, 224)
+        WISP: { ...getSpriteCoords(5, 7) } // (Column 5, Row 7) -> (160, 224)
     },
 
     CRAFTING_STATIONS: {
-        FORGE: { sx: 32, sy: 64, sw: 64, sh: 32 },
-        CARPENTRY_TABLE: { sx: 64, sy: 96, sw: 64, sh: 32 },
-        COOKING_RANGE: { sx: 0, sy: 128, sw: 32, sh: 64 }
+        FORGE: { ...getSpriteCoords(1, 2), sw: TILE_SIZE * 2, sh: TILE_SIZE }, // (Column 1, Row 2) -> (32, 64), 64x32px
+        CARPENTRY_TABLE: { ...getSpriteCoords(2, 3), sw: TILE_SIZE * 2, sh: TILE_SIZE }, // (Column 2, Row 3) -> (64, 96), 64x32px
+        COOKING_RANGE: { ...getSpriteCoords(0, 4), sw: TILE_SIZE, sh: TILE_SIZE * 2 } // (Column 0, Row 4) -> (0, 128), 32x64px
     },
 
     GROUND_TILES: {
         GRASS: [
-            { sx: 0, sy: 0 }
+            { ...getSpriteCoords(0, 0) }, // (Column 0, Row 0) -> (0, 0)
         ],
-        PATH: { sx: 128, sy: 0 },
-        SAND: { sx: 0, sy: 160 },
-        DIRT: { sx: 32, sy: 160 },
-        SHALLOW_WATER: { sx: 64, sy: 160 }
+        PATH: { ...getSpriteCoords(4, 0) }, // (Column 4, Row 0) -> (128, 0)
+        SAND: { ...getSpriteCoords(0, 5) }, // (Column 0, Row 5) -> (0, 160)
+        DIRT: { ...getSpriteCoords(1, 5) }, // (Column 1, Row 5) -> (32, 160)
+        SHALLOW_WATER: { ...getSpriteCoords(2, 5) } // (Column 2, Row 5) -> (64, 160)
     },
 
     UNWALKABLE_TILES: {
-        WALL: { sx: 224, sy: 0 },
-        DEEP_WATER: { sx: 256, sy: 224 },
-        DEEP_FOREST: { sx: 192, sy: 0 },
-        HOUSE_WALL: { sx: 0, sy: 256 },
-        HOUSE_ROOF: { sx: 32, sy: 256 },
-        WINDOW: { sx: 64, sy: 256 },
-        STONE_WALL: { sx: 128, sy: 256 },
-        RUINED_WALL: { sx: 224, sy: 256 }
+        WALL: { ...getSpriteCoords(7, 0) }, // (Column 7, Row 0) -> (224, 0)
+        DEEP_WATER: { ...getSpriteCoords(8, 7) }, // (Column 8, Row 7) -> (256, 224)
+        DEEP_FOREST: { ...getSpriteCoords(6, 0) }, // (Column 6, Row 0) -> (192, 0)
+        HOUSE_WALL: { ...getSpriteCoords(0, 8) }, // (Column 0, Row 8) -> (0, 256)
+        HOUSE_ROOF: { ...getSpriteCoords(1, 8) }, // (Column 1, Row 8) -> (32, 256)
+        WINDOW: { ...getSpriteCoords(2, 8) }, // (Column 2, Row 8) -> (64, 256)
+        STONE_WALL: { ...getSpriteCoords(4, 8) }, // (Column 4, Row 8) -> (128, 256)
+        RUINED_WALL: { ...getSpriteCoords(7, 8) } // (Column 7, Row 8) -> (224, 256)
     },
 
     RESOURCE_NODES: {
-        TREE: { sx: 64, sy: 0 },
-        CHOPPED_TREE: { sx: 96, sy: 32 },
-        ROCK: { sx: 96, sy: 0 },
-        FISHING_SPOT: { sx: 256, sy: 0 },
-        OAK_TREE: { sx: 0, sy: 192 },
-        TIN_ROCK: { sx: 32, sy: 192 },
-        RIVER_FISHING_SPOT: { sx: 64, sy: 192 },
-        WILLOW_TREE: { sx: 96, sy: 192 },
-        IRON_ROCK: { sx: 128, sy: 192 },
-        LAKE_FISHING_SPOT: { sx: 160, sy: 192 },
-        MAPLE_TREE: { sx: 192, sy: 192 },
-        SILVER_ROCK: { sx: 224, sy: 192 },
-        OCEAN_FISHING_SPOT: { sx: 256, sy: 192 },
-        ELDER_TREE: { sx: 288, sy: 192 },
-        GOLD_ROCK: { sx: 320, sy: 192 },
-        DEEP_SEA_FISHING_SPOT: { sx: 352, sy: 192 }
+        TREE: { ...getSpriteCoords(2, 0) }, // (Column 2, Row 0) -> (64, 0)
+        CHOPPED_TREE: { ...getSpriteCoords(3, 2) }, // (Column 3, Row 2) -> (96, 32)
+        ROCK: { ...getSpriteCoords(3, 0) }, // (Column 3, Row 0) -> (96, 0)
+        FISHING_SPOT: { ...getSpriteCoords(8, 0) }, // (Column 8, Row 0) -> (256, 0)
+        OAK_TREE: { ...getSpriteCoords(0, 6) }, // (Column 0, Row 6) -> (0, 192) - Note: This overlaps with Golem if it was (0,6) (sy:192). Golem changed to (0,6).
+        TIN_ROCK: { ...getSpriteCoords(1, 6) }, // (Column 1, Row 6) -> (32, 192)
+        RIVER_FISHING_SPOT: { ...getSpriteCoords(2, 6) }, // (Column 2, Row 6) -> (64, 192)
+        WILLOW_TREE: { ...getSpriteCoords(3, 6) }, // (Column 3, Row 6) -> (96, 192)
+        IRON_ROCK: { ...getSpriteCoords(4, 6) }, // (Column 4, Row 6) -> (128, 192)
+        LAKE_FISHING_SPOT: { ...getSpriteCoords(5, 6) }, // (Column 5, Row 6) -> (160, 192)
+        MAPLE_TREE: { ...getSpriteCoords(6, 6) }, // (Column 6, Row 6) -> (192, 192)
+        SILVER_ROCK: { ...getSpriteCoords(7, 6) }, // (Column 7, Row 6) -> (224, 192)
+        OCEAN_FISHING_SPOT: { ...getSpriteCoords(8, 6) }, // (Column 8, Row 6) -> (256, 192)
+        ELDER_TREE: { ...getSpriteCoords(9, 6) }, // (Column 9, Row 6) -> (288, 192)
+        GOLD_ROCK: { ...getSpriteCoords(10, 6) }, // (Column 10, Row 6) -> (320, 192)
+        DEEP_SEA_FISHING_SPOT: { ...getSpriteCoords(11, 6) } // (Column 11, Row 6) -> (352, 192)
     },
 
     SCENERY: {
-        BUSH: { sx: 96, sy: 160 },
-        FLOWERS: { sx: 128, sy: 160 },
-        FALLEN_LOG: { sx: 160, sy: 160 },
-        SMALL_ROCK: { sx: 192, sy: 160 }
+        BUSH: { ...getSpriteCoords(3, 5) }, // (Column 3, Row 5) -> (96, 160)
+        FLOWERS: { ...getSpriteCoords(4, 5) }, // (Column 4, Row 5) -> (128, 160)
+        FALLEN_LOG: { ...getSpriteCoords(5, 5) }, // (Column 5, Row 5) -> (160, 160)
+        SMALL_ROCK: { ...getSpriteCoords(6, 5) } // (Column 6, Row 5) -> (192, 160)
     },
 
     GATEWAYS: {
-        GATEWAY: { sx: 224, sy: 32 },
-        DOOR: { sx: 96, sy: 256 },
-        STONE_ARCHWAY: { sx: 160, sy: 256, sw: 64, sh: 64 }
+        GATEWAY: { ...getSpriteCoords(7, 1) }, // (Column 7, Row 1) -> (224, 32)
+        DOOR: { ...getSpriteCoords(3, 8) }, // (Column 3, Row 8) -> (96, 256)
+        STONE_ARCHWAY: { ...getSpriteCoords(5, 8), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 } // (Column 5, Row 8) -> (160, 256), 64x64px
     },
     MISC: {
-        PEDESTAL: { sx: 288, sy: 64 }
+        PEDESTAL: { ...getSpriteCoords(9, 2) } // (Column 9, Row 2) -> (288, 64)
     }
 };
 
