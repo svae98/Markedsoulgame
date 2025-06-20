@@ -208,7 +208,7 @@ function buildMapData(zoneX, zoneY) {
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         '.': TILES.PATH, 'S': TILES.SAND, 'G': TILES.DIRT, '~': TILES.SHALLOW_WATER,
-        '#': TILES.HOUSE_WALL, '+': TILES.DOOR_1, 'H': TILES.HOUSE_WALL, 'M': TILES.STONE_WALL // Example chars for new tiles
+        '#': TILES.HOUSE_WALL, '+': TILES.DOOR_1, 'H': TILES.RUINED_WALL, 'M': TILES.STONE_WALL // Example chars for new tiles
     };
 
     const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
@@ -245,7 +245,7 @@ function getDefaultGameState() {
         characters: [], activeCharacterIndex: 0,
         inventory: {
             soulFragment: 1000, ragingSoul: 0,
-            wood: 0, copper_ore: 0, fish: 0
+            wood: 0, copper_ore: 0, mackarel: 0
         },
         level: { current: 1, xp: 0 },
         skills: {
@@ -415,42 +415,75 @@ function renderCraftingTabs() {
 
 function renderCraftingList(categoryKey) {
     const container = ui.craftingListContainer;
+    if (!container) {
+        // Create a fallback or log an error if the element is missing from index.html
+        console.error("Error: craftingListContainer not found in the DOM.");
+        return; 
+    }
     container.innerHTML = '';
     const categoryData = CRAFTING_DATA[categoryKey];
-    // This line already uses categoryData.skill, which will now correctly resolve to 'woodworking'
     const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0;
 
     for (const recipeId in categoryData.recipes) {
         const recipeData = categoryData.recipes[recipeId];
-        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 0, progress: 0 };
+        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 1, progress: 0 };
         const itemEl = document.createElement('div');
         itemEl.className = 'modal-item';
 
         if (playerSkillLevel < recipeData.unlockLevel) {
-            // Recipe is locked by skill level
             itemEl.innerHTML = `<span>${recipeData.name}</span> <span class="cost">Requires Lv ${recipeData.unlockLevel} ${categoryData.name}</span>`;
             itemEl.classList.add('disabled');
         } else {
-            // Recipe is available to be crafted
-            let costString = "Craft: ";
-            for (const mat in recipeData.cost) { costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat]}`; }
+            let masteryLevelText = '';
+            let costString = '';
+            let canAfford = true;
+
+            if (masteryData.unlocked) {
+                // --- DISPLAY FOR UNLOCKED RECIPE ---
+                masteryLevelText = `Mastery ${masteryData.level}`;
+                costString = "Craft: ";
+                for (const mat in recipeData.cost) {
+                    costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat] || mat} `;
+                    if (getCategoryResourceCount(mat) < recipeData.cost[mat]) {
+                        canAfford = false;
+                    }
+                }
+            } else {
+                // --- DISPLAY FOR LOCKED RECIPE ---
+                masteryLevelText = '(Not Unlocked)';
+                costString = "Cost: "; // As per your request
+                const unlockCost = recipeData.unlockCost;
+                if (unlockCost) {
+                    for (const mat in unlockCost) {
+                        costString += `${unlockCost[mat]} ${ITEM_SPRITES[mat] || mat} `;
+                        if ((gameState.inventory[mat] || 0) < unlockCost[mat]) {
+                            canAfford = false;
+                        }
+                    }
+                }
+            }
 
             const progressNeeded = recipeData.masteryCurve(masteryData.level);
             const progressPercent = masteryData.unlocked ? (masteryData.progress / progressNeeded) * 100 : 0;
-            const masteryLevelText = masteryData.unlocked ? `Mastery ${masteryData.level}` : 'Unlock Bonus';
-
+            
             itemEl.innerHTML = `
                 <div class="w-full">
                     <div class="flex justify-between items-center mb-1">
                         <span>${recipeData.name} (${masteryLevelText})</span>
-                        <button class="cost">${costString}</button>
+                        <button class="cost">${costString.trim()}</button>
                     </div>
                     <div class="progress-bar-container" title="Mastery Progress">
                         <div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div>
                     </div>
                 </div>
             `;
-            itemEl.querySelector('button').addEventListener('click', () => craftRecipe(categoryKey, recipeId));
+            
+            const button = itemEl.querySelector('button');
+            button.addEventListener('click', () => craftRecipe(categoryKey, recipeId));
+
+            if (!canAfford) {
+                itemEl.classList.add('cannot-afford');
+            }
         }
         container.appendChild(itemEl);
     }
@@ -458,95 +491,80 @@ function renderCraftingList(categoryKey) {
 
 function craftRecipe(categoryKey, recipeId) {
     const recipeData = CRAFTING_DATA[categoryKey].recipes[recipeId];
-    // Check if the recipe is for mastery increasing (cost of 1 generic resource) or initial unlock (specific resource cost)
-    const isMasteryCraft = gameState.craftingMastery[recipeId]?.unlocked;
+    const skillKey = CRAFTING_DATA[categoryKey].skill;
+    const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 1, progress: 0 };
 
-    let canAfford = true;
-    let costToDeduct = {};
-
-    if (isMasteryCraft) {
-        // For mastery crafts, cost is always 1 unit of the generic category
-        for (const mat in recipeData.cost) { // mat here will be like 'wood', 'fish', 'copper_ore'
-            const requiredAmount = recipeData.cost[mat]; // This will be 1 for mastery crafts based on current understanding
-            if (getCategoryResourceCount(mat) < requiredAmount) { // Check if total category resources are enough
-                canAfford = false;
+    if (masteryData.unlocked) {
+        // --- MASTERY CRAFT PATH (Recipe is already unlocked) ---
+        let canAffordMastery = true;
+        for (const mat in recipeData.cost) {
+            if (getCategoryResourceCount(mat) < recipeData.cost[mat]) {
+                canAffordMastery = false;
                 break;
             }
-            costToDeduct[mat] = requiredAmount; // Mark to deduct 1 generic unit
         }
+
+        if (canAffordMastery) {
+            for (const mat in recipeData.cost) {
+                deductCategoryResource(mat, recipeData.cost[mat]);
+            }
+            gainSkillXp(skillKey, 25);
+            masteryData.progress += recipeData.masteryPerCraft;
+
+            let progressNeeded = recipeData.masteryCurve(masteryData.level);
+            while (masteryData.progress >= progressNeeded) {
+                masteryData.level++;
+                masteryData.progress -= progressNeeded;
+                showNotification(`${recipeData.name} Mastery increased to ${masteryData.level}!`);
+                recalculateTeamStats();
+                progressNeeded = recipeData.masteryCurve(masteryData.level);
+            }
+        } else {
+            showNotification(`Not enough generic materials for ${recipeData.name}.`);
+        }
+
     } else {
-        // For initial unlock, check specific resources and quantities from unlockCost
+        // --- UNLOCK CRAFT PATH (Recipe is currently locked) ---
         const unlockCost = recipeData.unlockCost;
-        if (!unlockCost) { // Should not happen if unlock is required
-            canAfford = false;
+        let canAffordUnlock = true;
+        if (!unlockCost || Object.keys(unlockCost).length === 0) {
+            canAffordUnlock = false; 
         } else {
             for (const mat in unlockCost) {
                 if ((gameState.inventory[mat] || 0) < unlockCost[mat]) {
-                    canAfford = false;
+                    canAffordUnlock = false;
                     break;
                 }
-                costToDeduct[mat] = unlockCost[mat]; // Mark to deduct specific units
-            }
-        }
-    }
-
-    if (canAfford) {
-        // Deduct materials
-        if (isMasteryCraft) {
-            // Deduct 1 generic resource from the category
-            for (const mat in costToDeduct) {
-                deductCategoryResource(mat, costToDeduct[mat]);
-            }
-        } else {
-            // Deduct specific resources for unlock
-            for (const mat in costToDeduct) {
-                gameState.inventory[mat] -= costToDeduct[mat];
             }
         }
 
-        // Grant XP to the crafting skill
-        gainSkillXp(CRAFTING_DATA[categoryKey].skill, 25);
+        if (canAffordUnlock) {
+            for (const mat in unlockCost) {
+                gameState.inventory[mat] -= unlockCost[mat];
+            }
+            gainSkillXp(skillKey, 25);
 
-        // Initialize mastery data if it doesn't exist
-        if (!gameState.craftingMastery[recipeId]) {
-            gameState.craftingMastery[recipeId] = { unlocked: false, level: 1, progress: 0 };
-        }
-        const masteryData = gameState.craftingMastery[recipeId];
-
-        // Unlock the bonus on the first craft
-        if (!masteryData.unlocked) {
+            if (!gameState.craftingMastery[recipeId]) {
+                gameState.craftingMastery[recipeId] = masteryData;
+            }
             masteryData.unlocked = true;
             showNotification(`${recipeData.name} bonus unlocked!`);
             recalculateTeamStats();
-        }
 
-        // Add mastery progress
-        masteryData.progress += recipeData.masteryPerCraft;
-
-        // Check for mastery level up
-        let progressNeeded = recipeData.masteryCurve(masteryData.level);
-        while (masteryData.progress >= progressNeeded) {
-            masteryData.level++;
-            masteryData.progress -= progressNeeded;
-            showNotification(`${recipeData.name} Mastery increased to ${masteryData.level}!`);
-            recalculateTeamStats(); // Recalculate stats for the new bonus
-            progressNeeded = recipeData.masteryCurve(masteryData.level);
-        }
-
-    } else {
-        // Display notification based on whether it's an unlock or mastery craft
-        if (isMasteryCraft) {
-            showNotification(`Not enough generic materials for ${recipeData.name}.`);
         } else {
             let costString = '';
-            for (const mat in recipeData.unlockCost) {
-                costString += `${recipeData.unlockCost[mat]} ${ITEM_SPRITES[mat]} `;
+            if (unlockCost) {
+                for (const mat in unlockCost) {
+                    costString += `${unlockCost[mat]} ${ITEM_SPRITES[mat] || mat} `;
+                }
             }
             showNotification(`Cannot afford to unlock ${recipeData.name}. Need: ${costString.trim()}`);
         }
     }
 
-    renderCraftingList(categoryKey);
+    if (window.renderCraftingList) {
+        renderCraftingList(categoryKey);
+    }
     updateAllUI();
     saveGameState();
 }
@@ -667,47 +685,63 @@ function drawResourceObject(resource) {
     const resourceDef = RESOURCE_DATA[resource.type];
     if (!resourceDef) return;
 
-    let spriteToDraw;
+    const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
     const isDepleted = resource.nextAvailableTime && currentGameTime < resource.nextAvailableTime;
 
-    if (isDepleted) {
-        const depletedSpriteKey = `DEPLETED_${resource.type.toUpperCase()}`;
-        // Check in RESOURCE_NODES first, then other categories if applicable
-        if (SPRITES.RESOURCE_NODES[depletedSpriteKey]) {
-            spriteToDraw = SPRITES.RESOURCE_NODES[depletedSpriteKey];
-        } else if (resource.type === 'TREE' && SPRITES.RESOURCE_NODES.CHOPPED_TREE) {
-            spriteToDraw = SPRITES.RESOURCE_NODES.CHOPPED_TREE;
-        } else {
-            // Fallback to the resource's default sprite, but apply alpha for depletion
-            spriteToDraw = resourceDef.sprite; // resourceDef.sprite already points to the correct categorized sprite
-            if (spriteToDraw) ui.ctx.globalAlpha = 0.5;
+    let baseSprite = null;
+    let topSprite = null;
+
+    // Determine base and top sprites based on skill
+    if (resourceDef.skill === 'mining') {
+        baseSprite = SPRITES.RESOURCE_NODES.DEPLETED_MINERAL_NODE;
+        if (!isDepleted) {
+            topSprite = resourceDef.sprite;
+        }
+    } else if (resourceDef.skill === 'woodcutting') {
+        const choppedSpriteKey = `CHOPPED_${resource.type}`;
+        baseSprite = SPRITES.RESOURCE_NODES[choppedSpriteKey];
+        if (!isDepleted) {
+            topSprite = resourceDef.sprite;
+        }
+    } else if (resourceDef.skill === 'fishing') {
+        baseSprite = SPRITES.RESOURCE_NODES.FISH_POND;
+        if (!isDepleted) {
+            topSprite = resourceDef.sprite;
         }
     } else {
-        spriteToDraw = resourceDef.sprite; // resourceDef.sprite already points to the correct categorized sprite
+        // Fallback for non-layered resources (like crafting stations)
+        baseSprite = resourceDef.sprite;
     }
 
-    if (!spriteToDraw) return; // Ensure a sprite is found before attempting to draw
+    // Draw the base sprite
+    if (baseSprite) {
+        const baseDrawWidth = (baseSprite.sw || 32) * (dynamicTileSize / 32);
+        const baseDrawHeight = (baseSprite.sh || 32) * (dynamicTileSize / 32);
+        let xOffset = (baseDrawWidth - dynamicTileSize) / 2;
+        let yOffset = (baseDrawHeight - dynamicTileSize);
 
-    const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
-    const baseDrawWidth = (spriteToDraw.sw || 32) * (dynamicTileSize / 32);
-    const baseDrawHeight = (spriteToDraw.sh || 32) * (dynamicTileSize / 32);
-
-    let xOffset = (baseDrawWidth - dynamicTileSize) / 2;
-    let yOffset = (baseDrawHeight - dynamicTileSize);
-
-    // If the resource has a 'skill' property, it's likely a crafting station.
-    // Adjust offsets specifically for multi-tile crafting stations.
-    if (resourceDef.skill && SPRITES.CRAFTING_STATIONS[resource.type]) { // Check if it's a crafting station type
-        if (spriteToDraw.sw === (resourceDef.size?.w || 1) * 32) {
-            xOffset = 0;
+        // Adjust for multi-tile crafting stations
+        if (SPRITES.CRAFTING_STATIONS[resource.type]) {
+             if (baseSprite.sw === (resourceDef.size?.w || 1) * 32) xOffset = 0;
+             if (baseSprite.sh === (resourceDef.size?.h || 1) * 32) yOffset = 0;
         }
-        if (spriteToDraw.sh === (resourceDef.size?.h || 1) * 32) {
-            yOffset = 0;
+        
+        if (isDepleted && resourceDef.skill !== 'mining' && resourceDef.skill !== 'woodcutting' && resourceDef.skill !== 'fishing') {
+             ui.ctx.globalAlpha = 0.5;
         }
+        
+        drawSprite(baseSprite, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
+        ui.ctx.globalAlpha = 1.0;
     }
 
-    drawSprite(spriteToDraw, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
-    if (isDepleted && spriteToDraw && ui.ctx.globalAlpha !== 1.0) ui.ctx.globalAlpha = 1.0;
+    // Draw the top sprite if it exists
+    if (topSprite) {
+        const topDrawWidth = (topSprite.sw || 32) * (dynamicTileSize / 32);
+        const topDrawHeight = (topSprite.sh || 32) * (dynamicTileSize / 32);
+        const xOffset = (topDrawWidth - dynamicTileSize) / 2;
+        const yOffset = (topDrawHeight - dynamicTileSize);
+        drawSprite(topSprite, drawX - xOffset, drawY - yOffset, topDrawWidth, topDrawHeight);
+    }
 }
 
 
@@ -1720,47 +1754,68 @@ function openStationCrafting(stationResource) { // Now accepts the full resource
     const list = document.getElementById('stationCraftingList');
     list.innerHTML = ''; // Clear old list
 
-    const skillKey = RESOURCE_DATA[stationResource.type].skill; // Get the skill key from the resource type
+    const skillKey = RESOURCE_DATA[stationResource.type].skill;
     const categoryData = CRAFTING_DATA[skillKey];
-    const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0; //
+    const playerSkillLevel = gameState.skills[categoryData.skill]?.level || 0;
 
-    title.textContent = categoryData.name; // Set modal title based on the station's name
+    title.textContent = categoryData.name;
 
     for (const recipeId in categoryData.recipes) {
         const recipeData = categoryData.recipes[recipeId];
-        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 0, progress: 0 };
+        const masteryData = gameState.craftingMastery[recipeId] || { unlocked: false, level: 1, progress: 0 };
         const itemEl = document.createElement('div');
-        itemEl.className = 'modal-item clickable'; // Make the entire item clickable
+        itemEl.className = 'modal-item clickable';
 
         if (playerSkillLevel < recipeData.unlockLevel) {
             itemEl.innerHTML = `<span>${recipeData.name}</span> <span class="cost">Requires Lv ${recipeData.unlockLevel} ${categoryData.name}</span>`;
             itemEl.classList.add('disabled');
         } else {
-            let costString = "Cost: ";
-            for (const mat in recipeData.cost) { costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat]}`; }
+            // --- NEW DISPLAY LOGIC ---
+            let masteryLevelText = '';
+            let costString = '';
+
+            if (masteryData.unlocked) {
+                // Display for an UNLOCKED recipe
+                masteryLevelText = `Mastery ${masteryData.level}`;
+                costString = "Cost: ";
+                for (const mat in recipeData.cost) {
+                    costString += `${recipeData.cost[mat]} ${ITEM_SPRITES[mat] || mat} `;
+                }
+            } else {
+                // Display for a LOCKED recipe
+                masteryLevelText = 'Not Unlocked';
+                costString = "Cost: "; // Changed from "Unlock:" as per your last request
+                const unlockCost = recipeData.unlockCost;
+                if (unlockCost) {
+                    for (const mat in unlockCost) {
+                        costString += `${unlockCost[mat]} ${ITEM_SPRITES[mat] || mat} `;
+                    }
+                }
+            }
+            // --- END NEW DISPLAY LOGIC ---
+
             const progressNeeded = recipeData.masteryCurve(masteryData.level);
             const progressPercent = masteryData.unlocked ? (masteryData.progress / progressNeeded) * 100 : 0;
-            const masteryLevelText = masteryData.unlocked ? `Mastery ${masteryData.level}` : 'Not Mastered';
 
             itemEl.innerHTML = `
                 <div class="w-full">
                     <div class="flex justify-between items-center mb-1">
-                        <span>${recipeData.name} (${masteryLevelText})</span> <span class="cost">${costString}</span>
+                        <span>${recipeData.name} (${masteryLevelText})</span> <span class="cost">${costString.trim()}</span>
                     </div>
-                    <div class="progress-bar-container" title="Mastery Progress"><div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div></div>
+                    <div class="progress-bar-container" title="Mastery Progress">
+                        <div class="progress-bar bg-yellow-500" style="width: ${progressPercent}%;">${masteryData.progress}/${progressNeeded}</div>
+                    </div>
                 </div>
             `;
-            // --- START FIX: Add event listener to select and mark the specific recipe ---
+            
             itemEl.addEventListener('click', () => {
-                // When a recipe is clicked, mark the station with this specific recipe
                 markRecipeForCrafting(stationResource.id, recipeId);
-                closeStationCrafting(); // Close the modal after selecting a recipe
+                closeStationCrafting();
             });
-            // --- END FIX ---
         }
         list.appendChild(itemEl);
     }
-    openModal(modal); // Open the crafting modal
+    openModal(modal);
 }
 
 function closeStationCrafting() {
@@ -2700,7 +2755,7 @@ async function loadGameState() {
              gameState.characters.push(getDefaultCharacterState(0, "Character 1", CHARACTER_COLORS[0]));
         }
     }
-
+    
     let needsSave = false;
 
     const timeOnLoad = currentGameTime;

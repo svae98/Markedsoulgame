@@ -68,39 +68,39 @@ export const TILES = {
     HOUSE_WALL: 8,
     DOOR_1: 9,
     DOOR_2: 10,
-    STONE_WALL: 11 // Corrected unique ID
+    STONE_WALL: 11, // Corrected unique ID
+    RUINED_WALL: 12
 };
 export const RESOURCE_CATEGORIES = {
-    wood: ['wood', 'oak_wood', 'willow_wood', 'maple_wood', 'elder_wood'],
-    ore: ['copper_ore', 'tin_ore', 'iron_ore', 'silver_ore', 'gold_ore'],
-    fish: ['fish', 'salmon', 'trout', 'tuna', 'shark'],
-    ragingSoul: ['ragingSoul'],   // Add if you ever want to categorize raging souls
+    wood: ['ash_wood', 'oak_wood', 'willow_wood', 'maple_wood', 'elder_wood'],
+    ore: ['copper_ore', 'iron_ore', 'mithril_ore', 'adamant_ore', 'silver_ore', 'gold_ore'],
+    fish: ['mackarel', 'salmon', 'trout', 'tuna', 'shark'], // 'mackarel' was already here, which is correct
+    ragingSoul: ['ragingSoul'],
     soulFragment: ['soulFragment']
 };
 export const ITEM_SPRITES = {
     // ... existing item sprites ...
     soulFragment: '✧',
     ragingSoul: '✧',
-    wood: '🪵',
-    copper_ore: '⛏️',
-    fish: '🐟',
-    cooked_fish: '🍣',
-    wood_carving: '🦉',
-    copper_sword: '🗡️',
-    wooden_shield: '🛡️',
-    // --- NEW TIERED RESOURCE ITEMS ---
+    // Woodcutting
+    ash_wood: '🪵', 
     oak_wood: '🌳',
-    tin_ore: '🔩',
-    salmon: '🐟',
     willow_wood: '🌿',
-    iron_ore: '🪨',
-    trout: '🐠',
     maple_wood: '🍁',
-    silver_ore: '⚪',
-    tuna: '🐡',
     elder_wood: '🌲',
-    gold_ore: '🟡',
+    // Fishing
+    mackarel: '🐟',
+    tuna: '🐡',
+    salmon: '🐟',
+    trout: '🐠',
     shark: '🦈',
+    // Mining
+    copper_ore: '⛏️',
+    iron_ore: '🪨',
+    mithril_ore: '',
+    adamant_ore: '',
+    silver_ore: '⚪',
+    gold_ore: '🟡'
 };
 
 // --- Spritesheet Mapping ---
@@ -111,88 +111,97 @@ export const ITEM_SPRITES = {
 // do NOT adjust sprites without user permission
 export const SPRITES = {
     PLAYER_CHARS: {
-        PLAYER: { ...getSpriteCoords(1, 0) } // (Column 1, Row 0) -> (32, 0)
+        PLAYER: { ...getSpriteCoords(1, 25) } 
     },
 
     MONSTERS: {
-        BLUE_SLIME: { ...getSpriteCoords(0, 1) }, // (Column 0, Row 1) -> (0, 32)
-        YELLOW_SLIME: { ...getSpriteCoords(1, 1) }, // (Column 1, Row 1) -> (32, 32)
-        RED_SLIME: { ...getSpriteCoords(2, 1) }, // (Column 2, Row 1) -> (64, 32)
-        BOAR: { ...getSpriteCoords(3, 1) }, // (Column 3, Row 1) -> (96, 32)
-        WOLF: { ...getSpriteCoords(4, 1) }, // (Column 4, Row 1) -> (128, 32)
-        GOLEM: { ...getSpriteCoords(0, 6), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, // (Column 0, Row 6) -> (0, 192), 64x64px
-        HUMAN: { ...getSpriteCoords(5, 1) }, // (Column 5, Row 1) -> (160, 32)
-        SKELETON: { ...getSpriteCoords(7, 1) }, // (Column 7, Row 1) -> (224, 32)
-        GIANT_SPIDER: { ...getSpriteCoords(9, 0) }, // (Column 9, Row 0) -> (288, 0)
-        FOREST_IMP: { ...getSpriteCoords(5, 2) }, // (Column 5, Row 2) -> (160, 64)
-        GIANT_BEETLE: { ...getSpriteCoords(6, 2) }, // (Column 6, Row 2) -> (192, 64)
-        GOBLIN: { ...getSpriteCoords(0, 7) }, // (Column 0, Row 7) -> (0, 224)
-        OGRE: { ...getSpriteCoords(1, 7), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, // (Column 1, Row 7) -> (32, 224), 64x64px
-        HARPY: { ...getSpriteCoords(3, 7) }, // (Column 3, Row 7) -> (96, 224)
-        SWAMP_BEAST: { ...getSpriteCoords(4, 7) }, // (Column 4, Row 7) -> (128, 224)
-        WISP: { ...getSpriteCoords(5, 7) } // (Column 5, Row 7) -> (160, 224)
+        BLUE_SLIME: { ...getSpriteCoords(1, 10) }, 
+        YELLOW_SLIME: { ...getSpriteCoords(2, 10) }, 
+        RED_SLIME: { ...getSpriteCoords(3, 10) },
+        BOAR: { ...getSpriteCoords(4, 10) },
+        WOLF: { ...getSpriteCoords(5, 10) }, 
+        GOLEM: { ...getSpriteCoords(1, 14), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, 
+        HUMAN: { ...getSpriteCoords(6, 10) }, 
+        SKELETON: { ...getSpriteCoords(8, 10) }, 
+        GIANT_SPIDER: { ...getSpriteCoords(7, 10) },
+        FOREST_IMP: { ...getSpriteCoords(10, 10) }, 
+        GIANT_BEETLE: { ...getSpriteCoords(11, 10) }, 
+        GOBLIN: { ...getSpriteCoords(12, 10) }, 
+        OGRE: { ...getSpriteCoords(13, 10), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 },
+        HARPY: { ...getSpriteCoords(16, 10) },
+        SWAMP_BEAST: { ...getSpriteCoords(14, 10) },
+        WISP: { ...getSpriteCoords(15, 10) } 
     },
 
     CRAFTING_STATIONS: {
-        FORGE: { ...getSpriteCoords(1, 2), sw: TILE_SIZE * 2, sh: TILE_SIZE }, // (Column 1, Row 2) -> (32, 64), 64x32px
-        CARPENTRY_TABLE: { ...getSpriteCoords(2, 3), sw: TILE_SIZE * 2, sh: TILE_SIZE }, // (Column 2, Row 3) -> (64, 96), 64x32px
-        COOKING_RANGE: { ...getSpriteCoords(0, 4), sw: TILE_SIZE, sh: TILE_SIZE * 2 } // (Column 0, Row 4) -> (0, 128), 32x64px
+        FORGE: { ...getSpriteCoords(3, 20), sw: TILE_SIZE * 2, sh: TILE_SIZE }, 
+        CARPENTRY_TABLE: { ...getSpriteCoords(1, 21), sw: TILE_SIZE * 2, sh: TILE_SIZE }, 
+        COOKING_RANGE: { ...getSpriteCoords(1, 22), sw: TILE_SIZE, sh: TILE_SIZE * 2 } 
     },
 
     GROUND_TILES: {
+        
+        
         GRASS: [
-            { ...getSpriteCoords(0, 0) }, // (Column 0, Row 0) -> (0, 0)
+            { ...getSpriteCoords(1, 1) },
         ],
-        PATH: { ...getSpriteCoords(4, 0) }, // (Column 4, Row 0) -> (128, 0)
-        SAND: { ...getSpriteCoords(0, 5) }, // (Column 0, Row 5) -> (0, 160)
-        DIRT: { ...getSpriteCoords(1, 5) }, // (Column 1, Row 5) -> (32, 160)
-        SHALLOW_WATER: { ...getSpriteCoords(2, 5) } // (Column 2, Row 5) -> (64, 160)
+        PATH: { ...getSpriteCoords(2, 1) },
+        SAND: { ...getSpriteCoords(4, 1) }, 
+        DIRT: { ...getSpriteCoords(5, 1) },
+        //SHALLOW_WATER: { ...getSpriteCoords(0, 0) }  don't have sprite
     },
 
     UNWALKABLE_TILES: {
-        WALL: { ...getSpriteCoords(7, 0) }, // (Column 7, Row 0) -> (224, 0)
-        DEEP_WATER: { ...getSpriteCoords(8, 7) }, // (Column 8, Row 7) -> (256, 224)
-        DEEP_FOREST: { ...getSpriteCoords(6, 0) }, // (Column 6, Row 0) -> (192, 0)
-        HOUSE_WALL: { ...getSpriteCoords(0, 8) }, // (Column 0, Row 8) -> (0, 256)
-        HOUSE_ROOF: { ...getSpriteCoords(1, 8) }, // (Column 1, Row 8) -> (32, 256)
-        WINDOW: { ...getSpriteCoords(2, 8) }, // (Column 2, Row 8) -> (64, 256)
-        STONE_WALL: { ...getSpriteCoords(4, 8) }, // (Column 4, Row 8) -> (128, 256)
-        RUINED_WALL: { ...getSpriteCoords(7, 8) } // (Column 7, Row 8) -> (224, 256)
+        WALL: { ...getSpriteCoords(1, 3) }, 
+        DEEP_WATER: { ...getSpriteCoords(1, 8) }, 
+        DEEP_FOREST: { ...getSpriteCoords(2, 3) },
+        //HOUSE_WALL: { ...getSpriteCoords(0, 8) },don't have
+        //HOUSE_ROOF: { ...getSpriteCoords(1, 8) }, don't have
+        //WINDOW: { ...getSpriteCoords(2, 8) },don't have
+        STONE_WALL: { ...getSpriteCoords(8, 1) },
+        RUINED_WALL: { ...getSpriteCoords(6, 1) } 
     },
 
     RESOURCE_NODES: {
-        TREE: { ...getSpriteCoords(2, 0) }, // (Column 2, Row 0) -> (64, 0)
-        CHOPPED_TREE: { ...getSpriteCoords(3, 2) }, // (Column 3, Row 2) -> (96, 32)
-        ROCK: { ...getSpriteCoords(3, 0) }, // (Column 3, Row 0) -> (96, 0)
-        FISHING_SPOT: { ...getSpriteCoords(8, 0) }, // (Column 8, Row 0) -> (256, 0)
-        OAK_TREE: { ...getSpriteCoords(0, 6) }, // (Column 0, Row 6) -> (0, 192) - Note: This overlaps with Golem if it was (0,6) (sy:192). Golem changed to (0,6).
-        TIN_ROCK: { ...getSpriteCoords(1, 6) }, // (Column 1, Row 6) -> (32, 192)
-        RIVER_FISHING_SPOT: { ...getSpriteCoords(2, 6) }, // (Column 2, Row 6) -> (64, 192)
-        WILLOW_TREE: { ...getSpriteCoords(3, 6) }, // (Column 3, Row 6) -> (96, 192)
-        IRON_ROCK: { ...getSpriteCoords(4, 6) }, // (Column 4, Row 6) -> (128, 192)
-        LAKE_FISHING_SPOT: { ...getSpriteCoords(5, 6) }, // (Column 5, Row 6) -> (160, 192)
-        MAPLE_TREE: { ...getSpriteCoords(6, 6) }, // (Column 6, Row 6) -> (192, 192)
-        SILVER_ROCK: { ...getSpriteCoords(7, 6) }, // (Column 7, Row 6) -> (224, 192)
-        OCEAN_FISHING_SPOT: { ...getSpriteCoords(8, 6) }, // (Column 8, Row 6) -> (256, 192)
-        ELDER_TREE: { ...getSpriteCoords(9, 6) }, // (Column 9, Row 6) -> (288, 192)
-        GOLD_ROCK: { ...getSpriteCoords(10, 6) }, // (Column 10, Row 6) -> (320, 192)
-        DEEP_SEA_FISHING_SPOT: { ...getSpriteCoords(11, 6) } // (Column 11, Row 6) -> (352, 192)
+        ASH_TREE: { ...getSpriteCoords(10, 7) }, 
+        CHOPPED_ASH_TREE: { ...getSpriteCoords(10, 8) },
+        OAK_TREE: { ...getSpriteCoords(11, 7) }, 
+        CHOPPED_OAK_TREE: { ...getSpriteCoords(11, 8) },
+        WILLOW_TREE: { ...getSpriteCoords(12, 7) }, 
+        CHOPPED_WILLOW_TREE: { ...getSpriteCoords(12, 8) },
+        MAPLE_TREE: { ...getSpriteCoords(6, 6) }, // forgot to make this one, another time
+        CHOPPED_MAPLE_TREE: { ...getSpriteCoords(3, 8) },   // same with this one
+        ELDER_TREE: { ...getSpriteCoords(13, 6) , sw: TILE_SIZE * 2, sh: TILE_SIZE * 2},
+        CHOPPED_ELDER_TREE: { ...getSpriteCoords(13, 8), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 },
+        DEPLETED_MINERAL_NODE: { ...getSpriteCoords(3, 7) },
+        FISH_POND: { ...getSpriteCoords(1, 7) }, // same textures as deepwater right now, but they are seperate, i just have two copies on the spritelist for it.
+        MACKAREL_FISH: { ...getSpriteCoords(2, 7) }, // placeholder name
+        TROUT_FISH: { ...getSpriteCoords(2, 7) }, 
+        SALMON_FISH: { ...getSpriteCoords(3, 7) }, 
+        SHARK_FISH: { ...getSpriteCoords(4, 7) }, 
+        DEPLETED_MINERAL_NODE: { ...getSpriteCoords(20, 7) },
+        COPPER_VEIN: { ...getSpriteCoords(21, 7) }, 
+        IRON_VEIN: { ...getSpriteCoords(24, 7) }, 
+        MITHRIL_VEIN: { ...getSpriteCoords(22, 7) }, 
+        ADAMANT_VEIN: { ...getSpriteCoords(23, 7) }, 
+        SILVER_VEIN: { ...getSpriteCoords(26, 7) }, 
+        GOLD_VEIN: { ...getSpriteCoords(25, 7) }, 
     },
 
     SCENERY: {
-        BUSH: { ...getSpriteCoords(3, 5) }, // (Column 3, Row 5) -> (96, 160)
-        FLOWERS: { ...getSpriteCoords(4, 5) }, // (Column 4, Row 5) -> (128, 160)
-        FALLEN_LOG: { ...getSpriteCoords(5, 5) }, // (Column 5, Row 5) -> (160, 160)
-        SMALL_ROCK: { ...getSpriteCoords(6, 5) } // (Column 6, Row 5) -> (192, 160)
+        BUSH: { ...getSpriteCoords(1, 26) }, 
+        FLOWERS: { ...getSpriteCoords(1, 27) }, 
+        FALLEN_LOG: { ...getSpriteCoords(5, 5) }, //don't have 
+        SMALL_ROCK: { ...getSpriteCoords(2, 26) } 
     },
 
     GATEWAYS: {
-        GATEWAY: { ...getSpriteCoords(7, 1) }, // (Column 7, Row 1) -> (224, 32)
-        DOOR: { ...getSpriteCoords(3, 8) }, // (Column 3, Row 8) -> (96, 256)
-        STONE_ARCHWAY: { ...getSpriteCoords(5, 8), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 } // (Column 5, Row 8) -> (160, 256), 64x64px
+        GATEWAY: { ...getSpriteCoords(1, 5) }, 
+        DOOR: { ...getSpriteCoords(3, 5) }, 
+        STONE_ARCHWAY: { ...getSpriteCoords(2, 5), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 } 
     },
     MISC: {
-        PEDESTAL: { ...getSpriteCoords(9, 2) } // (Column 9, Row 2) -> (288, 64)
+        PEDESTAL: { ...getSpriteCoords(1, 20) } // don't have a specific one for this, but i have one that works for now
     }
 };
 
@@ -233,28 +242,31 @@ export const ENEMIES_DATA = {
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
-    TREE: { name: 'Tree', time: BASE_GATHERING_TIME, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.TREE },
-    ROCK: { name: 'Copper Rock', time: BASE_GATHERING_TIME, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.ROCK },
-    FISHING_SPOT: { name: 'Fishing Spot', time: BASE_GATHERING_TIME, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.FISHING_SPOT },
+    // --- Trees ---
+    ASH_TREE: { name: 'Ash Tree', time: BASE_GATHERING_TIME, levelReq: 1, xp: 10, item: 'ash_wood', skill: 'woodcutting', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.ASH_TREE },
+    OAK_TREE: { name: 'Oak Tree', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 20, item: 'oak_wood', skill: 'woodcutting', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.OAK_TREE },
+    WILLOW_TREE: { name: 'Willow Tree', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 40, item: 'willow_wood', skill: 'woodcutting', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.WILLOW_TREE },
+    MAPLE_TREE: { name: 'Maple Tree', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 80, item: 'maple_wood', skill: 'woodcutting', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.MAPLE_TREE },
+    ELDER_TREE: { name: 'Elder Tree', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 160, item: 'elder_wood', skill: 'woodcutting', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.ELDER_TREE },
+
+    // --- Fishing (UPDATED) ---
+    MACKEREL_FISHING_SPOT: { name: 'Mackerel Spot', time: BASE_GATHERING_TIME, levelReq: 1, xp: 25, item: 'mackarel', skill: 'fishing', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.MACKAREL_FISH },
+    SALMON_FISHING_SPOT: { name: 'Salmon Spot', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 50, item: 'salmon', skill: 'fishing', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.SALMON_FISH },
+    TROUT_FISHING_SPOT: { name: 'Trout Spot', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 100, item: 'trout', skill: 'fishing', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.TROUT_FISH },
+    TUNA_FISHING_SPOT: { name: 'Tuna Spot', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 200, item: 'tuna', skill: 'fishing', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.SHARK_FISH },
+    SHARK_FISHING_SPOT: { name: 'Shark Spot', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 400, item: 'shark', skill: 'fishing', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.SHARK_FISH },
+
+    // --- Mining ---
+    COPPER_VEIN: { name: 'Copper Vein', time: BASE_GATHERING_TIME, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.COPPER_VEIN },
+    IRON_VEIN: { name: 'Iron Vein', time: BASE_GATHERING_TIME + 1500, levelReq: 10, xp: 30, item: 'iron_ore', skill: 'mining', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.IRON_VEIN },
+    SILVER_VEIN: { name: 'Silver Vein', time: BASE_GATHERING_TIME + 2500, levelReq: 20, xp: 50, item: 'silver_ore', skill: 'mining', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.SILVER_VEIN },
+    GOLD_VEIN: { name: 'Gold Vein', time: BASE_GATHERING_TIME + 3500, levelReq: 30, xp: 80, item: 'gold_ore', skill: 'mining', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.GOLD_VEIN },
+    MITHRIL_VEIN: { name: 'Mithril Vein', time: BASE_GATHERING_TIME + 5000, levelReq: 40, xp: 120, item: 'mithril_ore', skill: 'mining', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.MITHRIL_VEIN },
+    ADAMANT_VEIN: { name: 'Adamant Vein', time: BASE_GATHERING_TIME + 6500, levelReq: 50, xp: 180, item: 'adamant_ore', skill: 'mining', maxDurability: 9, sprite: SPRITES.RESOURCE_NODES.ADAMANT_VEIN },
+    // --- Crafting Stations ---
     CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'woodworking', size: {w: 2, h: 1}, sprite: SPRITES.CRAFTING_STATIONS.CARPENTRY_TABLE },
     FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1}, sprite: SPRITES.CRAFTING_STATIONS.FORGE },
     COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2}, sprite: SPRITES.CRAFTING_STATIONS.COOKING_RANGE },
-    // --- NEW TIERED RESOURCES (Tier 2-5) ---
-    OAK_TREE: { name: 'Oak Tree', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 20, item: 'oak_wood', skill: 'woodcutting', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.OAK_TREE },
-    TIN_ROCK: { name: 'Tin Rock', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 30, item: 'tin_ore', skill: 'mining', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.TIN_ROCK },
-    RIVER_FISHING_SPOT: { name: 'River Fishing Spot', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 50, item: 'salmon', skill: 'fishing', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.RIVER_FISHING_SPOT },
-
-    WILLOW_TREE: { name: 'Willow Tree', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 40, item: 'willow_wood', skill: 'woodcutting', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.WILLOW_TREE },
-    IRON_ROCK: { name: 'Iron Rock', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 60, item: 'iron_ore', skill: 'mining', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.IRON_ROCK },
-    LAKE_FISHING_SPOT: { name: 'Lake Fishing Spot', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 100, item: 'trout', skill: 'fishing', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.LAKE_FISHING_SPOT },
-
-    MAPLE_TREE: { name: 'Maple Tree', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 80, item: 'maple_wood', skill: 'woodcutting', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.MAPLE_TREE },
-    SILVER_ROCK: { name: 'Silver Rock', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 120, item: 'silver_ore', skill: 'mining', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.SILVER_ROCK },
-    OCEAN_FISHING_SPOT: { name: 'Ocean Fishing Spot', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 200, item: 'tuna', skill: 'fishing', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.OCEAN_FISHING_SPOT },
-
-    ELDER_TREE: { name: 'Elder Tree', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 160, item: 'elder_wood', skill: 'woodcutting', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.ELDER_TREE },
-    GOLD_ROCK: { name: 'Gold Rock', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 240, item: 'gold_ore', skill: 'mining', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.GOLD_ROCK },
-    DEEP_SEA_FISHING_SPOT: { name: 'Deep Sea Fishing Spot', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 400, item: 'shark', skill: 'fishing', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.DEEP_SEA_FISHING_SPOT }
 };
 // --- World Layout ---
 export const worldData = {
@@ -271,16 +283,16 @@ export const worldData = {
         ],
         mapLayout: [
             "WWWWWWWWWWWW",
-            "WCC.FF.....W",
-            "WCC.FF.....W",
-            "W..........W",
-            "W..........W",
-            "W..........W",
-            "W..........W",
-            "W..........W",
-            "WOO........W",
-            "WOO........W",
-            "W..........W",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
+            "WMMMMMMMMMMW",
             "WWWWW.WWWWWW",
         ]
     },
@@ -317,21 +329,21 @@ export const worldData = {
             { "x": 15, "y": 4, "type": "HUMAN" }
         ],
         "resources": [
-            { "x": 25, "y": 20, "type": "TREE", "id": "tree_1", "currentDurability": 4 },
-            { "x": 26, "y": 22, "type": "TREE", "id": "tree_2", "currentDurability": 4 },
-            { "x": 23, "y": 20, "type": "TREE", "id": "tree_3", "currentDurability": 4 },
-            { "x": 24, "y": 24, "type": "TREE", "id": "tree_4", "currentDurability": 4 },
-            { "x": 28, "y": 10, "type": "ROCK", "id": "rock_1", "currentDurability": 4 },
-            { "x": 28, "y": 12, "type": "ROCK", "id": "rock_2", "currentDurability": 4 },
-            { "x": 26, "y": 11, "type": "ROCK", "id": "rock_3", "currentDurability": 4 },
-            { "x": 26, "y": 13, "type": "ROCK", "id": "rock_4", "currentDurability": 4 },
-            { "x": 27, "y": 15, "type": "ROCK", "id": "rock_5", "currentDurability": 4 },
-            { "x": 3, "y": 3, "type": "FISHING_SPOT", "id": "fishing_spot_1", "currentDurability": 4 },
-            { "x": 4, "y": 3, "type": "FISHING_SPOT", "id": "fishing_spot_2", "currentDurability": 4 },
-            { "x": 4, "y": 2, "type": "FISHING_SPOT", "id": "fishing_spot_3", "currentDurability": 4 },
-            { "x": 4, "y": 1, "type": "FISHING_SPOT", "id": "fishing_spot_4", "currentDurability": 4 },
-            { "x": 5, "y": 1, "type": "FISHING_SPOT", "id": "fishing_spot_5", "currentDurability": 4 },
-            { "x": 5, "y": 2, "type": "FISHING_SPOT", "id": "fishing_spot_6", "currentDurability": 4 }
+            { "x": 25, "y": 20, "type": "ASH_TREE", "id": "tree_1", "currentDurability": 4 },
+            { "x": 26, "y": 22, "type": "ASH_TREE", "id": "tree_2", "currentDurability": 4 },
+            { "x": 23, "y": 20, "type": "ASH_TREE", "id": "tree_3", "currentDurability": 4 },
+            { "x": 24, "y": 24, "type": "ASH_TREE", "id": "tree_4", "currentDurability": 4 },
+            { "x": 28, "y": 10, "type": "COPPER_VEIN", "id": "rock_1", "currentDurability": 4 },
+            { "x": 28, "y": 12, "type": "COPPER_VEIN", "id": "rock_2", "currentDurability": 4 },
+            { "x": 26, "y": 11, "type": "COPPER_VEIN", "id": "rock_3", "currentDurability": 4 },
+            { "x": 26, "y": 13, "type": "COPPER_VEIN", "id": "rock_4", "currentDurability": 4 },
+            { "x": 27, "y": 15, "type": "COPPER_VEIN", "id": "rock_5", "currentDurability": 4 },
+            { "x": 3, "y": 3, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_1", "currentDurability": 4 },
+            { "x": 4, "y": 3, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_2", "currentDurability": 4 },
+            { "x": 4, "y": 2, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_3", "currentDurability": 4 },
+            { "x": 4, "y": 1, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_4", "currentDurability": 4 },
+            { "x": 5, "y": 1, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_5", "currentDurability": 4 },
+            { "x": 5, "y": 2, "type": "MACKEREL_FISHING_SPOT", "id": "fishing_spot_6", "currentDurability": 4 }
         ],
         "mapLayout": [
             "FFFFFFFFFFF      .   FFFFFFFFFF",
@@ -387,7 +399,7 @@ export const CRAFTING_DATA = {
         recipes: {
             cooked_fish: {
                 name: 'Cooked Fish', unlockLevel: 1, cost: { fish: 1 }, // Per-craft cost: 1 fish
-                unlockCost: { fish: 50 }, // Initial unlock cost: 50 fish (resource of the skill)
+                unlockCost: { 'mackarel': 50 }, // Initial unlock cost: 50 fish (resource of the skill)
                 time: BASE_CRAFTING_TIME,
                 masteryPerCraft: 5, masteryCurve: (level) => 10 + (level * 5),
                 bonus: (level) => ({ type: 'ADD_MAX_HP', value: level * 2 })
@@ -414,7 +426,7 @@ export const CRAFTING_DATA = {
             },
             wooden_axe: {
                 name: 'Wooden Axe', unlockLevel: 2, cost: { wood: 1 }, // Per-craft cost: 1 wood
-                unlockCost: { wood: 80 }, // Initial unlock cost: 80 wood (resource of the skill)
+                unlockCost: { 'oak_wood': 80 }, // Initial unlock cost: 80 wood (resource of the skill)
                 time: BASE_CRAFTING_TIME,
                 masteryPerCraft: 12, masteryCurve: (level) => 60 + (level * 12),
                 bonus: (level) => ({ type: 'ADD_DAMAGE', value: level * 0.1 })
@@ -426,7 +438,7 @@ export const CRAFTING_DATA = {
         skill: 'blacksmithing',
         recipes: {
             copper_sword: {
-                name: 'Copper Sword', unlockLevel: 1, cost: { copper_ore: 1 }, // Per-craft cost: 1 copper_ore (as you specified)
+                name: 'Copper Sword', unlockLevel: 1, cost: { ore: 1 }, // Per-craft cost: 1 copper_ore (as you specified)
                 unlockCost: { copper_ore: 100 }, // Initial unlock cost: 100 copper_ore (resource of the skill)
                 time: BASE_CRAFTING_TIME,
                 masteryPerCraft: 5, masteryCurve: (level) => 20 + (level * 5),
