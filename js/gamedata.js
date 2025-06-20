@@ -41,7 +41,7 @@
 // --- Core Game Mechanics ---
 export const TILE_SIZE = 32;
 export const BASE_CRAFTING_TIME = 1000;
-export const BASE_GATHERING_SPEED = 4000; // New universal base speed for gathering skills
+export const BASE_GATHERING_SPEED = 5000; // New universal base speed for gathering skills
 // Note: MAP_WIDTH/HEIGHT are now fallback values.
 // The game will prioritize per-zone dimensions.
 export const MAP_WIDTH_TILES = 150;
