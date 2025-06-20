@@ -7,7 +7,8 @@
 import {
     MAP_WIDTH_TILES, MAP_HEIGHT_TILES, RESPAWN_TIME, MAX_CHARACTERS, CHARACTER_COLORS,
     TILES, ITEM_SPRITES, ITEM_DROP_DATA, ENEMIES_DATA, RESOURCE_DATA, worldData, ALTAR_UPGRADES, SPRITES,
-    CRAFTING_DATA // --- THIS IS THE ONLY IMPORT NEEDED NOW ---
+    CRAFTING_DATA, // --- THIS IS THE ONLY IMPORT NEEDED NOW ---
+    RESOURCE_CATEGORIES // --- NEW: Import RESOURCE_CATEGORIES ---
 } from './gamedata.js';
 
 
@@ -457,15 +458,54 @@ function renderCraftingList(categoryKey) {
 
 function craftRecipe(categoryKey, recipeId) {
     const recipeData = CRAFTING_DATA[categoryKey].recipes[recipeId];
-    const cost = recipeData.cost;
+    // Check if the recipe is for mastery increasing (cost of 1 generic resource) or initial unlock (specific resource cost)
+    const isMasteryCraft = gameState.craftingMastery[recipeId]?.unlocked;
 
-    // Check if player can afford the cost
-    if (Object.keys(cost).every(mat => (gameState.inventory[mat] || 0) >= cost[mat])) {
+    let canAfford = true;
+    let costToDeduct = {};
+
+    if (isMasteryCraft) {
+        // For mastery crafts, cost is always 1 unit of the generic category
+        for (const mat in recipeData.cost) { // mat here will be like 'wood', 'fish', 'copper_ore'
+            const requiredAmount = recipeData.cost[mat]; // This will be 1 for mastery crafts based on current understanding
+            if (getCategoryResourceCount(mat) < requiredAmount) { // Check if total category resources are enough
+                canAfford = false;
+                break;
+            }
+            costToDeduct[mat] = requiredAmount; // Mark to deduct 1 generic unit
+        }
+    } else {
+        // For initial unlock, check specific resources and quantities from unlockCost
+        const unlockCost = recipeData.unlockCost;
+        if (!unlockCost) { // Should not happen if unlock is required
+            canAfford = false;
+        } else {
+            for (const mat in unlockCost) {
+                if ((gameState.inventory[mat] || 0) < unlockCost[mat]) {
+                    canAfford = false;
+                    break;
+                }
+                costToDeduct[mat] = unlockCost[mat]; // Mark to deduct specific units
+            }
+        }
+    }
+
+    if (canAfford) {
         // Deduct materials
-        Object.keys(cost).forEach(mat => gameState.inventory[mat] -= cost[mat]);
+        if (isMasteryCraft) {
+            // Deduct 1 generic resource from the category
+            for (const mat in costToDeduct) {
+                deductCategoryResource(mat, costToDeduct[mat]);
+            }
+        } else {
+            // Deduct specific resources for unlock
+            for (const mat in costToDeduct) {
+                gameState.inventory[mat] -= costToDeduct[mat];
+            }
+        }
 
         // Grant XP to the crafting skill
-        gainSkillXp(CRAFTING_DATA[categoryKey].skill, 25); // Grant 25 xp per craft
+        gainSkillXp(CRAFTING_DATA[categoryKey].skill, 25);
 
         // Initialize mastery data if it doesn't exist
         if (!gameState.craftingMastery[recipeId]) {
@@ -494,7 +534,16 @@ function craftRecipe(categoryKey, recipeId) {
         }
 
     } else {
-        showNotification(`Not enough materials.`);
+        // Display notification based on whether it's an unlock or mastery craft
+        if (isMasteryCraft) {
+            showNotification(`Not enough generic materials for ${recipeData.name}.`);
+        } else {
+            let costString = '';
+            for (const mat in recipeData.unlockCost) {
+                costString += `${recipeData.unlockCost[mat]} ${ITEM_SPRITES[mat]} `;
+            }
+            showNotification(`Cannot afford to unlock ${recipeData.name}. Need: ${costString.trim()}`);
+        }
     }
 
     renderCraftingList(categoryKey);
@@ -788,6 +837,48 @@ function getEnemyAt(x, y, zoneKey) {
         if (x >= enemy.x && x < enemy.x + size.w && y >= enemy.y && y < enemy.y + size.h) return enemy;
     } 
     return null; 
+}
+function getCategoryResourceCount(categoryKey) {
+    let totalCount = 0;
+    const itemsInAategory = RESOURCE_CATEGORIES[categoryKey];
+    if (itemsInAategory) {
+        for (const item of itemsInAategory) {
+            totalCount += (gameState.inventory[item] || 0);
+        }
+    }
+    return totalCount;
+}
+function deductCategoryResource(categoryKey, amountToDeduct) {
+    let deductedAmount = 0;
+    const itemsInAategory = RESOURCE_CATEGORIES[categoryKey];
+
+    if (!itemsInAategory) {
+        console.warn(`Attempted to deduct from unknown resource category: ${categoryKey}`);
+        return false;
+    }
+
+    // Sort items by presumed tier (lowest tier item name first, simple alphabetical for now)
+    // For actual tiering, you might need a tier property in RESOURCE_DATA or similar
+    const sortedItems = [...itemsInAategory].sort((a, b) => {
+        // Simple alphabetical sort for now, assuming 'wood' < 'oak_wood' etc.
+        // For more robust tiering, define a tier value in gamedata.js for each item
+        return a.localeCompare(b);
+    });
+
+    for (const item of sortedItems) {
+        const available = gameState.inventory[item] || 0;
+        const canDeduct = Math.min(available, amountToDeduct - deductedAmount);
+
+        if (canDeduct > 0) {
+            gameState.inventory[item] -= canDeduct;
+            deductedAmount += canDeduct;
+        }
+
+        if (deductedAmount >= amountToDeduct) {
+            break; // All required amount deducted
+        }
+    }
+    return deductedAmount === amountToDeduct;
 }
 // text file 1 end
 // text file 2 begin
@@ -1763,8 +1854,28 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
          automation.busyUntil = null;
     }
     if (automation.busyUntil && gameTime < automation.busyUntil) {
-        setStatus('Crafting...');
-        automation.state = 'PERFORMING_ACTION';
+        if (automation.task === 'crafting' && automation.recipeId) {
+            const stationResource = findResourceById(automation.targetId);
+            if (stationResource) {
+                const skillKey = RESOURCE_DATA[stationResource.type]?.skill;
+                const recipeData = CRAFTING_DATA[skillKey]?.recipes[automation.recipeId];
+                if (recipeData) {
+                    const primaryCostResource = Object.keys(recipeData.cost)[0];
+                    if (primaryCostResource) {
+                        const totalAvailable = getCategoryResourceCount(primaryCostResource);
+                        setStatus(`Crafting... (${totalAvailable})`);
+                    } else {
+                        setStatus('Crafting...');
+                    }
+                } else {
+                    setStatus('Crafting...');
+                }
+            } else {
+                setStatus('Crafting...');
+            }
+        } else {
+            setStatus('Performing action...');
+        }
         return;
     }
     automation.busyUntil = null;
@@ -1777,9 +1888,12 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 const entityDef = RESOURCE_DATA[entity.type];
                 if (entityDef && CRAFTING_DATA[entityDef.skill] && mark.recipeId) {
                     const recipeData = CRAFTING_DATA[entityDef.skill].recipes[mark.recipeId];
-                    if (recipeData && Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
-                        anyStationNowCraftable = true;
-                        break;
+                    if (recipeData) {
+                        const primaryCostResource = Object.keys(recipeData.cost)[0];
+                        if (primaryCostResource && getCategoryResourceCount(primaryCostResource) >= recipeData.cost[primaryCostResource]) {
+                            anyStationNowCraftable = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -1813,7 +1927,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             if (isAvailable && entity.currentDurability <= 0 && entityDef.maxDurability) {
                 entity.currentDurability = entityDef.maxDurability;
                 entity.nextAvailableTime = null;
-                // Removed: console.log(`[Resource Respawn] ${entity.type} (ID: ${entity.id}) respawned, durability reset to ${entity.currentDurability}`);
             }
             return isAvailable;
         }
@@ -1865,7 +1978,6 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 startIndex++;
                 continue;
             }
-            for (const mat in recipeData.cost) {
             const masteryData = gameState.craftingMastery[markedRecipeId] || { unlocked: false, level: 0, progress: 0 };
             if (!masteryData.unlocked) {
                 attemptedCycleCount++;
@@ -1873,9 +1985,8 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 continue;
             }
 
-                // Removed: console.log(`Material '${mat}': Needed=${recipeData.cost[mat]}, Have=${gameState.inventory[mat] || 0}`);
-            }
-            const canAfford = Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat]);
+            const primaryCostResource = Object.keys(recipeData.cost)[0];
+            const canAfford = primaryCostResource ? getCategoryResourceCount(primaryCostResource) >= recipeData.cost[primaryCostResource] : false;
 
             if (canAfford) {
                 bestTarget = targetEntry;
@@ -1963,7 +2074,8 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             const categoryData = CRAFTING_DATA[skillKey];
             const recipeData = categoryData.recipes[markedRecipeId];
 
-            if (!Object.keys(recipeData.cost).every(mat => (gameState.inventory[mat] || 0) >= recipeData.cost[mat])) {
+            const primaryCostResource = Object.keys(recipeData.cost)[0];
+            if (!primaryCostResource || getCategoryResourceCount(primaryCostResource) < recipeData.cost[primaryCostResource]) {
                 setStatus(`Not enough materials for ${recipeData.name}. Moving to next station.`);
                 automation.busyUntil = null;
                 automation.state = 'IDLE';
@@ -1984,7 +2096,8 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 return;
             }
 
-            Object.keys(recipeData.cost).forEach(mat => gameState.inventory[mat] -= recipeData.cost[mat]);
+            deductCategoryResource(primaryCostResource, recipeData.cost[primaryCostResource]);
+
             gainSkillXp(categoryData.skill, 25);
             const masteryData = gameState.craftingMastery[markedRecipeId] || { unlocked: false, level: 0, progress: 0 };
             masteryData.progress += recipeData.masteryPerCraft;
@@ -1997,7 +2110,8 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
                 progressNeeded = recipeData.masteryCurve(masteryData.level);
             }
             automation.busyUntil = gameTime + recipeData.time;
-            setStatus('Crafting...');
+            const totalAvailableAfterCraft = getCategoryResourceCount(primaryCostResource);
+            setStatus(`Crafting... (${totalAvailableAfterCraft})`);
             saveGameState();
             updateAllUI();
 
@@ -2012,7 +2126,7 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         } else {
             const resourceDef = RESOURCE_DATA[targetEntity.type];
             if (automation.targetId !== targetEntity.id) {
-                automation.targetId = targetEntity.id;
+                automation.targetId = targetEntity.id; // Corrected: Use targetEntity.id
                 automation.gatheringState.lastGatherAttemptTime = gameTime;
             }
             setStatus(`Gathering ${entityName}... (${targetEntity.currentDurability}/${resourceDef.maxDurability})`);

@@ -9,7 +9,6 @@
 // block the path of the player to go past them (unless it's on purpose). those are all my rules for now, if you wanna get creative with it and try something that might be cool, go for it.
 // and have landmarks for example, spaces for a town and a outpost in every zone, structures that would house monsters plus open forests that house wild animals.
 // the world is the same for every player that opens the game, it's not randomly generated when it's launched.
-// also to AI, if you make changes or adjustments to the game, please tick up the version indicator by 1
 // also also to AI, if you make the code in the chat log too long, i am unable to apply changes to it, so if the change is long, make it in
 // two or more diff review tabs please.
 // marking is supposed to work like this:(i might change it later, for now it's this) when you mark first, you go to the target and start combat
@@ -40,8 +39,8 @@
 
 // --- Core Game Mechanics ---
 export const TILE_SIZE = 32;
-export const BASE_CRAFTING_TIME = 1000;
-export const BASE_GATHERING_SPEED = 5000; // New universal base speed for gathering skills
+export const BASE_CRAFTING_TIME = 1500;
+export const BASE_GATHERING_TIME = 5000; // New universal base speed for gathering skills
 // Note: MAP_WIDTH/HEIGHT are now fallback values.
 // The game will prioritize per-zone dimensions.
 export const MAP_WIDTH_TILES = 150;
@@ -71,7 +70,13 @@ export const TILES = {
     DOOR_2: 10,
     STONE_WALL: 11 // Corrected unique ID
 };
-
+export const RESOURCE_CATEGORIES = {
+    wood: ['wood', 'oak_wood', 'willow_wood', 'maple_wood', 'elder_wood'],
+    ore: ['copper_ore', 'tin_ore', 'iron_ore', 'silver_ore', 'gold_ore'],
+    fish: ['fish', 'salmon', 'trout', 'tuna', 'shark'],
+    ragingSoul: ['ragingSoul'],   // Add if you ever want to categorize raging souls
+    soulFragment: ['soulFragment']
+};
 export const ITEM_SPRITES = {
     // ... existing item sprites ...
     soulFragment: '✧',
@@ -228,28 +233,28 @@ export const ENEMIES_DATA = {
 
 // --- Resource Definitions ---
 export const RESOURCE_DATA = {
-    TREE: { name: 'Tree', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.TREE },
-    ROCK: { name: 'Copper Rock', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.ROCK },
-    FISHING_SPOT: { name: 'Fishing Spot', time: BASE_GATHERING_SPEED, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.FISHING_SPOT },
+    TREE: { name: 'Tree', time: BASE_GATHERING_TIME, levelReq: 1, xp: 10, item: 'wood', skill: 'woodcutting', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.TREE },
+    ROCK: { name: 'Copper Rock', time: BASE_GATHERING_TIME, levelReq: 1, xp: 15, item: 'copper_ore', skill: 'mining', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.ROCK },
+    FISHING_SPOT: { name: 'Fishing Spot', time: BASE_GATHERING_TIME, levelReq: 1, xp: 25, item: 'fish', skill: 'fishing', maxDurability: 4, sprite: SPRITES.RESOURCE_NODES.FISHING_SPOT },
     CARPENTRY_TABLE: { name: 'Carpentry Table', skill: 'woodworking', size: {w: 2, h: 1}, sprite: SPRITES.CRAFTING_STATIONS.CARPENTRY_TABLE },
     FORGE: { name: 'Forge', skill: 'blacksmithing', size: {w: 2, h: 1}, sprite: SPRITES.CRAFTING_STATIONS.FORGE },
     COOKING_RANGE: { name: 'Cooking Range', skill: 'cooking', size: {w: 1, h: 2}, sprite: SPRITES.CRAFTING_STATIONS.COOKING_RANGE },
     // --- NEW TIERED RESOURCES (Tier 2-5) ---
-    OAK_TREE: { name: 'Oak Tree', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 20, item: 'oak_wood', skill: 'woodcutting', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.OAK_TREE },
-    TIN_ROCK: { name: 'Tin Rock', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 30, item: 'tin_ore', skill: 'mining', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.TIN_ROCK },
-    RIVER_FISHING_SPOT: { name: 'River Fishing Spot', time: BASE_GATHERING_SPEED + 1000, levelReq: 5, xp: 50, item: 'salmon', skill: 'fishing', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.RIVER_FISHING_SPOT },
+    OAK_TREE: { name: 'Oak Tree', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 20, item: 'oak_wood', skill: 'woodcutting', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.OAK_TREE },
+    TIN_ROCK: { name: 'Tin Rock', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 30, item: 'tin_ore', skill: 'mining', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.TIN_ROCK },
+    RIVER_FISHING_SPOT: { name: 'River Fishing Spot', time: BASE_GATHERING_TIME + 1000, levelReq: 5, xp: 50, item: 'salmon', skill: 'fishing', maxDurability: 5, sprite: SPRITES.RESOURCE_NODES.RIVER_FISHING_SPOT },
 
-    WILLOW_TREE: { name: 'Willow Tree', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 40, item: 'willow_wood', skill: 'woodcutting', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.WILLOW_TREE },
-    IRON_ROCK: { name: 'Iron Rock', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 60, item: 'iron_ore', skill: 'mining', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.IRON_ROCK },
-    LAKE_FISHING_SPOT: { name: 'Lake Fishing Spot', time: BASE_GATHERING_SPEED + 2000, levelReq: 10, xp: 100, item: 'trout', skill: 'fishing', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.LAKE_FISHING_SPOT },
+    WILLOW_TREE: { name: 'Willow Tree', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 40, item: 'willow_wood', skill: 'woodcutting', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.WILLOW_TREE },
+    IRON_ROCK: { name: 'Iron Rock', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 60, item: 'iron_ore', skill: 'mining', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.IRON_ROCK },
+    LAKE_FISHING_SPOT: { name: 'Lake Fishing Spot', time: BASE_GATHERING_TIME + 2000, levelReq: 10, xp: 100, item: 'trout', skill: 'fishing', maxDurability: 6, sprite: SPRITES.RESOURCE_NODES.LAKE_FISHING_SPOT },
 
-    MAPLE_TREE: { name: 'Maple Tree', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 80, item: 'maple_wood', skill: 'woodcutting', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.MAPLE_TREE },
-    SILVER_ROCK: { name: 'Silver Rock', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 120, item: 'silver_ore', skill: 'mining', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.SILVER_ROCK },
-    OCEAN_FISHING_SPOT: { name: 'Ocean Fishing Spot', time: BASE_GATHERING_SPEED + 3000, levelReq: 20, xp: 200, item: 'tuna', skill: 'fishing', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.OCEAN_FISHING_SPOT },
+    MAPLE_TREE: { name: 'Maple Tree', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 80, item: 'maple_wood', skill: 'woodcutting', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.MAPLE_TREE },
+    SILVER_ROCK: { name: 'Silver Rock', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 120, item: 'silver_ore', skill: 'mining', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.SILVER_ROCK },
+    OCEAN_FISHING_SPOT: { name: 'Ocean Fishing Spot', time: BASE_GATHERING_TIME + 3000, levelReq: 20, xp: 200, item: 'tuna', skill: 'fishing', maxDurability: 7, sprite: SPRITES.RESOURCE_NODES.OCEAN_FISHING_SPOT },
 
-    ELDER_TREE: { name: 'Elder Tree', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 160, item: 'elder_wood', skill: 'woodcutting', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.ELDER_TREE },
-    GOLD_ROCK: { name: 'Gold Rock', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 240, item: 'gold_ore', skill: 'mining', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.GOLD_ROCK },
-    DEEP_SEA_FISHING_SPOT: { name: 'Deep Sea Fishing Spot', time: BASE_GATHERING_SPEED + 4000, levelReq: 40, xp: 400, item: 'shark', skill: 'fishing', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.DEEP_SEA_FISHING_SPOT }
+    ELDER_TREE: { name: 'Elder Tree', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 160, item: 'elder_wood', skill: 'woodcutting', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.ELDER_TREE },
+    GOLD_ROCK: { name: 'Gold Rock', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 240, item: 'gold_ore', skill: 'mining', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.GOLD_ROCK },
+    DEEP_SEA_FISHING_SPOT: { name: 'Deep Sea Fishing Spot', time: BASE_GATHERING_TIME + 4000, levelReq: 40, xp: 400, item: 'shark', skill: 'fishing', maxDurability: 8, sprite: SPRITES.RESOURCE_NODES.DEEP_SEA_FISHING_SPOT }
 };
 // --- World Layout ---
 export const worldData = {
