@@ -242,7 +242,23 @@ function buildMapData(zoneX, zoneY) {
     return newMapData;
 }
 
+function updateAllPlayerRegen(gameTime) {
+    gameState.characters.forEach(char => {
+        if (char.isDead || char.hp.current >= char.hp.max) return;
 
+        // Recalculate stats for the character to get their specific regen bonus
+        const charStats = recalculateCharacterStats(char);
+
+        if (gameTime - (char.lastRegenTime || 0) > 1000) {
+            const baseRegen = char.hp.max * 0.01;
+            const bonusRegen = char.hp.max * (charStats.hpRegenBonus || 0); // Use character's own bonus
+            const totalRegen = baseRegen + bonusRegen;
+            char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
+            char.lastRegenTime = gameTime;
+            if (char.id === getActiveCharacter().id) updateAllUI();
+        }
+    });
+}
 function getDefaultCharacterState(id, name, color) {
     const startPos = { x: 15, y: 15 };
     return {
@@ -254,7 +270,19 @@ function getDefaultCharacterState(id, name, color) {
         movementCooldown: 0,
         hp: { current: 5, max: 5 },
         lastRegenTime: 0, isDead: false,
-        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastGatherAttemptTime: 0 }, craftingMarkIndex: 0, zonePath: [] }, // Added craftingMarkIndex
+
+        equipment: {
+            head: null, chest: null, legs: null, weapon: null, tool: null,
+        },
+        // --- NEW: Add a personal combat level to each character ---
+        level: { current: 1, xp: 0 },
+        
+        skills: {
+            woodcutting: { level: 1, xp: 0 }, mining: { level: 1, xp: 0 }, fishing: { level: 1, xp: 0 },
+            cooking: { level: 1, xp: 0 }, woodworking: { level: 1, xp: 0 }, blacksmithing: { level: 1, xp: 0 }
+        },
+
+        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastGatherAttemptTime: 0 }, craftingMarkIndex: 0, zonePath: [] },
         combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 }
     };
 }
@@ -263,7 +291,7 @@ function getDefaultGameState() {
     return {
         characters: [], activeCharacterIndex: 0,
         inventory: {
-            soulFragment: 1000, ragingSoul: 0,
+            soulFragment: 0, ragingSoul: 0,
             wood: 0, copper_ore: 0, mackarel: 0
         },
         level: { current: 1, xp: 0 },
@@ -367,7 +395,11 @@ function gameLoop(timestamp) {
         }
 
         gameState.characters.forEach(char => {
-            updateCharacterVisuals(char, deltaTime);
+            // --- THIS IS THE FIX ---
+            // This 'if (char)' check prevents the game from trying to update a non-existent character.
+            if (char) {
+                updateCharacterVisuals(char, deltaTime);
+            }
         });
 
         updateCombatPanelUI();
@@ -381,8 +413,8 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-function getEffectiveMoveSpeeds() {
-    const stats = getTeamStats();
+function getEffectiveMoveSpeeds(character) {
+    const stats = recalculateCharacterStats(character); // Changed from getTeamStats()
     const speedBonus = 1 + (stats.speed * 0.01); 
     const effectiveTileSpeed = BASE_MOVEMENT_SPEED * speedBonus;
     return {
@@ -403,13 +435,11 @@ function updateCharacterLogic(character, logicDelta) {
         character.target.x = nextStep.x;
         character.target.y = nextStep.y;
         
-        const speeds = getEffectiveMoveSpeeds();
+        const speeds = getEffectiveMoveSpeeds(character); // Pass the character here
         character.movementCooldown = speeds.stepInterval;
 
-        // THE FIX: Reverted to only check for a gateway at the END of a path.
         if (character.path.length === 0) {
          checkForGateway(character);
-         // If automation is active and path is complete, transition to IDLE
          if (character.automation.active) {
             character.automation.state = 'IDLE'; 
          }
@@ -610,7 +640,7 @@ function updateCharacterVisuals(character, frameDelta) {
     const dy = targetY - visualY;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    const speeds = getEffectiveMoveSpeeds();
+    const speeds = getEffectiveMoveSpeeds(character);
     const moveAmount = (speeds.visualSpeed / 1000) * frameDelta; 
 
     if (distance <= moveAmount) {
@@ -986,10 +1016,22 @@ function deductCategoryResource(categoryKey, amountToDeduct) {
 function getResourceNodeAt(x, y, zoneX, zoneY) {
     const zone = worldData[`${zoneX},${zoneY}`];
     if (!zone || !zone.resources) return null;
-    return zone.resources.find(r => {
-        const size = r.size || {w: 1, h: 1};
+
+    const resource = zone.resources.find(r => {
+        const resourceDef = RESOURCE_DATA[r.type];
+        if (!resourceDef) return false;
+        const size = resourceDef.size || { w: 1, h: 1 }; // Correctly get size from definition
         return x >= r.x && x < r.x + size.w && y >= r.y && y < r.y + size.h;
     });
+
+    if (resource) {
+        // Return a shallow copy with zone info attached.
+        // This is safe because the original object in worldData is not modified,
+        // and any logic that needs to mutate state (like durability) will fetch the original object using findResourceById.
+        return { ...resource, zoneX, zoneY };
+    }
+
+    return null;
 }
 
 function handleKeydown(e) {
@@ -1069,10 +1111,13 @@ function handleLeftClick(e) {
     const resource = getResourceNodeAt(x, y, ...zoneKey.split(',').map(Number));
     
     if (scoutModeZoneKey) {
-        if (enemy) {
-            handleMarking(enemy);
+        // --- START FIX: Allow marking resources in scout mode ---
+        const entityToMark = enemy || resource; // Check for enemy first, then resource
+        if (entityToMark) {
+            handleMarking(entityToMark);
         }
-        return; // In scout mode, we only allow marking enemies.
+        return; // In scout mode, clicks are only for marking.
+        // --- END FIX ---
     }
     const gateway = getGatewayAt(x, y, zoneKey); // Check if click was on a gateway
 
@@ -1672,11 +1717,6 @@ function renderInventory() {
     }
 }
 
-function getTeamStats() {
-    // Instead of recalculating here, simply call the function that already does it correctly.
-    // This ensures all bonuses (including crafting mastery) are always applied.
-    return recalculateTeamStats();
-}
 function updateCombat(character, gameTime) { 
     const { combat } = character; 
     if (!combat.active || character.isDead) return;
@@ -1687,33 +1727,36 @@ function updateCombat(character, gameTime) {
     const enemy = findEnemyById(combat.targetId);
     if (!enemy) { endCombat(character, true); return; } 
     
-    const playerStats = getTeamStats(); 
+    const playerStats = recalculateCharacterStats(character);
     let damage; 
-
-    // --- THIS IS THE CORRECTED PART ---
-    const activeChar = getActiveCharacter(); // Get the currently viewed character
+    const activeChar = getActiveCharacter();
 
     if (combat.isPlayerTurn) { 
         damage = Math.max(1, playerStats.damage); 
         enemy.currentHp -= damage; 
-        // Only show damage if the combat is in the same zone as the active character
         if (character.zoneX === activeChar.zoneX && character.zoneY === activeChar.zoneY) {
             showDamagePopup(enemy.x, enemy.y, damage, false); 
         }
-        gainXp(damage); 
+        gainXp(character, damage); 
     } else { 
         const enemyData = ENEMIES_DATA[enemy.type]; 
         const damageReduction = playerStats.defense * 0.25;
         damage = Math.max(0, enemyData.attack - damageReduction); 
         character.hp.current -= damage; 
-        // Only show damage if the combat is in the same zone as the active character
         if (character.zoneX === activeChar.zoneX && character.zoneY === activeChar.zoneY) {
             showDamagePopup(character.player.x, character.player.y, damage, true); 
         }
     } 
 
     combat.isPlayerTurn = !combat.isPlayerTurn; 
-    if (character.id === getActiveCharacter().id) updateCombatPanelUI(); 
+    
+    // This block ensures both player and enemy UI panels are updated
+    // when the active character is in combat.
+    if (character.id === getActiveCharacter().id) {
+        updateAllUI();
+        updateCombatPanelUI();
+    }
+    
     if (enemy.currentHp <= 0) endCombat(character, true); 
     else if (character.hp.current <= 0) endCombat(character, false); 
 }
@@ -1833,39 +1876,39 @@ function endCombat(character, playerWon) {
 }
 // text file 2 end
 // text file 3 begin
-function recalculateTeamStats() {
-    // Start with base stats
-    const baseDamage = 1 + Math.floor(gameState.level.current / 2);
-    let totalDamage = baseDamage + (gameState.upgrades.plusOneDamage || 0);
-    let totalMarks = 1 + (gameState.upgrades.plusOneMaxMarks || 0);
-    let totalSpeed = (gameState.upgrades.plusOneSpeed || 0);
-    let totalHpRegenBonus = 0;
-    let totalDefense = (gameState.level.current - 1) + (gameState.upgrades.plusOneDefense || 0);
-    let totalMaxHpBonus = (gameState.upgrades.plusTwoMaxHp || 0) * 2;
-    totalMaxHpBonus += (gameState.skills.fishing.level - 1) * 3;
+function recalculateCharacterStats(character) {
+    // Start with base stats and add per-level gains
+    let damage = 1 + Math.floor(character.level.current / 2);
+    let speed = 0;
+    let defense = character.level.current - 1;
+    let maxHp = 4 + character.level.current;
+    let hpRegenBonus = 0; 
 
-    // Add bonuses from trophy items
+    // Add stats from GLOBAL Altar upgrades
+    damage += (gameState.upgrades.plusOneDamage || 0);
+    speed += (gameState.upgrades.plusOneSpeed || 0);
+    defense += (gameState.upgrades.plusOneDefense || 0);
+    maxHp += (gameState.upgrades.plusTwoMaxHp || 0) * 2;
+
+    // Add bonuses from collected item drops
     if (gameState.collectedItemDrops) {
         gameState.collectedItemDrops.forEach(itemDropId => {
             const itemDrop = ITEM_DROP_DATA[itemDropId];
             if (!itemDrop) return;
             switch(itemDrop.effect.type) {
-                case 'ADD_DAMAGE': totalDamage += itemDrop.effect.value; break;
-                case 'ADD_SPEED': totalSpeed += itemDrop.effect.value; break;
-                case 'ADD_HP_REGEN': totalHpRegenBonus += itemDrop.effect.value; break;
-                case 'ADD_DEFENSE': totalDefense += itemDrop.effect.value; break;
-                case 'ADD_MAX_HP': totalMaxHpBonus += itemDrop.effect.value; break;
+                case 'ADD_DAMAGE': damage += itemDrop.effect.value; break;
+                case 'ADD_SPEED': speed += itemDrop.effect.value; break;
+                case 'ADD_DEFENSE': defense += itemDrop.effect.value; break;
+                case 'ADD_MAX_HP': maxHp += itemDrop.effect.value; break;
+                case 'ADD_HP_REGEN': hpRegenBonus += itemDrop.effect.value; break;
             }
         });
     }
-
+    
     // Add bonuses from Crafting Mastery
     if (gameState.craftingMastery) {
         for (const recipeId in gameState.craftingMastery) {
             const masteryData = gameState.craftingMastery[recipeId];
-
-            // Removed: console.log(`Mastery for recipe '${recipeId}': Unlocked = ${masteryData.unlocked}, Level = ${masteryData.level}, Progress = ${masteryData.progress}`);
-
             if (masteryData.unlocked) {
                 let recipeDef;
                 for (const categoryKey in CRAFTING_DATA) {
@@ -1874,61 +1917,54 @@ function recalculateTeamStats() {
                         break;
                     }
                 }
-
                 if (recipeDef && recipeDef.bonus) {
                     const bonus = recipeDef.bonus(masteryData.level);
                     switch(bonus.type) {
-                        case 'ADD_DAMAGE': totalDamage += bonus.value; break;
-                        case 'ADD_SPEED': totalSpeed += bonus.value; break;
-                        case 'ADD_DEFENSE': totalDefense += bonus.value; break;
-                        case 'ADD_MAX_HP': totalMaxHpBonus += bonus.value; break;
+                        case 'ADD_DAMAGE': damage += bonus.value; break;
+                        case 'ADD_SPEED': speed += bonus.value; break;
+                        case 'ADD_DEFENSE': defense += bonus.value; break;
+                        case 'ADD_MAX_HP': maxHp += bonus.value; break;
                     }
                 }
             }
         }
     }
 
-    // Apply final stats to characters
-    const finalMaxHp = 4 + gameState.level.current + totalMaxHpBonus;
-    gameState.characters.forEach(char => {
-        const oldMaxHp = char.hp.max;
-        char.hp.max = finalMaxHp;
-        const diff = char.hp.max - oldMaxHp;
-        char.hp.current = Math.min(char.hp.max, char.hp.current + diff);
-    });
+    // Apply final max HP and adjust current HP accordingly
+    const oldMaxHp = character.hp.max;
+    character.hp.max = maxHp;
+    if (character.hp.max > oldMaxHp) {
+        character.hp.current += (character.hp.max - oldMaxHp);
+    }
+    character.hp.current = Math.min(character.hp.max, character.hp.current);
 
-    // Removed: Debugging logs for calculated team stats
-    // console.log("Calculated Team Stats:");
-    // console.log(`  Damage: ${totalDamage}`);
-    // console.log(`  Speed: ${totalSpeed}`);
-    // console.log(`  Defense: ${totalDefense}`);
-    // console.log(`  Max HP Bonus: ${totalMaxHpBonus}`);
-    // console.log(`  HP Regen Bonus: ${totalHpRegenBonus}`);
+    // Return all calculated stats for this character
+    return { damage, speed, defense, maxHp, hpRegenBonus };
+}
+function recalculateTeamStats() {
+    // This function now just updates stats for all characters when a global change occurs.
+    gameState.characters.forEach(recalculateCharacterStats);
 
-    return { damage: totalDamage, maxMarks: totalMarks, speed: totalSpeed, hpRegenBonus: totalHpRegenBonus, defense: totalDefense, maxHpBonus: totalMaxHpBonus };
+    // It also returns team-wide values that aren't tied to one character.
+    return {
+        maxMarks: 1 + (gameState.upgrades.plusOneMaxMarks || 0)
+    };
 }
 
 function xpForLevel(level) { return Math.floor(50 * Math.pow(1.23, level - 1)); }
-function gainXp(amount) { 
-    const { level, upgrades, buffs } = gameState;
+function gainXp(character, amount) { // Now takes a character argument
+    const { level } = character; // Gets the level from the character
+    if (!level) return; // Safety check
+
+    // This logic can be expanded later with XP boosts etc.
     let finalAmount = amount;
     
-    if (upgrades.learningBoost && upgrades.learningBoost > 0) {
-        const boostPercentage = upgrades.learningBoost * 0.02; // 2% per level
-        finalAmount += amount * boostPercentage;
-    }
-
-    const xpBuff = buffs.find(b => b.effect.type === 'ADD_XP_BOOST');
-    if (xpBuff) {
-        finalAmount += amount * xpBuff.effect.value;
-    }
-
     level.xp += finalAmount;
     let needed = xpForLevel(level.current); 
     while (level.xp >= needed) { 
         level.xp -= needed; 
         level.current++;
-        recalculateTeamStats();
+        recalculateCharacterStats(character); // Recalculate stats for the character who leveled up
         needed = xpForLevel(level.current); 
     } 
     updateAllUI(); 
@@ -2502,19 +2538,11 @@ function findNearestResource(character, type) {
     return nearest;
 }
 
-function updateAllPlayerRegen(gameTime) {
-    const teamStats = getTeamStats();
-    gameState.characters.forEach(char => {
-        if (char.isDead || char.hp.current >= char.hp.max) return;
-        if (gameTime - (char.lastRegenTime || 0) > 1000) {
-            const baseRegen = char.hp.max * 0.01;
-            const bonusRegen = char.hp.max * (teamStats.hpRegenBonus || 0);
-            const totalRegen = baseRegen + bonusRegen;
-            char.hp.current = Math.min(char.hp.max, char.hp.current + totalRegen);
-            char.lastRegenTime = gameTime;
-            if (char.id === getActiveCharacter().id) updateAllUI();
-        }
-    });
+function getTeamStats() {
+    // This function is now only for getting purely team-wide values.
+    return {
+        maxMarks: 1 + (gameState.upgrades.plusOneMaxMarks || 0)
+    };
 }
 
 // --- A* Pathfinding Implementation ---
@@ -2969,8 +2997,12 @@ function updateCombatPanelUI() {
 
 function updateAllUI() { 
     const activeChar = getActiveCharacter(); 
-    if (!activeChar || !gameState.level) return; 
-    const teamStats = getTeamStats(); 
+    if (!activeChar) return; // Removed gameState.level check as skills are now per-character
+
+    // --- THIS IS THE KEY CHANGE ---
+    // We now calculate stats for the active character to display them
+    const individualStats = recalculateCharacterStats(activeChar); 
+    
     if (!scoutModeZoneKey && (!currentMapData || currentMapData.length === 0 || activeChar.zoneX !== (currentMapData.zoneX || -1) || activeChar.zoneY !== (currentMapData.zoneY || -1))) {
          currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
          currentMapData.zoneX = activeChar.zoneX;
@@ -2978,15 +3010,19 @@ function updateAllUI() {
     }
     renderCharacterSwitcher(); 
     ui.activeCharacterName.textContent = activeChar.name; 
-    ui.playerDamageStat.textContent = teamStats.damage; 
     
-    const speeds = getEffectiveMoveSpeeds();
-    ui.playerSpeedStat.textContent = `${teamStats.speed} (${speeds.visualSpeed.toFixed(1)} t/s)`;
+    // Update the stat display to use the individual stats
+    ui.playerDamageStat.textContent = individualStats.damage; 
+    
+    // We need to get movement speed here too for the display
+    const speeds = getEffectiveMoveSpeeds(activeChar);
+    ui.playerSpeedStat.textContent = `${individualStats.speed} (${speeds.visualSpeed.toFixed(1)} t/s)`;
 
-    const damageReduction = (teamStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
-    ui.playerDefenseStat.textContent = `${teamStats.defense} (${damageReduction})`;
+    const damageReduction = (individualStats.defense * 0.25).toFixed(2).replace(/\.00$/, '');
+    ui.playerDefenseStat.textContent = `${individualStats.defense} (${damageReduction})`;
     
-    // --- THIS LOGIC IS NOW CORRECTED ---
+    // Max marks is still a team-wide stat from the Altar for now
+    const teamStats = getTeamStats(); 
     const activeCharMarks = activeChar.automation.markedTiles.length;
     ui.markCount.textContent = `${activeCharMarks}/${teamStats.maxMarks}`; 
 
@@ -2998,7 +3034,9 @@ function updateAllUI() {
     ui.playerHpBar.style.width = `${(hp.current / hp.max) * 100}%`;
     ui.playerHpBar.textContent = `${currentHpDisplay}/${hp.max}`;
     
-    const {level} = gameState;
+    // The main level display might now refer to the active character's combat level or a primary skill
+    // For now, let's have it reflect the character's first skill as an example
+    const { level } = activeChar;
     const neededXp = xpForLevel(level.current);
     ui.playerLevel.textContent = `Lv ${level.current}`; 
     ui.xpProgress.style.width = `${(level.xp / neededXp) * 100}%`;
@@ -3039,9 +3077,23 @@ async function loadGameState() {
     
     let needsSave = false;
 
-    const timeOnLoad = currentGameTime;
-
+    // --- THIS IS THE LINE THAT IS FIXED ---
+    // It now correctly creates a single default character to get the default skills and level from.
+    const defaultCharState = getDefaultCharacterState(0, "Default", "#FFFFFF"); 
+    
     for (const char of gameState.characters) {
+        if (!char.skills) {
+            console.warn(`Character ${char.name} is from an old save. Adding default skills.`);
+            char.skills = defaultCharState.skills;
+            needsSave = true;
+        }
+        if (!char.level) {
+            console.warn(`Character ${char.name} is from an old save. Adding default level.`);
+            char.level = defaultCharState.level;
+            needsSave = true;
+        }
+    
+        const timeOnLoad = currentGameTime;
         char.lastRegenTime = timeOnLoad;
         if (char.combat) char.combat.lastUpdateTime = timeOnLoad;
         if (char.automation) char.automation.gatheringState.lastGatherAttemptTime = timeOnLoad;
@@ -3051,9 +3103,8 @@ async function loadGameState() {
         if(!char.path) { char.path = []; needsSave = true; }
         if(char.movementCooldown === undefined) { char.movementCooldown = 0; needsSave = true; }
 
-        currentMapData = buildMapData(char.zoneX, char.zoneY); // Still used for drawing, but not pathfinding
+        currentMapData = buildMapData(char.zoneX, char.zoneY);
 
-        // Call to isWalkable is already correct here, passing zoneX, zoneY
         if (!isWalkable(char.player.x, char.player.y, char.zoneX, char.zoneY, true)) {
             console.warn(`Character ${char.name} at (${char.player.x}, ${char.player.y}) in zone ${char.zoneX},${char.zoneY} is in an invalid tile. Resetting position.`);
             const respawnPos = { x: 15, y: 15 };
@@ -3080,11 +3131,6 @@ async function loadGameState() {
             needsSave = true;
         }
     };
-
-    if (gameState.upgrades) {
-        gameState.upgrades.plusOneSpeed = 100;
-        console.log("CHEAT APPLIED: Speed stat (plusOneSpeed upgrade) set to 100.");
-    }
 
     recalculateTeamStats();
 
