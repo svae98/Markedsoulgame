@@ -56,19 +56,24 @@ function getSpriteCoords(colIndex, rowIndex) {
 }
 // --- Tile & Item Definitions ---
 export const TILES = {
+    // Walkable
     GRASS: 0,
-    WALL: 1,
-    DEEP_FOREST: 2,
-    DEEP_WATER: 3,
     PATH: 4,
     SAND: 5,
     DIRT: 6,
     SHALLOW_WATER: 7,
-    // --- NEW UNWALKABLE TILES (Corrected IDs) ---
+    DARK_GRASS: 13,
+    BRIDGE: 14,
+    FLOORBOARDS: 15,
+
+    // Unwalkable
+    WALL: 1,
+    DEEP_FOREST: 2,
+    DEEP_WATER: 3,
     HOUSE_WALL: 8,
     DOOR_1: 9,
     DOOR_2: 10,
-    STONE_WALL: 11, // Corrected unique ID
+    STONE_WALL: 11,
     RUINED_WALL: 12
 };
 export const RESOURCE_CATEGORIES = {
@@ -83,7 +88,7 @@ export const ITEM_SPRITES = {
     soulFragment: '✧',
     ragingSoul: '✧',
     // Woodcutting
-    ash_wood: '🪵', 
+    ash_wood: '🪵',
     oak_wood: '🌳',
     willow_wood: '🌿',
     maple_wood: '🍁',
@@ -111,63 +116,65 @@ export const ITEM_SPRITES = {
 // do NOT adjust sprites without user permission
 export const SPRITES = {
     PLAYER_CHARS: {
-        PLAYER: { ...getSpriteCoords(1, 25) } 
+        PLAYER: { ...getSpriteCoords(1, 25) }
     },
 
     MONSTERS: {
-        BLUE_SLIME: { ...getSpriteCoords(1, 10) }, 
-        YELLOW_SLIME: { ...getSpriteCoords(2, 10) }, 
+        BLUE_SLIME: { ...getSpriteCoords(1, 10) },
+        YELLOW_SLIME: { ...getSpriteCoords(2, 10) },
         RED_SLIME: { ...getSpriteCoords(3, 10) },
         BOAR: { ...getSpriteCoords(4, 10) },
-        WOLF: { ...getSpriteCoords(5, 10) }, 
-        GOLEM: { ...getSpriteCoords(1, 14), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 }, 
-        HUMAN: { ...getSpriteCoords(6, 10) }, 
-        SKELETON: { ...getSpriteCoords(8, 10) }, 
+        WOLF: { ...getSpriteCoords(5, 10) },
+        GOLEM: { ...getSpriteCoords(1, 14), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 },
+        HUMAN: { ...getSpriteCoords(6, 10) },
+        SKELETON: { ...getSpriteCoords(8, 10) },
         GIANT_SPIDER: { ...getSpriteCoords(7, 10) },
-        FOREST_IMP: { ...getSpriteCoords(10, 10) }, 
-        GIANT_BEETLE: { ...getSpriteCoords(11, 10) }, 
-        GOBLIN: { ...getSpriteCoords(12, 10) }, 
+        FOREST_IMP: { ...getSpriteCoords(10, 10) },
+        GIANT_BEETLE: { ...getSpriteCoords(11, 10) },
+        GOBLIN: { ...getSpriteCoords(12, 10) },
         OGRE: { ...getSpriteCoords(13, 10), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 },
         HARPY: { ...getSpriteCoords(16, 10) },
         SWAMP_BEAST: { ...getSpriteCoords(14, 10) },
-        WISP: { ...getSpriteCoords(15, 10) } 
+        WISP: { ...getSpriteCoords(15, 10) }
     },
 
     CRAFTING_STATIONS: {
-        FORGE: { ...getSpriteCoords(3, 20), sw: TILE_SIZE * 2, sh: TILE_SIZE }, 
-        CARPENTRY_TABLE: { ...getSpriteCoords(1, 21), sw: TILE_SIZE * 2, sh: TILE_SIZE }, 
-        COOKING_RANGE: { ...getSpriteCoords(1, 22), sw: TILE_SIZE, sh: TILE_SIZE * 2 } 
+        FORGE: { ...getSpriteCoords(3, 20), sw: TILE_SIZE * 2, sh: TILE_SIZE },
+        CARPENTRY_TABLE: { ...getSpriteCoords(1, 21), sw: TILE_SIZE * 2, sh: TILE_SIZE },
+        COOKING_RANGE: { ...getSpriteCoords(1, 22), sw: TILE_SIZE, sh: TILE_SIZE * 2 }
     },
 
     GROUND_TILES: {
-        
-        
         GRASS: [
             { ...getSpriteCoords(1, 1) },
         ],
         PATH: { ...getSpriteCoords(2, 1) },
-        SAND: { ...getSpriteCoords(4, 1) }, 
+        SAND: { ...getSpriteCoords(4, 1) },
         DIRT: { ...getSpriteCoords(5, 1) },
+        DARK_GRASS: { ...getSpriteCoords(3, 1) },
+        BRIDGE: { ...getSpriteCoords(7, 1) },
+        FLOORBOARDS: { ...getSpriteCoords(9, 1) },
         //SHALLOW_WATER: { ...getSpriteCoords(0, 0) }  don't have sprite
+        
     },
 
     UNWALKABLE_TILES: {
-        WALL: { ...getSpriteCoords(1, 3) }, 
-        DEEP_WATER: { ...getSpriteCoords(1, 8) }, 
+        WALL: { ...getSpriteCoords(1, 3) },
+        DEEP_WATER: { ...getSpriteCoords(1, 8) },
         DEEP_FOREST: { ...getSpriteCoords(2, 3) },
         //HOUSE_WALL: { ...getSpriteCoords(0, 8) },don't have
         //HOUSE_ROOF: { ...getSpriteCoords(1, 8) }, don't have
         //WINDOW: { ...getSpriteCoords(2, 8) },don't have
         STONE_WALL: { ...getSpriteCoords(8, 1) },
-        RUINED_WALL: { ...getSpriteCoords(6, 1) } 
+        RUINED_WALL: { ...getSpriteCoords(6, 1) }
     },
 
     RESOURCE_NODES: {
-        ASH_TREE: { ...getSpriteCoords(10, 7) }, 
+        ASH_TREE: { ...getSpriteCoords(10, 7) },
         CHOPPED_ASH_TREE: { ...getSpriteCoords(10, 8) },
-        OAK_TREE: { ...getSpriteCoords(11, 7) }, 
+        OAK_TREE: { ...getSpriteCoords(11, 7) },
         CHOPPED_OAK_TREE: { ...getSpriteCoords(11, 8) },
-        WILLOW_TREE: { ...getSpriteCoords(12, 7) }, 
+        WILLOW_TREE: { ...getSpriteCoords(12, 7) },
         CHOPPED_WILLOW_TREE: { ...getSpriteCoords(12, 8) },
         MAPLE_TREE: { ...getSpriteCoords(6, 6) }, // forgot to make this one, another time
         CHOPPED_MAPLE_TREE: { ...getSpriteCoords(3, 8) },   // same with this one
@@ -176,29 +183,29 @@ export const SPRITES = {
         DEPLETED_MINERAL_NODE: { ...getSpriteCoords(3, 7) },
         FISH_POND: { ...getSpriteCoords(1, 7) }, // same textures as deepwater right now, but they are seperate, i just have two copies on the spritelist for it.
         MACKAREL_FISH: { ...getSpriteCoords(2, 7) }, // placeholder name
-        TROUT_FISH: { ...getSpriteCoords(2, 7) }, 
-        SALMON_FISH: { ...getSpriteCoords(3, 7) }, 
-        SHARK_FISH: { ...getSpriteCoords(4, 7) }, 
+        TROUT_FISH: { ...getSpriteCoords(2, 7) },
+        SALMON_FISH: { ...getSpriteCoords(3, 7) },
+        SHARK_FISH: { ...getSpriteCoords(4, 7) },
         DEPLETED_MINERAL_NODE: { ...getSpriteCoords(20, 7) },
-        COPPER_VEIN: { ...getSpriteCoords(21, 7) }, 
-        IRON_VEIN: { ...getSpriteCoords(24, 7) }, 
-        MITHRIL_VEIN: { ...getSpriteCoords(22, 7) }, 
-        ADAMANT_VEIN: { ...getSpriteCoords(23, 7) }, 
-        SILVER_VEIN: { ...getSpriteCoords(26, 7) }, 
-        GOLD_VEIN: { ...getSpriteCoords(25, 7) }, 
+        COPPER_VEIN: { ...getSpriteCoords(21, 7) },
+        IRON_VEIN: { ...getSpriteCoords(24, 7) },
+        MITHRIL_VEIN: { ...getSpriteCoords(22, 7) },
+        ADAMANT_VEIN: { ...getSpriteCoords(23, 7) },
+        SILVER_VEIN: { ...getSpriteCoords(26, 7) },
+        GOLD_VEIN: { ...getSpriteCoords(25, 7) },
     },
 
     SCENERY: {
-        BUSH: { ...getSpriteCoords(1, 26) }, 
-        FLOWERS: { ...getSpriteCoords(1, 27) }, 
-        FALLEN_LOG: { ...getSpriteCoords(5, 5) }, //don't have 
-        SMALL_ROCK: { ...getSpriteCoords(2, 26) } 
+        BUSH: { ...getSpriteCoords(1, 26) },
+        FLOWERS: { ...getSpriteCoords(1, 27) },
+        FALLEN_LOG: { ...getSpriteCoords(5, 5) }, //don't have
+        SMALL_ROCK: { ...getSpriteCoords(2, 26) }
     },
 
     GATEWAYS: {
-        GATEWAY: { ...getSpriteCoords(1, 5) }, 
-        DOOR: { ...getSpriteCoords(3, 5) }, 
-        STONE_ARCHWAY: { ...getSpriteCoords(2, 5), sw: TILE_SIZE * 2, sh: TILE_SIZE * 2 } 
+        GATEWAY: { ...getSpriteCoords(3, 5) },
+        DOOR: { ...getSpriteCoords(1, 5) },
+        STONE_ARCHWAY: { ...getSpriteCoords(2, 5) }
     },
     MISC: {
         PEDESTAL: { ...getSpriteCoords(1, 20) } // don't have a specific one for this, but i have one that works for now
@@ -270,12 +277,13 @@ export const RESOURCE_DATA = {
 };
 // --- World Layout ---
 export const worldData = {
+
     '0,1': {
         name: "Player House",
         theme: 'house',
         width: 12,
         height: 12,
-        gateways: [{ x: 5, y: 11, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 15 } }],
+        gateways: [{ x: 5, y: 11, destZone: { x: 1, y: 1 }, entry: { x: 1, y: 16 } }],
         resources: [
             { x: 1, y: 1, type: 'CARPENTRY_TABLE', id: 'house_carpentry', size: {w: 2, h: 1} },
             { x: 8, y: 1, type: 'FORGE', id: 'house_forge', size: {w: 2, h: 1} },
@@ -298,10 +306,12 @@ export const worldData = {
     },
     '1,1': {
         name: "Verdant Starting Zone",
-        width: 31, height: 31,
+        width: 31,
+        height: 31,
         gateways: [
             // This gateway now leads to the house
-            { x: 0, y: 15, destZone: { x: 0, y: 1 }, entry: { x: 10, y: 10 } },
+            { x: 0, y: 16, destZone: { x: 0, y: 1 }, entry: { x: 5 , y: 10 } },
+            { x: 17, y: 0, destZone: { x: 1, y: 2 }, entry: { x: 15 , y: 29 } },
         ],
         spawns: [
             { "x": 12, "y": 21, "type": "BLUE_SLIME" },
@@ -352,16 +362,16 @@ export const worldData = {
             "FF              .             F",
             "F              ..             F",
             "F              .              F",
-            ".              .              F",
-            ".              .             FF",
-            ".              ..             F",
-            ".               .             F",
-            ".               ..            F",
-            ".                .            F",
-            ".                .            F",
-            ".                .            F",
-            ".  ...           .            F",
-            ". .. .......   ...            F",
+            "F              .              F",
+            "F              .             FF",
+            "               ..             F",
+            "                .             F",
+            "                ..            F",
+            "                 .            F",
+            "                 .            F",
+            "                 .            F",
+            "   ...           .            F",
+            "  .. .......   ...            F",
             "...        .....              F",
             "                              F",
             "                             FF",
@@ -378,7 +388,131 @@ export const worldData = {
             "FFFFFFFFF  FFF           FF   F",
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
         ]
-    }
+    },
+        '1,2': {
+    name: "Goblin Den",
+    width: 31,
+    height: 31,
+    gateways: [
+            // This gateway now leads to the house
+            { x: 15, y: 30, destZone: { x: 1, y: 1 }, entry: { x: 17 , y: 1 } },
+        ],
+    spawns: [
+        {
+            "x": 6,
+            "y": 4,
+            "type": "GOBLIN"
+        },
+        {
+            "x": 4,
+            "y": 5,
+            "type": "GOBLIN"
+        },
+        {
+            "x": 4,
+            "y": 7,
+            "type": "GOBLIN"
+        },
+        {
+            "x": 6,
+            "y": 6,
+            "type": "GOBLIN"
+        },
+        {
+            "x": 8,
+            "y": 5,
+            "type": "GOBLIN"
+        },
+        {
+            "x": 6,
+            "y": 14,
+            "type": "FOREST_IMP"
+        },
+        {
+            "x": 3,
+            "y": 17,
+            "type": "FOREST_IMP"
+        },
+        {
+            "x": 7,
+            "y": 18,
+            "type": "FOREST_IMP"
+        },
+        {
+            "x": 5,
+            "y": 21,
+            "type": "FOREST_IMP"
+        },
+        {
+            "x": 9,
+            "y": 22,
+            "type": "GIANT_BEETLE"
+        },
+        {
+            "x": 6,
+            "y": 25,
+            "type": "GIANT_BEETLE"
+        },
+        {
+            "x": 5,
+            "y": 17,
+            "type": "GIANT_BEETLE"
+        }
+    ],
+    "resources": [
+        {
+            "x": 3,
+            "y": 12,
+            "type": "OAK_TREE",
+            "id": "oak_tree_1"
+        },
+        {
+            "x": 26,
+            "y": 4,
+            "type": "OAK_TREE",
+            "id": "oak_tree_2"
+        },
+        {
+            "x": 25,
+            "y": 23,
+            "type": "OAK_TREE",
+            "id": "oak_tree_3"
+        }
+    ],
+    "mapLayout": [
+        "FFFFFFFFFFFdddddGGddddFFFFFFFFF",
+        "FFFFFFFFFFFFddddGGdddddFFddddFF",
+        "FFFFFFFFFdFFFdddGGGdddddddddddF",
+        "FFFGGGGGFFdFFdddddGdddddddddddF",
+        "FFGGGGGGFFFdddddddddddddddddddF",
+        "FFGGGGGGGGFFddddddddddddddddddF",
+        "FFFGGGGGGGGGddddddddddddddddddF",
+        "FFFGGGGGGGddddddddddddddddddddF",
+        "FFFFGGGGGdddddddddddddddddddddF",
+        "FFFFGGGGGGdddddddddddddddddddFF",
+        "FdddddGGGdddddddddddddddddddddF",
+        "Fdddddddddddddddddddddddddddddd",
+        "Fdddddddddddddddddddddddddddddd",
+        "FFddddddddddddddddddddddddddddd",
+        "dFddddddddddddddddddddddddddddd",
+        "FFddddddddddddddddddddddddGGGGG",
+        "FdddddddddddddddddddddddddddGGG",
+        "Fdddddddddddddddddddddddddddddd",
+        "Fdddddddddddddddddddddddddddddd",
+        "FdddddddddddddGGddddddddddddddd",
+        "FdddddddddddddGGGdddddddddddddF",
+        "FdddddddddddGdGGddddddddddddddF",
+        "FdddddddddddddGGddddddddddddddF",
+        "FdddddddddddddGGdddddddddddddFF",
+        "FdddddddddddddGGdddddddddddddFd",
+        "FdddddddddddddGGGddddddddddddFF",
+        "FFFdddddddddddGGddddddddddddddd",
+        "dFFdddddddddddGGGdddddddddddddF",
+        "FFdddddddddddGGGGdddddddddddddF",
+        "FdddFFFFdddddGGGGdddddFFFdFFFFF",
+        "FFFFFFFFFddddGGGddddFFFFFFFddFF"
+    ]
+},
 };
 // --- Altar Upgrades ---
 export const ALTAR_UPGRADES = {
@@ -454,4 +588,3 @@ export const CRAFTING_DATA = {
         }
     }
 };
-

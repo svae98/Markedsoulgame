@@ -74,6 +74,7 @@ let dynamicTileSize = 32;
 let lastFrameTime = 0;
 let accumulator = 0;
 let currentGameTime = 0;
+let scoutModeZoneKey = null; // New global variable for Scout Mode
 
 // --- Movement and Logic Constants ---
 const LOGIC_TICK_RATE = 20; // Run logic updates 50 times per second
@@ -85,11 +86,13 @@ function getActiveCharacter() {
 }
 
 const ui = {
+    
     canvas: document.getElementById('game-canvas'),
     canvasContainer: document.getElementById('canvas-container'),
     ctx: document.getElementById('game-canvas').getContext('2d'),
     actionStatus: document.getElementById('action-status'),
     contextMenu: document.getElementById('context-menu'),
+    exitScoutModeButton: document.getElementById('exitScoutModeButton'),
     activeCharacterName: document.getElementById('active-character-name'),
     playerHpBar: document.getElementById('player-hp-bar'),
     playerSouls: document.getElementById('player-souls'),
@@ -127,18 +130,23 @@ function resizeCanvasAndCenterCamera() {
     ui.canvas.width = ui.canvasContainer.offsetWidth;
     ui.canvas.height = ui.canvasContainer.offsetHeight;
     ui.ctx.imageSmoothingEnabled = false;
-    
-    const activeChar = getActiveCharacter();
-    if (activeChar) {
-        const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+
+    let zoneKey;
+    if (scoutModeZoneKey) {
+        zoneKey = scoutModeZoneKey;
+    } else {
+        const activeChar = getActiveCharacter();
+        if (activeChar) {
+            zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+        }
+    }
+
+    if (zoneKey) {
         const zone = worldData[zoneKey];
         if (zone) {
-            // Calculate the perfect tile size to fit the zone in the canvas
             const tileW = ui.canvas.width / zone.width;
             const tileH = ui.canvas.height / zone.height;
             dynamicTileSize = Math.min(tileW, tileH);
-
-            // Center the camera on the middle of the zone
             camera.x = zone.width / 2;
             camera.y = zone.height / 2;
         }
@@ -155,12 +163,20 @@ function checkForGateway(character) {
             character.player = { ...entryPos };
             character.target = { ...entryPos };
             character.visual = { ...entryPos };
-            
-            // --- This is the new part ---
+
             // After changing zones, resize everything based on the new zone's dimensions
-            resizeCanvasAndCenterCamera(); 
-            
+            resizeCanvasAndCenterCamera();
+
             currentMapData = buildMapData(character.zoneX, character.zoneY);
+            
+            // If the character is following a multi-zone path, update the path
+            if (character.automation.zonePath && character.automation.zonePath.length > 1) {
+                character.automation.zonePath.shift(); // Remove the zone we just left
+                // Immediately trigger automation to find the path to the next gateway
+                character.automation.state = 'IDLE'; 
+                updateAutomation(character, currentGameTime);
+            }
+            
             saveGameState();
             updateAllUI();
         }
@@ -208,7 +224,10 @@ function buildMapData(zoneX, zoneY) {
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
         '.': TILES.PATH, 'S': TILES.SAND, 'G': TILES.DIRT, '~': TILES.SHALLOW_WATER,
-        '#': TILES.HOUSE_WALL, '+': TILES.DOOR_1, 'H': TILES.RUINED_WALL, 'M': TILES.STONE_WALL // Example chars for new tiles
+        '#': TILES.HOUSE_WALL, 'H': TILES.RUINED_WALL, 'M': TILES.FLOORBOARDS, // Removed '+' mapping
+        'd': TILES.DARK_GRASS,
+        'B': TILES.BRIDGE,
+        'P': TILES.FLOORBOARDS
     };
 
     const newMapData = Array.from({ length: height }, () => Array(width).fill(TILES.GRASS));
@@ -235,7 +254,7 @@ function getDefaultCharacterState(id, name, color) {
         movementCooldown: 0,
         hp: { current: 5, max: 5 },
         lastRegenTime: 0, isDead: false,
-        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastGatherAttemptTime: 0 }, craftingMarkIndex: 0 }, // Added craftingMarkIndex
+        automation: { active: false, task: null, state: 'IDLE', targetId: null, markedTiles: [], color, gatheringState: { lastGatherAttemptTime: 0 }, craftingMarkIndex: 0, zonePath: [] }, // Added craftingMarkIndex
         combat: { active: false, targetId: null, isPlayerTurn: true, lastUpdateTime: 0 }
     };
 }
@@ -285,6 +304,7 @@ async function initGame() {
             ui.contextMenu.style.display = 'none';
         }
     });
+    ui.exitScoutModeButton.addEventListener('click', exitScoutMode);
     ui.openAltarButton.addEventListener('click', openSoulAltar);
     ui.closeAltarButton.addEventListener('click', closeSoulAltar);
     ui.openLevelsButton.addEventListener('click', openLevels);
@@ -330,25 +350,32 @@ function gameLoop(timestamp) {
     
     if (accumulator > 1000) accumulator = 1000;
 
-    while (accumulator >= LOGIC_TICK_RATE) {
-        currentGameTime += LOGIC_TICK_RATE;
-        checkAllRespawns(currentGameTime);
-        updateAllPlayerRegen(currentGameTime);
+    // We only update game logic if not in scout mode to prevent weird background state changes
+    if (!scoutModeZoneKey) {
+        while (accumulator >= LOGIC_TICK_RATE) {
+            currentGameTime += LOGIC_TICK_RATE;
+            checkAllRespawns(currentGameTime);
+            updateAllPlayerRegen(currentGameTime);
+            gameState.characters.forEach(char => {
+                if (char) {
+                    updateCharacterLogic(char, LOGIC_TICK_RATE);
+                    updateAutomation(char, currentGameTime);
+                    updateCombat(char, currentGameTime);
+                }
+            });
+            accumulator -= LOGIC_TICK_RATE;
+        }
+
         gameState.characters.forEach(char => {
-            if (char) {
-                updateCharacterLogic(char, LOGIC_TICK_RATE);
-                updateAutomation(char, currentGameTime);
-                updateCombat(char, currentGameTime);
-            }
+            updateCharacterVisuals(char, deltaTime);
         });
-        accumulator -= LOGIC_TICK_RATE;
+
+        updateCombatPanelUI();
+    } else {
+        // In scout mode, we still need to process a little to keep the render fresh
+        accumulator = 0;
     }
 
-    gameState.characters.forEach(char => {
-        updateCharacterVisuals(char, deltaTime);
-    });
-
-    updateCombatPanelUI();
     draw(); 
     
     requestAnimationFrame(gameLoop);
@@ -379,6 +406,7 @@ function updateCharacterLogic(character, logicDelta) {
         const speeds = getEffectiveMoveSpeeds();
         character.movementCooldown = speeds.stepInterval;
 
+        // THE FIX: Reverted to only check for a gateway at the END of a path.
         if (character.path.length === 0) {
          checkForGateway(character);
          // If automation is active and path is complete, transition to IDLE
@@ -599,19 +627,29 @@ function updateCharacterVisuals(character, frameDelta) {
 function draw() {
     const ctx = ui.ctx;
     ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
-    const activeChar = getActiveCharacter();
-    if(!activeChar || !spriteSheet) return;
     
-    const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
-    const zone = worldData[zoneKey];
+    let currentZoneKey;
+    if (scoutModeZoneKey) {
+        currentZoneKey = scoutModeZoneKey;
+    } else {
+        const activeChar = getActiveCharacter();
+        if (!activeChar || !spriteSheet) return;
+        currentZoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+    }
+
+    const zone = worldData[currentZoneKey];
     if (!zone) return;
 
     // The new draw loop simply draws every tile in the current zone
     for (let y = 0; y < zone.height; y++) {
         for (let x = 0; x < zone.width; x++) {
-            drawTile(x, y, activeChar.zoneX, activeChar.zoneY);
+            const [zoneX, zoneY] = currentZoneKey.split(',').map(Number);
+            drawTile(x, y, zoneX, zoneY);
         }
     }
+
+    // --- NEW: Draw gateways on top of the tiles ---
+    drawGateways(zone);
 
     if (zone.resources) {
         zone.resources.forEach(resource => {
@@ -619,17 +657,23 @@ function draw() {
         });
     }
     
-    if(enemies[zoneKey]) {
-        for(const enemyId in enemies[zoneKey]) {
-            drawEnemy(enemies[zoneKey][enemyId]);
+    if(enemies[currentZoneKey]) {
+        for(const enemyId in enemies[currentZoneKey]) {
+            drawEnemy(enemies[currentZoneKey][enemyId]);
         }
     }
-    gameState.characters.forEach((char) => {
-        if (char.zoneX === activeChar.zoneX && char.zoneY === activeChar.zoneY) {
-            drawPlayer(char, char.id === activeChar.id);
-        }
-    });
-    drawMarks(zoneKey);
+    
+    // Only draw characters if we are NOT in scout mode
+    if (!scoutModeZoneKey) {
+        const activeChar = getActiveCharacter();
+        gameState.characters.forEach((char) => {
+            if (char.zoneX === activeChar.zoneX && char.zoneY === activeChar.zoneY) {
+                drawPlayer(char, char.id === activeChar.id);
+            }
+        });
+    }
+
+    drawMarks(currentZoneKey);
 }
 
 function worldToScreen(worldX, worldY) {
@@ -669,9 +713,11 @@ function drawTile(x, y, zoneX, zoneY) {
         case TILES.DIRT: sprite = SPRITES.GROUND_TILES.DIRT; break;
         case TILES.SHALLOW_WATER: sprite = SPRITES.GROUND_TILES.SHALLOW_WATER; break;
         case TILES.HOUSE_WALL: sprite = SPRITES.UNWALKABLE_TILES.HOUSE_WALL; break;
-        case TILES.DOOR_1: sprite = SPRITES.GATEWAYS.DOOR; break; // Assuming DOOR_1 uses the general DOOR sprite
-        case TILES.DOOR_2: sprite = SPRITES.GATEWAYS.DOOR; break; // Assuming DOOR_2 also uses the general DOOR sprite
         case TILES.STONE_WALL: sprite = SPRITES.UNWALKABLE_TILES.STONE_WALL; break;
+        // --- ADDED NEW DRAW CASES ---
+        case TILES.DARK_GRASS: sprite = SPRITES.GROUND_TILES.DARK_GRASS; break;
+        case TILES.BRIDGE: sprite = SPRITES.GROUND_TILES.BRIDGE; break;
+        case TILES.FLOORBOARDS: sprite = SPRITES.GROUND_TILES.FLOORBOARDS; break;
         default: sprite = SPRITES.GROUND_TILES.GRASS[0]; // Default to a grass sprite if type is unknown
     }
 
@@ -679,69 +725,86 @@ function drawTile(x, y, zoneX, zoneY) {
     const drawHeight = (sprite.sh || 32) / 32 * dynamicTileSize;
     drawSprite(sprite, drawX, drawY, drawWidth, drawHeight);
 }
+function drawGateways(zone) {
+    if (zone && zone.gateways) {
+        zone.gateways.forEach(gateway => {
+            // For now, we'll assume all gateways use the DOOR sprite.
+            // This could be customized later by adding a 'type' to the gateway object.
+            const sprite = SPRITES.GATEWAYS.DOOR;
+            if (!sprite) return;
 
+            const { x: screenX, y: screenY } = worldToScreen(gateway.x, gateway.y);
+            const drawWidth = (sprite.sw || 32) * (dynamicTileSize / 32);
+            const drawHeight = (sprite.sh || 32) * (dynamicTileSize / 32);
+            drawSprite(sprite, screenX, screenY, drawWidth, drawHeight);
+        });
+    }
+}
 
 function drawResourceObject(resource) {
     const resourceDef = RESOURCE_DATA[resource.type];
     if (!resourceDef) return;
 
-    const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
-    const isDepleted = resource.nextAvailableTime && currentGameTime < resource.nextAvailableTime;
+    const activeChar = getActiveCharacter();
+    if (!activeChar) return;
 
+    // --- START OF NEW, COMBINED LOGIC ---
+
+    // 1. Draw the correct ground tile(s) from the map layout first.
+    const resourceSize = resourceDef.size || { w: 1, h: 1 };
+    for (let i = 0; i < resourceSize.w; i++) {
+        for (let j = 0; j < resourceSize.h; j++) {
+            drawTile(resource.x + i, resource.y + j, activeChar.zoneX, activeChar.zoneY);
+        }
+    }
+
+    // 2. Re-introduce the layering logic to determine base and top sprites.
+    const isDepleted = resource.nextAvailableTime && currentGameTime < resource.nextAvailableTime;
     let baseSprite = null;
     let topSprite = null;
 
-    // Determine base and top sprites based on skill
     if (resourceDef.skill === 'mining') {
-        baseSprite = SPRITES.RESOURCE_NODES.DEPLETED_MINERAL_NODE;
+        baseSprite = SPRITES.RESOURCE_NODES.DEPLETED_MINERAL_NODE; // The base rock
         if (!isDepleted) {
-            topSprite = resourceDef.sprite;
+            topSprite = resourceDef.sprite; // The ore vein
         }
     } else if (resourceDef.skill === 'woodcutting') {
-        const choppedSpriteKey = `CHOPPED_${resource.type}`;
-        baseSprite = SPRITES.RESOURCE_NODES[choppedSpriteKey];
+        baseSprite = SPRITES.RESOURCE_NODES[`CHOPPED_${resource.type}`]; // The stump
         if (!isDepleted) {
-            topSprite = resourceDef.sprite;
+            topSprite = resourceDef.sprite; // The tree
         }
     } else if (resourceDef.skill === 'fishing') {
-        baseSprite = SPRITES.RESOURCE_NODES.FISH_POND;
+        baseSprite = SPRITES.RESOURCE_NODES.FISH_POND; // The water
         if (!isDepleted) {
-            topSprite = resourceDef.sprite;
+            topSprite = resourceDef.sprite; // The fish splash
         }
     } else {
-        // Fallback for non-layered resources (like crafting stations)
+        // Fallback for non-layered resources like crafting stations
         baseSprite = resourceDef.sprite;
     }
 
-    // Draw the base sprite
+    // 3. Draw the base sprite (e.g., the rock) if it exists.
     if (baseSprite) {
+        const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
         const baseDrawWidth = (baseSprite.sw || 32) * (dynamicTileSize / 32);
         const baseDrawHeight = (baseSprite.sh || 32) * (dynamicTileSize / 32);
-        let xOffset = (baseDrawWidth - dynamicTileSize) / 2;
-        let yOffset = (baseDrawHeight - dynamicTileSize);
-
-        // Adjust for multi-tile crafting stations
-        if (SPRITES.CRAFTING_STATIONS[resource.type]) {
-             if (baseSprite.sw === (resourceDef.size?.w || 1) * 32) xOffset = 0;
-             if (baseSprite.sh === (resourceDef.size?.h || 1) * 32) yOffset = 0;
-        }
-        
-        if (isDepleted && resourceDef.skill !== 'mining' && resourceDef.skill !== 'woodcutting' && resourceDef.skill !== 'fishing') {
-             ui.ctx.globalAlpha = 0.5;
-        }
+        let xOffset = (baseDrawWidth - (resourceSize.w * dynamicTileSize)) / 2;
+        let yOffset = (baseDrawHeight - (resourceSize.h * dynamicTileSize));
         
         drawSprite(baseSprite, drawX - xOffset, drawY - yOffset, baseDrawWidth, baseDrawHeight);
-        ui.ctx.globalAlpha = 1.0;
     }
 
-    // Draw the top sprite if it exists
+    // 4. Draw the top sprite (e.g., the vein) over the base sprite.
     if (topSprite) {
+        const { x: drawX, y: drawY } = worldToScreen(resource.x, resource.y);
         const topDrawWidth = (topSprite.sw || 32) * (dynamicTileSize / 32);
         const topDrawHeight = (topSprite.sh || 32) * (dynamicTileSize / 32);
-        const xOffset = (topDrawWidth - dynamicTileSize) / 2;
-        const yOffset = (topDrawHeight - dynamicTileSize);
+        const xOffset = (topDrawWidth - (resourceSize.w * dynamicTileSize)) / 2;
+        const yOffset = (topDrawHeight - (resourceSize.h * dynamicTileSize));
+
         drawSprite(topSprite, drawX - xOffset, drawY - yOffset, topDrawWidth, topDrawHeight);
     }
+    // --- END OF NEW LOGIC ---
 }
 
 
@@ -856,9 +919,13 @@ function getTileFromClick(e) {
     const rect = ui.canvas.getBoundingClientRect(); 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    // --- BROYTING HER ---
-    const worldX = Math.floor(camera.x - (ui.canvas.width / 2 / dynamicTileSize) + (screenX / dynamicTileSize) );
-    const worldY = Math.floor(camera.y - (ui.canvas.height / 2 / dynamicTileSize) + (screenY / dynamicTileSize) );
+
+    const currentZoneKey = scoutModeZoneKey || `${getActiveCharacter().zoneX},${getActiveCharacter().zoneY}`;
+    const zone = worldData[currentZoneKey];
+    if (!zone) return {x: 0, y: 0}; // Should not happen
+
+    const worldX = Math.floor(camera.x - (zone.width / 2) + (screenX / dynamicTileSize) );
+    const worldY = Math.floor(camera.y - (zone.height / 2) + (screenY / dynamicTileSize) );
     return {x: worldX, y: worldY};
 }
 
@@ -926,6 +993,11 @@ function getResourceNodeAt(x, y, zoneX, zoneY) {
 }
 
 function handleKeydown(e) {
+    if (scoutModeZoneKey && e.key === 'Escape') {
+        exitScoutMode();
+        return;
+    }
+
     const key = parseInt(e.key);
     // Check if the pressed key is a number and corresponds to a valid character index
     // The condition `key > 0 && key <= MAX_CHARACTERS` needs to be updated to `key >= 0` to include '0' for the 10th character,
@@ -941,6 +1013,9 @@ function handleKeydown(e) {
     }
 
     if (gameState.characters[charIndex]) {
+        if (scoutModeZoneKey) {
+            exitScoutMode();
+        }
         gameState.activeCharacterIndex = charIndex;
         saveGameState();
         // --- FIX START ---
@@ -989,36 +1064,53 @@ function handleLeftClick(e) {
     if (!activeChar || activeChar.isDead) return;
 
     const { x, y } = getTileFromClick(e);
-    const zoneKey = `${activeChar.zoneX},${activeChar.zoneY}`;
+    const zoneKey = scoutModeZoneKey || `${activeChar.zoneX},${activeChar.zoneY}`;
     const enemy = getEnemyAt(x, y, zoneKey);
-    const resource = getResourceNodeAt(x, y, activeChar.zoneX, activeChar.zoneY);
-
-    // Determine if the clicked resource is a crafting station
-    const isCraftingStation = resource && (resource.type === 'CARPENTRY_TABLE' || resource.type === 'FORGE' || resource.type === 'COOKING_RANGE');
+    const resource = getResourceNodeAt(x, y, ...zoneKey.split(',').map(Number));
+    
+    if (scoutModeZoneKey) {
+        if (enemy) {
+            handleMarking(enemy);
+        }
+        return; // In scout mode, we only allow marking enemies.
+    }
+    const gateway = getGatewayAt(x, y, zoneKey); // Check if click was on a gateway
 
     // --- START FIX: Implement new shift-click for crafting stations ---
     if (e.shiftKey) { // If the Shift key is pressed
+        const isCraftingStation = resource && (resource.type === 'CARPENTRY_TABLE' || resource.type === 'FORGE' || resource.type === 'COOKING_RANGE');
         if (isCraftingStation) {
-            // If it's a crafting station, open the recipe selection menu for this specific station.
-            // We'll need to adapt openStationCrafting or create a new function for this.
-            openStationCrafting(resource); // Pass the entire resource object
+            openStationCrafting(resource);
             return;
         } else {
-            // If it's not a crafting station (e.g., monster, tree), handle marking directly.
             handleMarking(enemy || resource);
             return;
         }
     }
     // --- END FIX ---
 
-    // Existing logic for regular (non-shift) clicks:
-    // If it's a crafting station, a regular click should just initiate movement to it.
-    if (isCraftingStation) { // No shift key, and it's a crafting station
+    // --- NEW: Special handling for gateway clicks ---
+    if (gateway) {
+        const neighbors = getNeighbors(gateway, activeChar.zoneX, activeChar.zoneY);
+        if (neighbors.length > 0) {
+            // Find path to a tile neighboring the gateway
+            neighbors.sort((a, b) => heuristic(activeChar.player, a) - heuristic(activeChar.player, b));
+            const path = findPath(activeChar.player, neighbors[0], activeChar.zoneX, activeChar.zoneY);
+            if (path) {
+                path.push({ x: gateway.x, y: gateway.y }); // Manually add gateway as the final step
+                activeChar.path = path;
+                if (activeChar.automation.active) stopAutomation(activeChar);
+            }
+        }
+        return; // Stop processing the click here
+    }
+
+    // Existing logic for regular (non-gateway) clicks:
+    const isCraftingStation = resource && (resource.type === 'CARPENTRY_TABLE' || resource.type === 'FORGE' || resource.type === 'COOKING_RANGE');
+    if (isCraftingStation) {
         initiateMoveToEntity(activeChar, resource);
         return;
     }
-
-    // Continue with existing logic for regular clicks on enemies, other resources, or ground
     if (enemy) {
         initiateMoveToEntity(activeChar, enemy);
         return;
@@ -1033,6 +1125,13 @@ function handleLeftClick(e) {
         stopAutomation(activeChar);
     }
     handleMovementClick(x, y, activeChar);
+}
+function getGatewayAt(x, y, zoneKey) {
+    const zone = worldData[zoneKey];
+    if (zone && zone.gateways) {
+        return zone.gateways.find(g => g.x === x && g.y === y);
+    }
+    return null;
 }
 
 function handleMonsterClick(enemy) {
@@ -1388,45 +1487,131 @@ function openInventory() { openModal(ui.inventoryModal); renderInventory(); }
 function closeInventory() { closeModal(ui.inventoryModal); }
 function openMap() { openModal(ui.mapModal); renderMap(); }
 function closeMap() { closeModal(ui.mapModal); }
+function drawMiniMap(canvas, zoneKey) {
+    const ctx = canvas.getContext('2d');
+    const zoneData = worldData[zoneKey];
+    if (!zoneData) {
+        ctx.fillStyle = '#18181b'; // zinc-900
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+    }
 
+    const tileColorMap = {
+        [TILES.GRASS]: '#22c55e',       // green-500
+        [TILES.PATH]: '#a16207',        // yellow-700
+        [TILES.SAND]: '#fde047',        // yellow-300
+        [TILES.DIRT]: '#92400e',        // amber-800
+        [TILES.SHALLOW_WATER]: '#38bdf8', // sky-400
+        [TILES.DARK_GRASS]: '#166534',   // green-800
+        [TILES.BRIDGE]: '#9ca3af',      // gray-400
+        [TILES.FLOORBOARDS]: '#7c2d12', // orange-800
+        [TILES.WALL]: '#44403c',        // stone-700
+        [TILES.DEEP_FOREST]: '#14532d', // green-900
+        [TILES.DEEP_WATER]: '#0c4a6e',   // sky-900
+        [TILES.HOUSE_WALL]: '#57534e',  // stone-600
+        [TILES.RUINED_WALL]: '#78716c', // stone-500
+        [TILES.STONE_WALL]: '#44403c',  // stone-700
+    };
+    
+    const legend = {
+        ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
+        '.': TILES.PATH, 'S': TILES.SAND, 'G': TILES.DIRT, '~': TILES.SHALLOW_WATER,
+        '#': TILES.HOUSE_WALL, 'H': TILES.RUINED_WALL, 'M': TILES.FLOORBOARDS,
+        'd': TILES.DARK_GRASS, 'B': TILES.BRIDGE, 'P': TILES.FLOORBOARDS
+    };
+
+    const zoneWidth = zoneData.width;
+    const zoneHeight = zoneData.height;
+    const tileW = canvas.width / zoneWidth;
+    const tileH = canvas.height / zoneHeight;
+
+    ctx.fillStyle = '#18181b'; // Background for any missing tiles
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < zoneHeight; y++) {
+        for (let x = 0; x < zoneWidth; x++) {
+            const char = zoneData.mapLayout[y]?.[x] || ' ';
+            const tileType = legend[char] ?? TILES.GRASS;
+            const color = tileColorMap[tileType] || '#ff00ff'; // Default to magenta for unknown tiles
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
+        }
+    }
+}
+function enterScoutMode(zoneKey) {
+    scoutModeZoneKey = zoneKey;
+    ui.exitScoutModeButton.classList.remove('hidden');
+    closeMap(); // Close the map modal after entering scout mode
+    
+    // --- BUG FIX ---
+    // Explicitly rebuild the map data for the zone being scouted.
+    const [zoneX, zoneY] = zoneKey.split(',').map(Number);
+    currentMapData = buildMapData(zoneX, zoneY);
+
+    resizeCanvasAndCenterCamera(); // Update the view
+    ui.actionStatus.textContent = `Scouting: ${worldData[zoneKey].name}. Left-click to mark.`;
+}
+function exitScoutMode() {
+    scoutModeZoneKey = null;
+    ui.exitScoutModeButton.classList.add('hidden');
+    
+    // --- BUG FIX ---
+    // Explicitly rebuild the map data for the active character's zone when returning.
+    const activeChar = getActiveCharacter();
+    if (activeChar) {
+        currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY);
+    }
+
+    resizeCanvasAndCenterCamera(); // Snap back to the active character's view
+    ui.actionStatus.textContent = 'Idle';
+    // No need to call draw() here, the gameLoop will handle it.
+}
 function renderMap() {
     const grid = ui.mapGridContainer;
     grid.innerHTML = '';
     const activeChar = getActiveCharacter();
 
-    Object.keys(worldData).forEach(zoneKey => {
+    // Create a sorted list of zone keys
+    const sortedZoneKeys = Object.keys(worldData).sort((a, b) => {
+        const [ax, ay] = a.split(',').map(Number);
+        const [bx, by] = b.split(',').map(Number);
+        if (ay !== by) return ay - by;
+        return ax - bx;
+    });
+
+    sortedZoneKeys.forEach(zoneKey => {
         const [x, y] = zoneKey.split(',').map(Number);
         const zoneData = worldData[zoneKey];
-        const zoneEl = document.createElement('div');
-        zoneEl.className = 'map-zone';
+        
+        const zoneContainer = document.createElement('div');
+        zoneContainer.className = 'map-zone';
+
+        const canvas = document.createElement('canvas');
+        // Set a fixed resolution for the mini-map canvas for performance
+        canvas.width = 150; 
+        canvas.height = 150;
+        
+        const nameOverlay = document.createElement('div');
+        nameOverlay.className = 'zone-name-overlay';
+
+        zoneContainer.appendChild(canvas);
+        zoneContainer.appendChild(nameOverlay);
         
         if (zoneData) {
-            zoneEl.textContent = zoneData.name;
-            if (activeChar.zoneX === x && activeChar.zoneY === y) {
-                 zoneEl.classList.add('active-zone');
-            }
+            nameOverlay.textContent = zoneData.name;
+            zoneContainer.addEventListener('click', () => enterScoutMode(zoneKey));
             
-            if(enemies[zoneKey]) {
-                for(const enemyId in enemies[zoneKey]) {
-                    const enemy = enemies[zoneKey][enemyId];
-                    const enemyData = ENEMIES_DATA[enemy.type];
-                    if(enemyData.isBoss) {
-                        const bossIcon = document.createElement('div');
-                        bossIcon.textContent = '💀';
-                        bossIcon.className = 'boss-icon';
-                        bossIcon.title = enemy.name;
-                        bossIcon.addEventListener('click', (e) => {
-                            handleMapMarking(enemy, activeChar);
-                            e.stopPropagation();
-                        });
-                        zoneEl.appendChild(bossIcon);
-                    }
-                }
+            // Draw the mini-map
+            drawMiniMap(canvas, zoneKey);
+
+            if (!scoutModeZoneKey && activeChar.zoneX === x && activeChar.zoneY === y) {
+                 zoneContainer.classList.add('active-zone');
             }
         } else {
-            zoneEl.style.backgroundColor = '#111';
+            zoneContainer.style.backgroundColor = '#111';
         }
-        grid.appendChild(zoneEl);
+        grid.appendChild(zoneContainer);
     });
 }
 
@@ -1964,6 +2149,10 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
         }
     }
 
+    // This block is no longer needed at the top, logic is unified below
+    // if (automation.zonePath && automation.zonePath.length > 1) { ... }
+
+
     const potentialTargets = automation.markedTiles.map(mark => {
         const entity = findEnemyById(mark.entityId) || findResourceById(mark.entityId);
         if (!entity) return null;
@@ -2104,25 +2293,48 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
     const targetZoneY = bestTarget.zoneY;
     const entityData = ENEMIES_DATA[targetEntity.type] || RESOURCE_DATA[targetEntity.type];
     const entityName = entityData.name;
-
     const isStation = !!CRAFTING_DATA[entityData.skill];
 
+    // --- RESTRUCTURED PATHFINDING LOGIC ---
+
+    // Are we in the right zone?
     if (targetZoneX !== zoneX || targetZoneY !== zoneY) {
-        automation.state = 'PATHING';
-        setStatus(`Traveling to ${entityName}'s zone...`);
-        const path = findPathToZone(character, targetZoneX, targetZoneY);
-        if (path && path.length > 0) {
-            character.path = path;
-        } else {
-            setStatus(`Can't find path to ${entityName}'s zone.`);
-            automation.state = 'IDLE';
+        // No, we need to travel.
+
+        // Do we have a travel plan? If not, create one.
+        if (!automation.zonePath || automation.zonePath.length <= 1) {
+            const startZoneKey = `${zoneX},${zoneY}`;
+            const endZoneKey = `${targetZoneX},${targetZoneY}`;
+            automation.zonePath = findZonePath(startZoneKey, endZoneKey);
         }
-        return;
+
+        // If we have a valid plan, find a path to the next gateway.
+        if (automation.zonePath && automation.zonePath.length > 1) {
+            const nextZoneKey = automation.zonePath[1];
+            const [nextZoneX, nextZoneY] = nextZoneKey.split(',').map(Number);
+            setStatus(`Traveling to zone ${nextZoneKey}...`);
+            const path = findPathToZone(character, nextZoneX, nextZoneY);
+            if (path && path.length > 0) {
+                character.path = path;
+                automation.state = 'PATHING_TO_GATEWAY';
+            } else {
+                setStatus(`Can't find path to zone ${nextZoneKey}. Stopping.`);
+                stopAutomation(character);
+            }
+        } else {
+            setStatus(`No world path to ${entityName}'s zone.`);
+            stopAutomation(character);
+        }
+        return; // End here, we are moving towards a gateway.
     }
+    
+    // If we are here, we are in the correct zone. Clear any leftover zone path.
+    automation.zonePath = [];
 
     if (isAdjacent(player, targetEntity, zoneX, zoneY)) {
+        // --- ACTION LOGIC (COMBAT/GATHERING) ---
+        // This part remains the same
         automation.state = 'PERFORMING_ACTION';
-
         if (isStation && automation.task === 'crafting') {
             const markedRecipeId = automation.recipeId;
             const skillKey = entityData.skill;
@@ -2202,6 +2414,8 @@ function updateMarkedEntityAutomation(character, gameTime, setStatus) {
             }
         }
     } else {
+        // --- PATHFINDING LOGIC (within the same zone) ---
+        // This part also remains the same
         automation.state = 'PATHING';
         const potentialApproachSpots = findWalkableNeighborForEntity(targetEntity, player, [], targetZoneX, targetZoneY);
         let closestApproachSpot = null;
@@ -2416,22 +2630,78 @@ function reconstructPath(endNode) {
 }
 
 
+function findZonePath(startZoneKey, endZoneKey) {
+    if (startZoneKey === endZoneKey) return [startZoneKey];
+
+    const queue = [[startZoneKey]];
+    const visited = new Set([startZoneKey]);
+
+    while (queue.length > 0) {
+        const path = queue.shift();
+        const currentZoneKey = path[path.length - 1];
+
+        if (currentZoneKey === endZoneKey) {
+            return path;
+        }
+
+        const currentZone = worldData[currentZoneKey];
+        if (!currentZone || !currentZone.gateways) continue;
+
+        for (const gateway of currentZone.gateways) {
+            const neighborZoneKey = `${gateway.destZone.x},${gateway.destZone.y}`;
+            if (!visited.has(neighborZoneKey)) {
+                visited.add(neighborZoneKey);
+                const newPath = [...path, neighborZoneKey];
+                queue.push(newPath);
+            }
+        }
+    }
+
+    return null; // No path found
+}
+
+
 function findPathToZone(character, targetZoneX, targetZoneY) {
     const currentZoneKey = `${character.zoneX},${character.zoneY}`;
     const currentZoneData = worldData[currentZoneKey];
     if (!currentZoneData || !currentZoneData.gateways) return null;
+
     for (const gateway of currentZoneData.gateways) {
         if (gateway.destZone.x === targetZoneX && gateway.destZone.y === targetZoneY) {
-            return findPath(character.player, gateway, character.zoneX, character.zoneY);
+            // --- START FIX: Path to a neighbor of the gateway, not the gateway itself ---
+            const neighbors = getNeighbors(gateway, character.zoneX, character.zoneY);
+            if (neighbors.length === 0) {
+                continue; // This gateway is blocked, try to find another one
+            }
+
+            // Sort neighbors by distance to the character to find the most efficient approach
+            neighbors.sort((a, b) => heuristic(character.player, a) - heuristic(character.player, b));
+            const targetNeighbor = neighbors[0];
+
+            // --- NEW: Handle the edge case where the character is already at the neighbor spot ---
+            if (character.player.x === targetNeighbor.x && character.player.y === targetNeighbor.y) {
+                // Already in position. The path is just one step onto the gateway.
+                return [{ x: gateway.x, y: gateway.y }];
+            }
+
+            // Find a path to the closest neighbor (original logic for when the character is not already there)
+            const path = findPath(character.player, targetNeighbor, character.zoneX, character.zoneY);
+
+            if (path && path.length > 0) {
+                // If a path to the neighbor is found, manually add the gateway as the final step
+                path.push({ x: gateway.x, y: gateway.y });
+                return path;
+            }
+            // If no path to any neighbor is found, we will eventually return null
+            // --- END FIX ---
         }
     }
-    return null;
+    return null; // Return null if no valid path to any relevant gateway is found
 }
 
-function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { // Signature changed to accept zoneX, zoneY
+function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { 
     const zoneKey = `${zoneX},${zoneY}`;
-    const zoneData = worldData[zoneKey]; // Get zoneData using the passed zoneX, zoneY
-
+    const zoneData = worldData[zoneKey]; 
     if (!zoneData || !zoneData.mapLayout) {
         console.error("isWalkable: Missing or malformed zoneData or mapLayout. Zone:", zoneData);
         return false;
@@ -2439,8 +2709,12 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { // Signature chan
 
     const { width, height, mapLayout } = zoneData;
 
-    // Check if coordinates are within zone bounds
     if (x < 0 || x >= width || y < 0 || y >= height) {
+        return false;
+    }
+
+    // --- NEW: Check for gateway first, making it a pathfinding obstacle ---
+    if (getGatewayAt(x, y, zoneKey)) {
         return false;
     }
 
@@ -2451,17 +2725,22 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { // Signature chan
 
     const legend = {
         ' ': TILES.GRASS, 'W': TILES.WALL, 'F': TILES.DEEP_FOREST, 'D': TILES.DEEP_WATER,
-        '.': TILES.PATH,
+        '.': TILES.PATH, 'S': TILES.SAND, 'G': TILES.DIRT, '~': TILES.SHALLOW_WATER,
+        '#': TILES.HOUSE_WALL, 'H': TILES.RUINED_WALL, 'M': TILES.FLOORBOARDS,
+        'd': TILES.DARK_GRASS, 'B': TILES.BRIDGE, 'P': TILES.FLOORBOARDS
     };
     const tileChar = mapLayout[y][x] || ' ';
     const tileType = legend[tileChar] ?? TILES.GRASS;
+ 
+    const unwalkableTileTypes = [
+        TILES.WALL, TILES.DEEP_FOREST, TILES.DEEP_WATER, TILES.HOUSE_WALL,
+        TILES.DOOR_1, TILES.DOOR_2, TILES.STONE_WALL, TILES.RUINED_WALL
+    ];
 
-    // Check if the tile type itself is unwalkable (Wall, Deep Water, Deep Forest)
-    if (tileType === TILES.WALL || tileType === TILES.DEEP_WATER || tileType === TILES.DEEP_FOREST) {
+    if (unwalkableTileTypes.includes(tileType)) {
         return false;
     }
 
-    // Improved resource collision detection
     if (zoneData.resources) {
         for (const resource of zoneData.resources) {
             const resourceDef = RESOURCE_DATA[resource.type];
@@ -2476,10 +2755,8 @@ function isWalkable(x, y, zoneX, zoneY, ignoreChars = false) { // Signature chan
         }
     }
 
-    // Check for enemies at the position - NOW uses correct zoneX, zoneY
     if (getEnemyAt(x, y, zoneKey)) return false;
 
-    // Check for other characters at the position, unless ignored - NOW uses correct zoneX, zoneY
     if (!ignoreChars && gameState.characters.some(c => c.zoneX === zoneX && c.zoneY === zoneY && c.player.x === x && c.player.y === y)) return false;
 
     return true;
@@ -2597,6 +2874,7 @@ function stopAutomation(character) {
     character.path = [];
     character.automation.markedTiles = []; // Clear all marks when stopping
     character.automation.busyUntil = null; // <-- CRITICAL FIX: Ensure busyUntil is cleared here
+    character.automation.zonePath = []; // <-- NEW: Clear the zone path as well
     
     if (character.id === getActiveCharacter().id) ui.actionStatus.textContent = 'Idle'; 
     if(ui.levelsModal.classList.contains('hidden') === false) renderLevels(); 
@@ -2662,6 +2940,9 @@ function renderCharacterSwitcher() {
         if (index === gameState.activeCharacterIndex) btn.classList.add('active');
 
         btn.addEventListener('click', () => {
+            if (scoutModeZoneKey) {
+                exitScoutMode();
+            }
             gameState.activeCharacterIndex = index;
             saveGameState();
             resizeCanvasAndCenterCamera(); // Recalculate zoom for the new active character
@@ -2690,7 +2971,7 @@ function updateAllUI() {
     const activeChar = getActiveCharacter(); 
     if (!activeChar || !gameState.level) return; 
     const teamStats = getTeamStats(); 
-    if(!currentMapData || currentMapData.length === 0 || activeChar.zoneX !== (currentMapData.zoneX || -1) || activeChar.zoneY !== (currentMapData.zoneY || -1)) {
+    if (!scoutModeZoneKey && (!currentMapData || currentMapData.length === 0 || activeChar.zoneX !== (currentMapData.zoneX || -1) || activeChar.zoneY !== (currentMapData.zoneY || -1))) {
          currentMapData = buildMapData(activeChar.zoneX, activeChar.zoneY); 
          currentMapData.zoneX = activeChar.zoneX;
          currentMapData.zoneY = activeChar.zoneY;

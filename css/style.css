@@ -1,13 +1,48 @@
 /* css/style.css */
 
+
 /* --- Base Body & Layout Styling --- */
+
 body {
     background-color: #18181b; /* zinc-900 */
     color: #e4e4e7; /* zinc-200 */
     font-family: 'Roboto Mono', monospace;
     overflow: hidden; /* Prevent scrollbars from main page */
 }
+.map-zone {
+    background-color: #3f3f46; /* zinc-700 */
+    border: 1px solid #52525b;
+    border-radius: 6px;
+    position: relative; /* This is needed for the text overlay */
+    padding: 0; /* Remove padding to allow canvas to fill the space */
+    overflow: hidden; /* Ensure canvas corners are rounded */
+    cursor: pointer;
+}
 
+.map-zone canvas {
+    display: block; /* Remove any default spacing */
+    width: 100%;
+    height: 100%;
+}
+
+.map-zone .zone-name-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0));
+    color: white;
+    text-align: center;
+    padding: 8px 4px 4px 4px;
+    font-size: 14px;
+    font-weight: 500;
+    pointer-events: none; /* Allows clicks to go through to the zone container */
+}
+
+.map-zone.active-zone {
+    border-color: #fde047; /* yellow-300 */
+    box-shadow: 0 0 10px #fde047;
+}
 #game-container {
     height: 98vh; /* Make the container almost full screen height */
 }
@@ -191,7 +226,7 @@ body {
     height: 16px;
     font-size: 10px;
     line-height: 16px;
-}
+}   
 
 .modal-item.assigned {
      border-color: #a855f7;
